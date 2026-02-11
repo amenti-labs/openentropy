@@ -19,7 +19,7 @@ def scan_ble_system_profiler():
     print("[BLE] Scanning via system_profiler...")
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPBluetoothDataType', '-json'],
+            ['/usr/sbin/system_profiler', 'SPBluetoothDataType', '-json'],
             capture_output=True, text=True, timeout=15
         )
         data = json.loads(result.stdout)
@@ -163,7 +163,7 @@ def run(output_file='explore/entropy_ble_noise.bin'):
     timings = []
     for i in range(50):
         start = time.perf_counter_ns()
-        subprocess.run(['system_profiler', 'SPBluetoothDataType'],
+        subprocess.run(['/usr/sbin/system_profiler', 'SPBluetoothDataType'],
                       capture_output=True, timeout=10)
         elapsed = time.perf_counter_ns() - start
         timings.append(elapsed)

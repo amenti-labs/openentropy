@@ -92,7 +92,7 @@ def measure_sysctl_jitter(n_samples=200):
     
     for i in range(n_samples):
         start = libsystem.mach_absolute_time()
-        result = subprocess.run(['sysctl', 'kern.boottime', 'vm.swapusage', 'kern.osrelease'],
+        result = subprocess.run(['/usr/sbin/sysctl', 'kern.boottime', 'vm.swapusage', 'kern.osrelease'],
                               capture_output=True, text=True, timeout=2)
         elapsed = libsystem.mach_absolute_time() - start
         timings.append(elapsed)

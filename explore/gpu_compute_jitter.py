@@ -25,7 +25,7 @@ def time_sips_operations(n_ops=200):
     tmp_out.close()
     
     # Create test image with sips
-    subprocess.run(['sips', '-z', '64', '64', '/System/Library/Desktop Pictures/Solid Colors/Black.png',
+    subprocess.run(['/usr/bin/sips', '-z', '64', '64', '/System/Library/Desktop Pictures/Solid Colors/Black.png',
                     '--out', tmp.name], capture_output=True, timeout=10)
     
     # If that fails, create with Python
@@ -37,13 +37,13 @@ def time_sips_operations(n_ops=200):
             img.save(tmp.name)
         except ImportError:
             # Create minimal test image via screencapture
-            subprocess.run(['screencapture', '-x', '-R', '0,0,64,64', tmp.name],
+            subprocess.run(['/usr/sbin/screencapture', '-x', '-R', '0,0,64,64', tmp.name],
                           capture_output=True, timeout=5)
     
     timings = []
     for i in range(n_ops):
         start = time.perf_counter_ns()
-        subprocess.run(['sips', '-z', '32', '32', tmp.name, '--out', tmp_out.name],
+        subprocess.run(['/usr/bin/sips', '-z', '32', '32', tmp.name, '--out', tmp_out.name],
                       capture_output=True, timeout=5)
         elapsed = time.perf_counter_ns() - start
         timings.append(elapsed)

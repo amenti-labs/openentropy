@@ -17,7 +17,7 @@ def get_cpu_temp_macos():
     try:
         # Try powermetrics (needs sudo) or third-party tools
         result = subprocess.run(
-            ['sudo', 'powermetrics', '--samplers', 'smc', '-i1', '-n1'],
+            ['/usr/bin/sudo', 'powermetrics', '--samplers', 'smc', '-i1', '-n1'],
             capture_output=True, text=True, timeout=5
         )
         for line in result.stdout.split('\n'):

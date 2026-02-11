@@ -22,7 +22,7 @@ def read_powermetrics(n_samples=50, interval_ms=100):
     """Read CPU temperature via powermetrics (requires sudo)."""
     try:
         result = subprocess.run(
-            ['sudo', '-n', 'powermetrics', '--samplers', 'smc',
+            ['/usr/bin/sudo', '-n', 'powermetrics', '--samplers', 'smc',
              f'-i{interval_ms}', f'-n{n_samples}'],
             capture_output=True, text=True, timeout=n_samples * interval_ms / 1000 + 10
         )
@@ -70,12 +70,12 @@ def read_ioreg_thermal(n_samples=50, interval=0.1):
         temps = []
         for _ in range(n_samples):
             result = subprocess.run(
-                ['ioreg', '-rc', 'AppleSmartBattery'],
+                ['/usr/sbin/ioreg', '-rc', 'AppleSmartBattery'],
                 capture_output=True, text=True, timeout=5
             )
             # Also try thermal sensors
             result2 = subprocess.run(
-                ['ioreg', '-n', 'AppleAPCIThermalDriver'],
+                ['/usr/sbin/ioreg', '-n', 'AppleAPCIThermalDriver'],
                 capture_output=True, text=True, timeout=5
             )
             for output in [result.stdout, result2.stdout]:

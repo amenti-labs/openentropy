@@ -27,7 +27,7 @@ def capture_frame_macos():
     # Try imagesnap first
     try:
         result = subprocess.run(
-            ['imagesnap', '-w', '1', tmpfile],
+            ['/opt/homebrew/bin/imagesnap', '-w', '1', tmpfile],
             capture_output=True, text=True, timeout=10
         )
         if os.path.exists(tmpfile):

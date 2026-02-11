@@ -13,7 +13,7 @@ from pathlib import Path
 
 def _sysctl(key):
     """Read a sysctl key, trying full path if needed."""
-    for cmd in [['sysctl', '-n', key], ['/usr/sbin/sysctl', '-n', key]]:
+    for cmd in [['/usr/sbin/sysctl', '-n', key], ['/usr/sbin/sysctl', '-n', key]]:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if result.returncode == 0 and result.stdout.strip():
@@ -46,7 +46,7 @@ def has_camera():
     """Check for built-in camera."""
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPCameraDataType'], capture_output=True, text=True
+            ['/usr/sbin/system_profiler', 'SPCameraDataType'], capture_output=True, text=True
         )
         return 'FaceTime' in result.stdout or 'Camera' in result.stdout
     except Exception:
@@ -56,7 +56,7 @@ def has_microphone():
     """Check for audio input (built-in mic or external)."""
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPAudioDataType'], capture_output=True, text=True
+            ['/usr/sbin/system_profiler', 'SPAudioDataType'], capture_output=True, text=True
         )
         return 'Input' in result.stdout or 'Microphone' in result.stdout
     except Exception:
@@ -76,12 +76,12 @@ def has_trackpad():
     """Check for built-in trackpad."""
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPUSBDataType'], capture_output=True, text=True
+            ['/usr/sbin/system_profiler', 'SPUSBDataType'], capture_output=True, text=True
         )
         has_builtin = 'Trackpad' in result.stdout
         # Also check Bluetooth for Magic Trackpad
         result2 = subprocess.run(
-            ['system_profiler', 'SPBluetoothDataType'], capture_output=True, text=True
+            ['/usr/sbin/system_profiler', 'SPBluetoothDataType'], capture_output=True, text=True
         )
         has_bt = 'Trackpad' in result2.stdout
         return has_builtin or has_bt
@@ -92,7 +92,7 @@ def has_magnetometer():
     """Check for magnetometer (some MacBooks only)."""
     try:
         result = subprocess.run(
-            ['ioreg', '-l', '-w0'], capture_output=True, text=True
+            ['/usr/sbin/ioreg', '-l', '-w0'], capture_output=True, text=True
         )
         return 'Magnetometer' in result.stdout or 'compass' in result.stdout.lower()
     except Exception:
@@ -102,7 +102,7 @@ def has_ambient_light_sensor():
     """Check for ambient light sensor."""
     try:
         result = subprocess.run(
-            ['ioreg', '-l', '-w0', '-n', 'AppleHIDKeyboardEventDriverV2'],
+            ['/usr/sbin/ioreg', '-l', '-w0', '-n', 'AppleHIDKeyboardEventDriverV2'],
             capture_output=True, text=True
         )
         return 'ALSSensor' in result.stdout or 'AmbientLight' in result.stdout
@@ -113,7 +113,7 @@ def has_motion_sensors():
     """Check for accelerometer/gyroscope (MacBooks with SMS/SuddenMotionSensor)."""
     try:
         result = subprocess.run(
-            ['ioreg', '-l', '-w0'], capture_output=True, text=True
+            ['/usr/sbin/ioreg', '-l', '-w0'], capture_output=True, text=True
         )
         return 'SMCMotionSensor' in result.stdout or 'Accelerometer' in result.stdout
     except Exception:
@@ -123,7 +123,7 @@ def has_bluetooth():
     """Check for Bluetooth."""
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPBluetoothDataType'], capture_output=True, text=True
+            ['/usr/sbin/system_profiler', 'SPBluetoothDataType'], capture_output=True, text=True
         )
         return 'Bluetooth' in result.stdout
     except Exception:
@@ -145,7 +145,7 @@ def has_wifi():
 
 def has_sudo():
     """Check if we can run sudo without password."""
-    for cmd in [['sudo', '-n', 'true'], ['/usr/bin/sudo', '-n', 'true']]:
+    for cmd in [['/usr/bin/sudo', '-n', 'true'], ['/usr/bin/sudo', '-n', 'true']]:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
             if result.returncode == 0:
@@ -179,7 +179,7 @@ ENTROPY_SOURCES = {
         'name': 'SMC Sensor Galaxy',
         'description': 'Hundreds of voltage, current, power, temp ADC readings',
         'requires': ['macos'],
-        'best_with': ['sudo'],
+        'best_with': ['/usr/bin/sudo'],
         'available_on': ['mac_mini', 'macbook', 'imac'],
     },
     'audio_thermal': {
@@ -230,7 +230,7 @@ ENTROPY_SOURCES = {
         'name': 'NVMe I/O & SMART Jitter',
         'description': 'Storage timing and SMART attribute fluctuations',
         'requires': [],
-        'best_with': ['sudo', 'smartctl'],
+        'best_with': ['/usr/bin/sudo', 'smartctl'],
         'available_on': ['mac_mini', 'macbook', 'imac', 'linux'],
     },
     'camera_quantum': {

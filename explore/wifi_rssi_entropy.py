@@ -1,97 +1,111 @@
 #!/usr/bin/env python3
 """
-Harvest entropy from WiFi RSSI fluctuations.
-
-WiFi signal strength varies due to multipath fading, interference,
-and atmospheric effects. The micro-fluctuations contain genuine
-environmental randomness.
-
-macOS: Uses CoreWLAN via subprocess.
-Linux: Uses iwconfig/iw.
+WiFi RSSI Entropy — harvest entropy from WiFi signal fluctuations via CoreWLAN.
 """
-import subprocess
-import platform
 import time
+import hashlib
 import numpy as np
-import sys
 
-def get_rssi_macos():
-    """Get current WiFi RSSI on macOS."""
+
+def _get_wifi_interface():
+    """Get CoreWLAN WiFi interface."""
+    import objc
+    _g = {}
+    objc.loadBundle('CoreWLAN',
+        bundle_path='/System/Library/Frameworks/CoreWLAN.framework',
+        module_globals=_g)
+    CWWiFiClient = objc.lookUpClass('CWWiFiClient')
+    client = CWWiFiClient.sharedWiFiClient()
+    return client.interface()
+
+
+def run(output_file='explore/entropy_wifi_rssi.bin'):
+    print("=" * 60)
+    print("WIFI RSSI ENTROPY — Signal Fluctuation Harvester")
+    print("=" * 60)
+
     try:
-        result = subprocess.run(
-            ['/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport', '-I'],
-            capture_output=True, text=True
-        )
-        for line in result.stdout.split('\n'):
-            if 'agrCtlRSSI' in line:
-                return int(line.split(':')[1].strip())
+        iface = _get_wifi_interface()
     except Exception as e:
-        print(f"Error: {e}")
-    return None
+        print(f"[FAIL] Cannot load CoreWLAN: {e}")
+        return None
 
-def get_rssi_linux():
-    """Get current WiFi RSSI on Linux."""
-    try:
-        result = subprocess.run(['iwconfig'], capture_output=True, text=True)
-        for line in result.stdout.split('\n'):
-            if 'Signal level' in line:
-                parts = line.split('Signal level=')[1]
-                return int(parts.split(' ')[0])
-    except Exception:
-        pass
-    return None
+    if iface is None:
+        print("[FAIL] No WiFi interface available")
+        return None
 
-def collect_rssi_series(n_samples=200, interval=0.05):
-    """Collect a time series of RSSI measurements."""
-    get_rssi = get_rssi_macos if platform.system() == 'Darwin' else get_rssi_linux
-    
-    print(f"Collecting {n_samples} RSSI samples at {1/interval:.0f}Hz...")
-    readings = []
+    r = int(iface.rssiValue())
+    n = int(iface.noiseMeasurement())
+    print(f"[WiFi] Connected: RSSI={r}dBm, Noise={n}dBm")
+
+    # Collect samples
+    n_samples = 200
+    interval = 0.05
+    print(f"\n[Phase 1] Collecting {n_samples} samples at {1/interval:.0f}Hz...")
+
+    rssi_vals = []
+    noise_vals = []
+    tx_rate_vals = []
+    timings = []
+
     for i in range(n_samples):
-        rssi = get_rssi()
-        if rssi is not None:
-            readings.append(rssi)
+        t0 = time.perf_counter_ns()
+        rssi_vals.append(int(iface.rssiValue()))
+        noise_vals.append(int(iface.noiseMeasurement()))
+        tx_rate_vals.append(float(iface.transmitRate()))
+        t1 = time.perf_counter_ns()
+        timings.append(t1 - t0)
         time.sleep(interval)
-        if (i + 1) % 50 == 0:
+        if (i + 1) % 100 == 0:
             print(f"  {i+1}/{n_samples}...")
-    
-    return np.array(readings)
 
-def extract_entropy_from_rssi(readings):
-    """Extract entropy from RSSI deltas."""
-    deltas = np.diff(readings)
-    # Use sign of differences as entropy bits
-    bits = (deltas > 0).astype(np.uint8)
-    
-    # Von Neumann debias
-    pairs = bits[:len(bits)//2*2].reshape(-1, 2)
-    mask = pairs[:, 0] != pairs[:, 1]
-    debiased = pairs[mask, 0]
-    
-    return deltas, bits, debiased
+    all_entropy = bytearray()
+    streams = {}
+
+    # Process each signal source
+    for label, vals in [('rssi', rssi_vals), ('noise', noise_vals), ('tx_rate', tx_rate_vals)]:
+        arr = np.array(vals, dtype=np.float64)
+        unique = len(set(vals))
+        print(f"  [{label}] Samples: {len(vals)}, Unique: {unique}, "
+              f"Mean: {arr.mean():.1f}, Std: {arr.std():.2f}")
+        if unique <= 1:
+            continue
+        # Detrend and extract
+        detrended = arr - np.convolve(arr, np.ones(5)/5, mode='same')
+        noise = detrended[2:-2]
+        if noise.std() == 0:
+            continue
+        normalized = (noise - noise.min()) / (noise.max() - noise.min() + 1e-30)
+        quantized = (normalized * 255).astype(np.uint8)
+        all_entropy.extend(quantized.tobytes())
+        streams[label] = len(quantized)
+
+    # Timing LSBs — the call timing itself contains entropy
+    t_arr = np.array(timings, dtype=np.uint64)
+    lsbs = (t_arr & 0xFF).astype(np.uint8)
+    all_entropy.extend(lsbs.tobytes())
+    streams['timing'] = len(lsbs)
+    print(f"  [timing] Unique LSBs: {len(set(lsbs))}/256, Mean: {t_arr.mean():.0f}ns")
+
+    if not all_entropy:
+        print("[FAIL] No entropy collected")
+        return None
+
+    with open(output_file, 'wb') as f:
+        f.write(bytes(all_entropy))
+
+    sha = hashlib.sha256(bytes(all_entropy)).hexdigest()
+    print(f"\n[RESULT] Collected {len(all_entropy)} entropy bytes from {len(streams)} streams")
+    print(f"  Streams: {streams}")
+    print(f"  SHA256: {sha[:32]}...")
+
+    import zlib
+    if len(all_entropy) > 100:
+        ratio = len(zlib.compress(bytes(all_entropy))) / len(all_entropy)
+        print(f"  Compression ratio: {ratio:.3f}")
+
+    return {'total_bytes': len(all_entropy), 'sha256': sha, 'streams': streams}
+
 
 if __name__ == '__main__':
-    print("=== WiFi RSSI Entropy Explorer ===\n")
-    
-    readings = collect_rssi_series()
-    if len(readings) < 10:
-        print("Not enough readings. Is WiFi connected?")
-        sys.exit(1)
-    
-    print(f"\nRSSI stats:")
-    print(f"  Samples: {len(readings)}")
-    print(f"  Mean: {np.mean(readings):.1f} dBm")
-    print(f"  Std:  {np.std(readings):.2f} dBm")
-    print(f"  Range: {np.min(readings)} to {np.max(readings)} dBm")
-    
-    deltas, raw_bits, debiased = extract_entropy_from_rssi(readings)
-    
-    print(f"\nDelta distribution:")
-    unique, counts = np.unique(deltas, return_counts=True)
-    for v, c in zip(unique, counts):
-        print(f"  {v:+d}: {'█' * c} ({c})")
-    
-    print(f"\nRaw bits: {len(raw_bits)} (bias: {np.mean(raw_bits):.3f})")
-    print(f"Debiased: {len(debiased)} bits")
-    if len(debiased) > 0:
-        print(f"  Bias: {np.mean(debiased):.3f}")
+    run()

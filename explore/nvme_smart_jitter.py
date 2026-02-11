@@ -18,7 +18,7 @@ from collections import defaultdict
 def read_smart_attributes():
     """Read SMART attributes from NVMe drive."""
     try:
-        result = subprocess.run(['smartctl', '-a', '/dev/disk0'],
+        result = subprocess.run(['/opt/homebrew/bin/smartctl', '-a', '/dev/disk0'],
                               capture_output=True, text=True, timeout=10)
         attrs = {}
         for line in result.stdout.split('\n'):
@@ -88,7 +88,7 @@ def time_direct_disk_reads(n_reads=100):
     for i in range(n_reads):
         start = time.perf_counter_ns()
         result = subprocess.run(
-            ['sudo', 'dd', 'if=/dev/disk0', 'bs=512', 'count=1'],
+            ['/usr/bin/sudo', 'dd', 'if=/dev/disk0', 'bs=512', 'count=1'],
             capture_output=True, timeout=5
         )
         elapsed = time.perf_counter_ns() - start

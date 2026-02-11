@@ -70,7 +70,7 @@ def try_system_profiler():
     """Check what motion/sensor hardware is available."""
     try:
         result = subprocess.run(
-            ['system_profiler', 'SPSPIDataType'],
+            ['/usr/sbin/system_profiler', 'SPSPIDataType'],
             capture_output=True, text=True, timeout=10
         )
         sensors = []
