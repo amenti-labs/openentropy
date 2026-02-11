@@ -1,0 +1,276 @@
+{
+  "capabilities": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "model": "Mac16,10",
+    "chip": "Apple M4",
+    "is_mac_mini": true,
+    "is_macbook": false,
+    "is_imac": false,
+    "has_camera": false,
+    "has_microphone": false,
+    "has_battery": false,
+    "has_trackpad": false,
+    "has_magnetometer": false,
+    "has_ambient_light_sensor": false,
+    "has_motion_sensors": false,
+    "has_bluetooth": false,
+    "has_wifi": true,
+    "has_sudo": false,
+    "has_smartctl": true,
+    "has_imagesnap": true
+  },
+  "available_sources": {
+    "smc_sensors": {
+      "name": "SMC Sensor Galaxy",
+      "description": "Hundreds of voltage, current, power, temp ADC readings",
+      "requires": [
+        "macos"
+      ],
+      "best_with": [
+        "sudo"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ],
+      "degraded": [
+        "sudo"
+      ]
+    },
+    "wifi_rssi": {
+      "name": "WiFi RSSI Fluctuations",
+      "description": "Signal strength micro-variations from multipath fading",
+      "requires": [
+        "wifi"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ]
+    },
+    "gpu_timing": {
+      "name": "GPU Compute Timing Jitter",
+      "description": "Metal/GPU dispatch completion time variance",
+      "requires": [
+        "macos"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ]
+    },
+    "clock_jitter": {
+      "name": "Clock/Timing Jitter",
+      "description": "High-resolution clock call and sleep-wake jitter",
+      "requires": [],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac",
+        "linux"
+      ]
+    },
+    "mach_timing": {
+      "name": "Mach Kernel Timing",
+      "description": "Mach absolute time, port ops, page fault timing",
+      "requires": [
+        "macos"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ]
+    },
+    "nvme_jitter": {
+      "name": "NVMe I/O & SMART Jitter",
+      "description": "Storage timing and SMART attribute fluctuations",
+      "requires": [],
+      "best_with": [
+        "sudo",
+        "smartctl"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac",
+        "linux"
+      ],
+      "degraded": [
+        "sudo"
+      ]
+    },
+    "ioregistry": {
+      "name": "IORegistry Deep Mining",
+      "description": "Auto-discover fluctuating numeric values across IOKit",
+      "requires": [
+        "macos"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ]
+    },
+    "cross_domain_beat": {
+      "name": "Cross-Clock-Domain Beat Frequency",
+      "description": "Phase noise beats between independent PLL domains",
+      "requires": [
+        "macos"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ]
+    },
+    "memory_timing": {
+      "name": "DRAM Access Timing",
+      "description": "Memory access/allocation timing variations",
+      "requires": [],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac",
+        "linux"
+      ]
+    }
+  },
+  "unavailable_sources": {
+    "audio_thermal": {
+      "name": "Audio Thermal Noise",
+      "description": "Johnson-Nyquist noise from audio ADC",
+      "requires": [
+        "microphone"
+      ],
+      "available_on": [
+        "macbook",
+        "imac"
+      ],
+      "note_mac_mini": "Requires external audio input device",
+      "missing": [
+        "microphone"
+      ]
+    },
+    "audio_emi": {
+      "name": "Audio EMI Coupling",
+      "description": "Electromagnetic interference from CPU/GPU via audio ADC",
+      "requires": [
+        "microphone"
+      ],
+      "available_on": [
+        "macbook",
+        "imac"
+      ],
+      "note_mac_mini": "Requires external audio input device",
+      "missing": [
+        "microphone"
+      ]
+    },
+    "ble_ambient": {
+      "name": "BLE Advertisement Noise",
+      "description": "RSSI and timing from ambient Bluetooth devices",
+      "requires": [
+        "bluetooth"
+      ],
+      "available_on": [
+        "mac_mini",
+        "macbook",
+        "imac"
+      ],
+      "missing": [
+        "bluetooth"
+      ]
+    },
+    "camera_quantum": {
+      "name": "Camera Photon Shot Noise",
+      "description": "Quantum Poisson noise from image sensor",
+      "requires": [
+        "camera"
+      ],
+      "available_on": [
+        "macbook",
+        "imac"
+      ],
+      "note_mac_mini": "Requires external USB camera",
+      "missing": [
+        "camera"
+      ]
+    },
+    "trackpad_capacitance": {
+      "name": "Trackpad Capacitive Noise",
+      "description": "EM noise from capacitive sensor array",
+      "requires": [
+        "trackpad"
+      ],
+      "available_on": [
+        "macbook"
+      ],
+      "note_mac_mini": "Requires Magic Trackpad connected via BT/USB",
+      "missing": [
+        "trackpad"
+      ]
+    },
+    "magnetometer": {
+      "name": "Magnetometer Geomagnetic Noise",
+      "description": "Geomagnetic micro-fluctuations and Schumann resonance",
+      "requires": [
+        "magnetometer"
+      ],
+      "available_on": [
+        "macbook"
+      ],
+      "note_mac_mini": "Not available \u2014 no magnetometer hardware",
+      "missing": [
+        "magnetometer"
+      ]
+    },
+    "ambient_light": {
+      "name": "Ambient Light Sensor Noise",
+      "description": "Photon shot noise at low light levels",
+      "requires": [
+        "ambient_light_sensor"
+      ],
+      "available_on": [
+        "macbook",
+        "imac"
+      ],
+      "note_mac_mini": "Not available \u2014 no ALS hardware",
+      "missing": [
+        "ambient_light_sensor"
+      ]
+    },
+    "battery_noise": {
+      "name": "Battery Electrochemical Noise",
+      "description": "Discharge rate and impedance micro-variations",
+      "requires": [
+        "battery"
+      ],
+      "available_on": [
+        "macbook"
+      ],
+      "note_mac_mini": "Not available \u2014 no battery",
+      "missing": [
+        "battery"
+      ]
+    },
+    "motion_sensors": {
+      "name": "Accelerometer/Gyroscope Noise",
+      "description": "MEMS Brownian motion and bias drift",
+      "requires": [
+        "motion_sensors"
+      ],
+      "available_on": [
+        "macbook"
+      ],
+      "note_mac_mini": "Not available \u2014 no motion sensors",
+      "missing": [
+        "motion_sensors"
+      ]
+    }
+  }
+}
