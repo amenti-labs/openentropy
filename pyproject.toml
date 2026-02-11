@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "esoteric-entropy"
+version = "0.1.0"
+description = "Your computer is a quantum noise observatory. This library knows where to listen."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Esoteric Entropy Contributors" }]
+keywords = ["entropy", "randomness", "hardware", "noise", "TRNG", "security"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["numpy>=1.24", "click>=8.0"]
+
+[project.optional-dependencies]
+audio = ["sounddevice>=0.4"]
+camera = ["opencv-python>=4.0"]
+all = ["sounddevice>=0.4", "opencv-python>=4.0"]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[project.scripts]
+esoteric-entropy = "esoteric_entropy.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/esoteric-entropy/esoteric-entropy"
+Repository = "https://github.com/esoteric-entropy/esoteric-entropy"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
