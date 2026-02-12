@@ -249,7 +249,9 @@ def spectral_flatness(data: np.ndarray) -> TestResult:
     n = len(arr)
     if n < 64:
         return _insufficient(name, 64, n)
-    S = np.abs(fft(arr))[:n // 2] ** 2
+    # Remove DC offset (mean) — uniform [0,255] has large DC component
+    arr = arr - np.mean(arr)
+    S = np.abs(fft(arr))[1:n // 2] ** 2  # skip DC bin
     S = S + 1e-15
     geo_mean = np.exp(np.mean(np.log(S)))
     arith_mean = np.mean(S)
@@ -463,32 +465,42 @@ def ks_test(data: np.ndarray) -> TestResult:
 
 
 def anderson_darling_test(data: np.ndarray) -> TestResult:
-    """Anderson-Darling test (more sensitive to tails)."""
+    """Anderson-Darling test for uniformity (KS-style, more sensitive to tails).
+
+    Random bytes should follow a uniform distribution over [0, 255], not normal.
+    We use a KS test for uniform as a fallback since scipy's anderson() only
+    supports normal/exponential/logistic distributions directly.
+    """
     name = "Anderson-Darling"
     n = len(data)
     if n < 50:
         return _insufficient(name, 50, n)
-    normalized = data.astype(float) / 255.0
-    # Add tiny noise to avoid ties
-    normalized = normalized + np.random.default_rng(42).normal(0, 1e-10, n)
-    result = sp_stats.anderson(normalized, dist='norm')
-    stat = float(result.statistic)
-    if hasattr(result, 'critical_values') and result.critical_values is not None:
-        crit_5 = result.critical_values[2]  # 5% level
-        passed = stat < crit_5
-        grade = "A" if stat < result.critical_values[0] else "B" if stat < result.critical_values[1] else "C" if stat < crit_5 else "D" if stat < result.critical_values[3] else "F"
-        details = f"A²={stat:.4f}, 5% critical={crit_5:.4f}"
-    elif hasattr(result, 'pvalue'):
-        p = float(result.pvalue)
-        passed = p > 0.05
-        grade = "A" if p > 0.5 else "B" if p > 0.1 else "C" if p > 0.05 else "D" if p > 0.01 else "F"
-        details = f"A²={stat:.4f}, p={p:.6f}"
+    # Test if byte values are uniformly distributed on [0, 256)
+    normalized = (data.astype(float) + 0.5) / 256.0  # map to (0, 1)
+    # Cramér-von Mises / Anderson-Darling statistic for U(0,1)
+    sorted_u = np.sort(normalized)
+    i = np.arange(1, n + 1, dtype=float)
+    # A² statistic for uniform
+    s = (2 * i - 1) * (np.log(sorted_u + 1e-15) + np.log(1 - sorted_u[::-1] + 1e-15))
+    a2 = -n - np.mean(s)
+    # Adjusted statistic
+    a2_star = a2 * (1 + 0.75 / n + 2.25 / (n * n))
+    # Critical values for uniform: 1.933 (5%), 2.492 (2.5%), 3.857 (1%)
+    passed = a2_star < 2.492
+    if a2_star < 1.248:
+        grade = "A"
+    elif a2_star < 1.933:
+        grade = "B"
+    elif a2_star < 2.492:
+        grade = "C"
+    elif a2_star < 3.857:
+        grade = "D"
     else:
-        passed = False
         grade = "F"
-        details = f"A²={stat:.4f}"
     return TestResult(name=name, passed=passed, p_value=None,
-                      statistic=stat, details=details, grade=grade)
+                      statistic=a2_star,
+                      details=f"A²*={a2_star:.4f}, 5% critical=2.492",
+                      grade=grade)
 
 
 # ═══════════════════════ PATTERN TESTS ═══════════════════════
@@ -586,6 +598,30 @@ def maurers_universal(data: np.ndarray, L: int = 6, Q: int = 640) -> TestResult:
 
 # ═══════════════════════ ADVANCED TESTS ═══════════════════════
 
+def _gf2_rank(matrix: np.ndarray) -> int:
+    """Compute rank of a binary matrix over GF(2) using Gaussian elimination."""
+    m = matrix.astype(np.uint8).copy()
+    rows, cols = m.shape
+    rank = 0
+    for col in range(cols):
+        # Find pivot
+        pivot = None
+        for row in range(rank, rows):
+            if m[row, col] == 1:
+                pivot = row
+                break
+        if pivot is None:
+            continue
+        # Swap
+        m[[rank, pivot]] = m[[pivot, rank]]
+        # Eliminate
+        for row in range(rows):
+            if row != rank and m[row, col] == 1:
+                m[row] ^= m[rank]
+        rank += 1
+    return rank
+
+
 def binary_matrix_rank(data: np.ndarray) -> TestResult:
     """Rank of random binary matrices."""
     name = "Binary Matrix Rank"
@@ -597,8 +633,8 @@ def binary_matrix_rank(data: np.ndarray) -> TestResult:
         return _insufficient(name, 38 * M * Q, n)
     ranks = []
     for i in range(N):
-        block = bits[i * M * Q:(i + 1) * M * Q].reshape(M, Q).astype(float)
-        ranks.append(int(np.linalg.matrix_rank(block)))
+        block = bits[i * M * Q:(i + 1) * M * Q].reshape(M, Q).copy()
+        ranks.append(_gf2_rank(block))
 
     full_rank = sum(1 for r in ranks if r == min(M, Q))
     rank_m1 = sum(1 for r in ranks if r == min(M, Q) - 1)
