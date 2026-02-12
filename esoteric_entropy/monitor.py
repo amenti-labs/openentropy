@@ -1,37 +1,40 @@
 """Live entropy monitor — interactive TUI dashboard.
 
-Shows real-time entropy collection from all sources with:
-- Source health table with live entropy rates
-- Pool throughput meter
-- Entropy bit visualization (sparkline)
-- Rolling quality scores
+Features:
+- Toggle sources on/off with keyboard
+- Live line chart of entropy values (0-1) per source
+- RNG number display
+- Sparklines, health table, pool stats
+- Configurable refresh rate
 """
 
 from __future__ import annotations
 
-import signal
-import sys
+import hashlib
+import struct
 import threading
 import time
 from collections import deque
 
 import numpy as np
 
-from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
-from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 from rich.text import Text
 
+# ── Sparkline / viz helpers ──
 
-# ── Sparkline characters ──
 SPARK = "▁▂▃▄▅▆▇█"
+COLORS = [
+    "red", "green", "blue", "yellow", "magenta", "cyan",
+    "bright_red", "bright_green", "bright_blue", "bright_yellow",
+    "bright_magenta", "bright_cyan", "orange1", "deep_pink1",
+    "spring_green1", "dodger_blue1", "gold1", "medium_purple1",
+    "dark_orange", "chartreuse1", "steel_blue1", "hot_pink",
+    "turquoise2", "salmon1", "orchid1", "khaki1",
+    "slate_blue1", "pale_green1",
+]
 
 
-def _sparkline(values: list[float], width: int = 30) -> str:
-    """Render a sparkline string from values."""
+def _sparkline(values: list[float], width: int = 24) -> str:
     if not values:
         return ""
     recent = values[-width:]
@@ -40,100 +43,317 @@ def _sparkline(values: list[float], width: int = 30) -> str:
     return "".join(SPARK[min(int((v - mn) / rng * 7), 7)] for v in recent)
 
 
-def _entropy_bar(value: float, max_val: float = 8.0, width: int = 16) -> Text:
-    """Colored bar for entropy value."""
+def _bytes_to_01(data: bytes) -> float:
+    """Hash bytes to a float in [0, 1)."""
+    h = hashlib.sha256(data).digest()[:8]
+    return struct.unpack("<Q", h)[0] / (2**64)
+
+
+def _entropy_bar_text(value: float, max_val: float = 8.0, width: int = 12) -> str:
     ratio = min(value / max_val, 1.0)
     filled = int(ratio * width)
-    if ratio > 0.8:
-        color = "green"
-    elif ratio > 0.5:
-        color = "yellow"
-    elif ratio > 0.2:
-        color = "red"
-    else:
-        color = "bright_black"
-    bar = "█" * filled + "░" * (width - filled)
-    return Text(bar, style=color)
+    return "█" * filled + "░" * (width - filled)
 
 
-def _hex_dump(data: bytes, width: int = 32) -> Text:
-    """Colorized hex dump of entropy bytes."""
-    text = Text()
-    for i, b in enumerate(data[:width * 4]):
-        # Color by value range for visual density
-        if b < 32:
-            style = "bright_black"
-        elif b < 96:
-            style = "blue"
-        elif b < 160:
-            style = "green"
-        elif b < 224:
-            style = "yellow"
-        else:
-            style = "red"
-        text.append(f"{b:02x}", style=style)
-        if (i + 1) % 2 == 0:
-            text.append(" ")
-        if (i + 1) % width == 0 and i < width * 4 - 1:
-            text.append("\n")
-    return text
+# ── Terminal chart using plotext ──
+
+def _render_chart(
+    history: dict[str, deque],
+    enabled: set[str],
+    width: int = 80,
+    height: int = 15,
+) -> str:
+    """Render a terminal line chart of source entropy (0-1) over time."""
+    import plotext as plt
+
+    plt.clear_figure()
+    plt.plotsize(width, height)
+    plt.theme("dark")
+    plt.title("Entropy History (hashed → 0-1)")
+    plt.xlabel("Sample")
+    plt.ylabel("Value")
+    plt.ylim(0, 1)
+
+    color_list = [
+        "red", "green", "blue", "yellow", "magenta", "cyan",
+        "orange", "red+", "green+", "blue+", "yellow+", "magenta+",
+    ]
+
+    plotted = 0
+    for i, (name, values) in enumerate(sorted(history.items())):
+        if name not in enabled or len(values) < 2:
+            continue
+        y = list(values)
+        x = list(range(len(y)))
+        color = color_list[plotted % len(color_list)]
+        plt.plot(x, y, label=name[:16], color=color)
+        plotted += 1
+
+    if plotted == 0:
+        plt.plot([0], [0.5], label="(no data)")
+
+    return plt.build()
 
 
-class EntropyMonitor:
-    """Live TUI entropy monitor."""
+# ── Textual TUI App ──
 
-    def __init__(self, refresh_rate: float = 1.0, sources_filter: list[str] | None = None):
-        self.refresh_rate = refresh_rate
-        self.sources_filter = sources_filter
-        self.console = Console()
-        self._stop = threading.Event()
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.reactive import reactive
+from textual.widgets import DataTable, Footer, Header, Static
 
-        # State
-        self._source_history: dict[str, deque] = {}  # name -> deque of shannon values
-        self._pool_throughput: deque = deque(maxlen=60)  # bytes/sec history
+
+class SourceToggle(Static):
+    """Clickable source toggle widget."""
+    pass
+
+
+class ChartWidget(Static):
+    """Live plotext chart rendered as rich text."""
+    pass
+
+
+class RNGDisplay(Static):
+    """Shows current RNG values."""
+    pass
+
+
+class PoolStatus(Static):
+    """Pool health status bar."""
+    pass
+
+
+class EntropyMonitorApp(App):
+    """Interactive entropy monitor TUI."""
+
+    TITLE = "🔬 Esoteric Entropy Monitor"
+    CSS = """
+    Screen {
+        layout: grid;
+        grid-size: 2 3;
+        grid-columns: 1fr 1fr;
+        grid-rows: auto 1fr auto;
+    }
+    #source-table {
+        column-span: 1;
+        height: 100%;
+        border: solid $primary-background;
+    }
+    #chart {
+        column-span: 1;
+        height: 100%;
+        border: solid $secondary-background;
+    }
+    #rng-display {
+        column-span: 1;
+        height: auto;
+        min-height: 5;
+        border: solid $accent;
+    }
+    #pool-status {
+        column-span: 1;
+        height: auto;
+        min-height: 5;
+        border: solid $success;
+    }
+    DataTable {
+        height: 100%;
+    }
+    """
+
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("space", "toggle_source", "Toggle Source"),
+        Binding("a", "enable_all", "Enable All"),
+        Binding("n", "disable_all", "Disable All"),
+        Binding("f", "cycle_speed", "Speed"),
+        Binding("r", "force_refresh", "Refresh Now"),
+    ]
+
+    refresh_rate = reactive(1.0)
+
+    def __init__(
+        self,
+        initial_rate: float = 1.0,
+        sources_filter: list[str] | None = None,
+    ):
+        super().__init__()
+        self._initial_rate = initial_rate
+        self._sources_filter = sources_filter
+        self._pool = None
+        self._enabled: set[str] = set()
+        self._source_names: list[str] = []
+        self._source_history: dict[str, deque] = {}  # name -> deque of 0-1 values
+        self._source_shannon: dict[str, deque] = {}  # name -> deque of shannon values
+        self._source_states: dict[str, dict] = {}
         self._total_bytes = 0
         self._total_collections = 0
-        self._start_time = 0.0
-        self._last_pool_bytes: bytes = b""
+        self._last_rng_int = 0
+        self._last_rng_float = 0.0
+        self._last_rng_hex = ""
         self._last_quality: dict = {}
-        self._source_states: list[dict] = []
+        self._stop = threading.Event()
+        self._collector_thread = None
+        self._start_time = 0.0
+        self._speeds = [2.0, 1.0, 0.5, 0.25]
+        self._speed_idx = 1  # start at 1.0s
 
-    def _build_source_table(self) -> Table:
-        """Build the source health table."""
-        table = Table(
-            title="⚡ Entropy Sources",
-            show_header=True,
-            header_style="bold cyan",
-            border_style="bright_black",
-            expand=True,
-            padding=(0, 1),
-        )
-        table.add_column("Source", style="bold", ratio=3, no_wrap=True)
-        table.add_column("Shannon", justify="right", ratio=1)
-        table.add_column("Entropy", ratio=2)
-        table.add_column("Bytes", justify="right", ratio=1)
-        table.add_column("Time", justify="right", ratio=1)
-        table.add_column("Sparkline", ratio=3)
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield DataTable(id="source-table")
+        yield ChartWidget(id="chart")
+        yield RNGDisplay(id="rng-display")
+        yield PoolStatus(id="pool-status")
+        yield Footer()
 
-        for ss in self._source_states:
-            name = ss["name"]
-            shannon = ss.get("entropy", 0.0)
-            nbytes = ss.get("bytes", 0)
-            collect_time = ss.get("time", 0.0)
-            healthy = ss.get("healthy", False)
+    def on_mount(self) -> None:
+        from esoteric_entropy.pool import EntropyPool
 
-            # Sparkline from history
-            hist = self._source_history.get(name, deque(maxlen=30))
-            spark = _sparkline(list(hist))
+        self._pool = EntropyPool.auto()
+        if self._sources_filter:
+            filt = set(self._sources_filter)
+            self._pool._sources = [
+                s for s in self._pool._sources
+                if any(f in s.source.name for f in filt)
+            ]
 
-            # Status icon
-            icon = "✅" if healthy else "❌"
-            name_text = f"{icon} {name}"
+        self._source_names = [s.source.name for s in self._pool.sources]
+        self._enabled = set(self._source_names)
 
-            # Entropy bar
-            bar = _entropy_bar(shannon)
+        for name in self._source_names:
+            self._source_history[name] = deque(maxlen=120)
+            self._source_shannon[name] = deque(maxlen=60)
 
-            # Time formatting
+        # Setup table
+        table = self.query_one("#source-table", DataTable)
+        table.cursor_type = "row"
+        table.add_columns("", "Source", "Shannon", "Bar", "Bytes", "Time", "Spark", "0→1")
+
+        for name in self._source_names:
+            table.add_row(
+                "✅", name, "-.--", "░" * 12, "0", "-", "", "-.---",
+                key=name,
+            )
+
+        self._start_time = time.monotonic()
+        self.refresh_rate = self._initial_rate
+
+        # Start collector
+        self._collector_thread = threading.Thread(target=self._collector_loop, daemon=True)
+        self._collector_thread.start()
+
+        # Start UI refresh timer
+        self.set_interval(0.5, self._update_ui)
+
+    def _collector_loop(self) -> None:
+        """Background collection loop."""
+        while not self._stop.is_set():
+            self._collect_cycle()
+            self._stop.wait(self.refresh_rate)
+
+    def _collect_cycle(self) -> None:
+        """Run one collection cycle."""
+        if not self._pool:
+            return
+
+        # Only collect from enabled sources
+        from esoteric_entropy.sources.base import EntropySource
+
+        results_lock = threading.Lock()
+        raw_chunks: list[bytes] = []
+
+        def _collect_source(ss):
+            if ss.source.name not in self._enabled:
+                return
+            try:
+                t0 = time.monotonic()
+                data = ss.source.collect(n_samples=200)
+                elapsed = time.monotonic() - t0
+                if len(data) > 0:
+                    ss.total_bytes += len(data)
+                    ss.last_collect_time = elapsed
+                    ss.last_entropy = EntropySource._quick_shannon(data)
+                    ss.healthy = ss.last_entropy > 1.0
+
+                    # Hash to 0-1 for chart
+                    val01 = _bytes_to_01(data.tobytes()[:64])
+                    self._source_history[ss.source.name].append(val01)
+                    self._source_shannon[ss.source.name].append(ss.last_entropy)
+
+                    with results_lock:
+                        raw_chunks.append(data.tobytes())
+                else:
+                    ss.failures += 1
+                    ss.healthy = False
+            except Exception:
+                ss.failures += 1
+                ss.healthy = False
+
+        # Parallel collection
+        threads = []
+        for ss in self._pool.sources:
+            t = threading.Thread(target=_collect_source, args=(ss,), daemon=True)
+            t.start()
+            threads.append(t)
+
+        deadline = time.monotonic() + 8.0
+        for t in threads:
+            remaining = max(0.1, deadline - time.monotonic())
+            t.join(timeout=remaining)
+
+        # Feed pool buffer
+        raw = bytearray()
+        for chunk in raw_chunks:
+            raw.extend(chunk)
+        with self._pool._lock:
+            self._pool._buffer.extend(raw)
+
+        self._total_collections += 1
+
+        # Generate conditioned RNG output
+        out = self._pool.get_random_bytes(32)
+        self._total_bytes += 32
+        self._last_rng_hex = out.hex()
+        self._last_rng_int = int.from_bytes(out[:8], "little")
+        self._last_rng_float = _bytes_to_01(out)
+
+        # Quality
+        arr = np.frombuffer(self._pool.get_random_bytes(512), dtype=np.uint8)
+        self._last_quality = EntropySource._quick_quality(arr, "pool")
+        self._total_bytes += 512
+
+        # Update state dict
+        for ss in self._pool.sources:
+            self._source_states[ss.source.name] = {
+                "healthy": ss.healthy,
+                "entropy": ss.last_entropy,
+                "bytes": ss.total_bytes,
+                "time": ss.last_collect_time,
+                "failures": ss.failures,
+            }
+
+    def _update_ui(self) -> None:
+        """Update all UI widgets."""
+        self._update_table()
+        self._update_chart()
+        self._update_rng()
+        self._update_pool()
+
+    def _update_table(self) -> None:
+        table = self.query_one("#source-table", DataTable)
+        for name in self._source_names:
+            state = self._source_states.get(name, {})
+            enabled = name in self._enabled
+            healthy = state.get("healthy", False)
+            shannon = state.get("entropy", 0.0)
+            nbytes = state.get("bytes", 0)
+            collect_time = state.get("time", 0.0)
+
+            icon = "✅" if enabled and healthy else "⏸️" if not enabled else "❌"
+            bar = _entropy_bar_text(shannon) if enabled else "░" * 12
+            spark = _sparkline(list(self._source_shannon.get(name, [])))
+
             if collect_time < 0.01:
                 time_str = "<10ms"
             elif collect_time < 1.0:
@@ -141,184 +361,132 @@ class EntropyMonitor:
             else:
                 time_str = f"{collect_time:.1f}s"
 
-            table.add_row(
-                name_text,
-                f"[{'green' if shannon > 5 else 'yellow' if shannon > 3 else 'red'}]{shannon:.2f}[/]",
-                bar,
-                f"{nbytes:,}",
-                time_str,
-                f"[bright_black]{spark}[/]",
-            )
+            hist = self._source_history.get(name, deque())
+            val01 = f"{hist[-1]:.3f}" if hist else "-.---"
 
-        return table
+            try:
+                table.update_cell(name, table.columns[0].key, icon)
+                table.update_cell(name, table.columns[2].key, f"{shannon:.2f}" if enabled else "off")
+                table.update_cell(name, table.columns[3].key, bar)
+                table.update_cell(name, table.columns[4].key, f"{nbytes:,}")
+                table.update_cell(name, table.columns[5].key, time_str)
+                table.update_cell(name, table.columns[6].key, spark)
+                table.update_cell(name, table.columns[7].key, val01)
+            except Exception:
+                pass
 
-    def _build_pool_panel(self) -> Panel:
-        """Build the pool status panel."""
-        elapsed = time.monotonic() - self._start_time if self._start_time else 0
+    def _update_chart(self) -> None:
+        chart_widget = self.query_one("#chart", ChartWidget)
+        try:
+            size = chart_widget.size
+            w = max(40, size.width - 4)
+            h = max(8, size.height - 2)
+            chart_str = _render_chart(self._source_history, self._enabled, width=w, height=h)
+            chart_widget.update(chart_str)
+        except Exception as e:
+            chart_widget.update(f"[dim]Chart loading... ({e})[/dim]")
+
+    def _update_rng(self) -> None:
+        rng_widget = self.query_one("#rng-display", RNGDisplay)
+        elapsed = time.monotonic() - self._start_time
         rate = self._total_bytes / elapsed if elapsed > 0 else 0
 
-        # Quality metrics
+        text = Text()
+        text.append("  🎲 RNG Output\n", style="bold magenta")
+        text.append(f"  Int:   ", style="dim")
+        text.append(f"{self._last_rng_int}\n", style="bold green")
+        text.append(f"  Float: ", style="dim")
+        text.append(f"{self._last_rng_float:.15f}\n", style="bold cyan")
+        text.append(f"  Hex:   ", style="dim")
+        text.append(f"{self._last_rng_hex[:32]}...\n", style="bold yellow")
+        text.append(f"  Rate:  {rate:,.0f} B/s", style="dim")
+        text.append(f"  │  Cycle: {self._total_collections}", style="dim")
+        text.append(f"  │  Speed: {self.refresh_rate:.1f}s", style="dim")
+
+        rng_widget.update(text)
+
+    def _update_pool(self) -> None:
+        pool_widget = self.query_one("#pool-status", PoolStatus)
         q = self._last_quality
-        shannon = q.get("shannon_entropy", 0.0)
         grade = q.get("grade", "?")
-        score = q.get("quality_score", 0.0)
+        score = q.get("quality_score", 0)
+        shannon = q.get("shannon_entropy", 0)
 
-        grade_color = {
-            "A": "green", "B": "blue", "C": "yellow", "D": "red", "F": "bright_red"
-        }.get(grade, "white")
+        grade_colors = {"A": "green", "B": "blue", "C": "yellow", "D": "red", "F": "bright_red"}
+        gc = grade_colors.get(grade, "white")
 
-        # Throughput sparkline
-        tp_spark = _sparkline(list(self._pool_throughput), width=40)
+        enabled_count = len(self._enabled)
+        healthy = sum(1 for n in self._enabled if self._source_states.get(n, {}).get("healthy"))
+        elapsed = time.monotonic() - self._start_time
 
         text = Text()
-        text.append("  Grade: ", style="bold")
-        text.append(f"{grade}", style=f"bold {grade_color}")
+        text.append("  🏊 Pool Status\n", style="bold green")
+        text.append(f"  Grade: ", style="dim")
+        text.append(f"{grade}", style=f"bold {gc}")
         text.append(f"  Score: {score:.0f}/100", style="dim")
         text.append(f"  Shannon: {shannon:.2f}/8.0\n")
-        text.append(f"  Total: {self._total_bytes:,} bytes")
-        text.append(f"  Rate: {rate:,.0f} B/s")
-        text.append(f"  Collections: {self._total_collections}\n")
-        text.append(f"  Throughput: ", style="dim")
-        text.append(f"{tp_spark}", style="cyan")
+        text.append(f"  Sources: {healthy}/{enabled_count} healthy", style="dim")
+        text.append(f"  │  Total: {self._total_bytes:,} B", style="dim")
+        text.append(f"  │  Uptime: {int(elapsed)}s", style="dim")
 
-        return Panel(text, title="🏊 Conditioned Pool", border_style="green")
+        pool_widget.update(text)
 
-    def _build_entropy_viz(self) -> Panel:
-        """Build the live entropy byte visualization."""
-        if self._last_pool_bytes:
-            hex_text = _hex_dump(self._last_pool_bytes, width=32)
-        else:
-            hex_text = Text("[waiting for first collection...]", style="dim")
+    # ── Actions ──
 
-        return Panel(hex_text, title="🔬 Live Entropy Bytes", border_style="magenta")
-
-    def _build_layout(self) -> Layout:
-        """Build the full dashboard layout."""
-        layout = Layout()
-        layout.split_column(
-            Layout(name="header", size=3),
-            Layout(name="body"),
-            Layout(name="footer", size=7),
-        )
-
-        # Header
-        elapsed = time.monotonic() - self._start_time if self._start_time else 0
-        healthy = sum(1 for s in self._source_states if s.get("healthy"))
-        total = len(self._source_states)
-        header = Text()
-        header.append("  🔬 ESOTERIC ENTROPY MONITOR", style="bold magenta")
-        header.append(f"  │  {healthy}/{total} sources healthy", style="cyan")
-        header.append(f"  │  uptime {int(elapsed)}s", style="dim")
-        header.append(f"  │  [q] quit", style="bright_black")
-        layout["header"].update(Panel(header, border_style="bright_black"))
-
-        # Body: sources table
-        layout["body"].update(self._build_source_table())
-
-        # Footer: pool + viz side by side
-        layout["footer"].split_row(
-            Layout(self._build_pool_panel(), name="pool", ratio=2),
-            Layout(self._build_entropy_viz(), name="viz", ratio=1),
-        )
-
-        return layout
-
-    def _collect_cycle(self, pool) -> None:
-        """Run one collection cycle."""
-        from esoteric_entropy.sources.base import EntropySource
-
-        pool.collect_all(parallel=True, timeout=8.0)
-        self._total_collections += 1
-
-        # Update source states
-        self._source_states = []
-        for ss in pool.sources:
-            name = ss.source.name
-            self._source_states.append({
-                "name": name,
-                "healthy": ss.healthy,
-                "entropy": ss.last_entropy,
-                "bytes": ss.total_bytes,
-                "time": ss.last_collect_time,
-                "failures": ss.failures,
-            })
-
-            if name not in self._source_history:
-                self._source_history[name] = deque(maxlen=60)
-            if ss.last_entropy > 0:
-                self._source_history[name].append(ss.last_entropy)
-
-        # Get conditioned output
-        out = pool.get_random_bytes(256)
-        self._last_pool_bytes = out
-        self._total_bytes += len(out)
-
-        # Quality check
-        arr = np.frombuffer(out, dtype=np.uint8)
-        self._last_quality = EntropySource._quick_quality(arr, "pool")
-
-        # Throughput tracking
-        self._pool_throughput.append(sum(s.total_bytes for s in pool.sources))
-
-    def run(self) -> None:
-        """Run the live monitor."""
-        from esoteric_entropy.pool import EntropyPool
-
-        self.console.clear()
-        self._start_time = time.monotonic()
-
-        # Build pool, optionally filtering sources
-        pool = EntropyPool.auto()
-        if self.sources_filter:
-            filt = set(self.sources_filter)
-            pool._sources = [s for s in pool._sources if s.source.name in filt]
-
-        if not pool._sources:
-            self.console.print("[red]No sources available![/]")
+    def action_toggle_source(self) -> None:
+        """Toggle the currently selected source."""
+        table = self.query_one("#source-table", DataTable)
+        if table.cursor_row is None:
+            return
+        row_key = table.get_row_at(table.cursor_row)
+        # Get the source name from row key
+        try:
+            name = list(self._source_states.keys())[table.cursor_row]
+        except (IndexError, KeyError):
+            name = self._source_names[table.cursor_row] if table.cursor_row < len(self._source_names) else None
+        if not name:
             return
 
-        # Initial collection
-        self._collect_cycle(pool)
+        if name in self._enabled:
+            self._enabled.discard(name)
+            self.notify(f"Disabled: {name}", severity="warning")
+        else:
+            self._enabled.add(name)
+            self.notify(f"Enabled: {name}", severity="information")
 
-        # Background collector
-        def _collector():
-            while not self._stop.is_set():
-                try:
-                    self._collect_cycle(pool)
-                except Exception:
-                    pass
-                self._stop.wait(self.refresh_rate)
+    def action_enable_all(self) -> None:
+        self._enabled = set(self._source_names)
+        self.notify("All sources enabled")
 
-        collector = threading.Thread(target=_collector, daemon=True)
-        collector.start()
+    def action_disable_all(self) -> None:
+        self._enabled.clear()
+        self.notify("All sources disabled", severity="warning")
 
-        # Handle Ctrl+C
-        def _sigint(sig, frame):
-            self._stop.set()
+    def action_cycle_speed(self) -> None:
+        self._speed_idx = (self._speed_idx + 1) % len(self._speeds)
+        self.refresh_rate = self._speeds[self._speed_idx]
+        self.notify(f"Refresh: {self.refresh_rate:.1f}s")
 
-        old_handler = signal.signal(signal.SIGINT, _sigint)
+    def action_force_refresh(self) -> None:
+        threading.Thread(target=self._collect_cycle, daemon=True).start()
+        self.notify("Collecting...")
 
-        try:
-            with Live(
-                self._build_layout(),
-                console=self.console,
-                refresh_per_second=2,
-                screen=True,
-            ) as live:
-                while not self._stop.is_set():
-                    live.update(self._build_layout())
-                    self._stop.wait(0.5)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self._stop.set()
-            signal.signal(signal.SIGINT, old_handler)
-            self.console.clear()
-            self.console.print("[green]Monitor stopped.[/]")
-            # Print final stats
-            elapsed = time.monotonic() - self._start_time
-            self.console.print(f"  Total bytes: {self._total_bytes:,}")
-            self.console.print(f"  Collections: {self._total_collections}")
-            self.console.print(f"  Uptime: {elapsed:.0f}s")
-            healthy = sum(1 for s in self._source_states if s.get("healthy"))
-            self.console.print(f"  Sources: {healthy}/{len(self._source_states)} healthy")
+    def on_unmount(self) -> None:
+        self._stop.set()
+
+
+# ── Entry point for CLI ──
+
+class EntropyMonitor:
+    """Wrapper for CLI integration."""
+
+    def __init__(self, refresh_rate: float = 1.0, sources_filter: list[str] | None = None):
+        self.refresh_rate = refresh_rate
+        self.sources_filter = sources_filter
+
+    def run(self) -> None:
+        app = EntropyMonitorApp(
+            initial_rate=self.refresh_rate,
+            sources_filter=self.sources_filter,
+        )
+        app.run()
