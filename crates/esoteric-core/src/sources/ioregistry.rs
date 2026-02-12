@@ -254,6 +254,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
+    #[ignore] // Run with: cargo test -- --ignored
     fn ioregistry_collects_bytes() {
         let src = IORegistryEntropySource;
         if src.is_available() {

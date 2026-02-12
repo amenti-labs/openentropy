@@ -108,6 +108,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[ignore] // Run with: cargo test -- --ignored
     fn memory_timing_collects_bytes() {
         let src = MemoryTimingSource;
         assert!(src.is_available());

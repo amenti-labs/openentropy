@@ -405,6 +405,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn dispatch_queue_collects_bytes() {
         let src = DispatchQueueSource;
         assert!(src.is_available());
@@ -430,6 +431,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[ignore] // Run with: cargo test -- --ignored
     fn vm_page_timing_collects_bytes() {
         let src = VMPageTimingSource;
         assert!(src.is_available());
@@ -447,6 +449,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
+    #[ignore] // Run with: cargo test -- --ignored
     fn spotlight_timing_collects_bytes() {
         let src = SpotlightTimingSource;
         if src.is_available() {

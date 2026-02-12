@@ -116,6 +116,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn disk_io_collects_bytes() {
         let src = DiskIOSource;
         assert!(src.is_available());

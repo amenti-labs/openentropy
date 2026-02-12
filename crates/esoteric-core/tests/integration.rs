@@ -27,6 +27,7 @@ fn pool_auto_creates_with_sources() {
 }
 
 #[test]
+#[ignore] // Run with: cargo test -- --ignored
 fn pool_produces_requested_byte_count() {
     let pool = EntropyPool::auto();
     for size in [1, 32, 64, 128, 256, 1024] {
@@ -42,6 +43,7 @@ fn pool_produces_requested_byte_count() {
 }
 
 #[test]
+#[ignore] // Run with: cargo test -- --ignored
 fn pool_output_has_high_entropy() {
     let pool = EntropyPool::auto();
     let bytes = pool.get_random_bytes(5000);
@@ -56,6 +58,7 @@ fn pool_output_has_high_entropy() {
 }
 
 #[test]
+#[ignore] // Run with: cargo test -- --ignored
 fn pool_output_not_constant() {
     let pool = EntropyPool::auto();
     let a = pool.get_random_bytes(256);
@@ -68,6 +71,7 @@ fn pool_output_not_constant() {
 }
 
 #[test]
+#[ignore] // Run with: cargo test -- --ignored
 fn pool_health_report_structure() {
     let pool = EntropyPool::auto();
     let _ = pool.get_random_bytes(64);

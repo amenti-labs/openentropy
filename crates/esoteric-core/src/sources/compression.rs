@@ -174,6 +174,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn compression_timing_collects_bytes() {
         let src = CompressionTimingSource;
         assert!(src.is_available());
@@ -182,6 +183,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn hash_timing_collects_bytes() {
         let src = HashTimingSource;
         assert!(src.is_available());

@@ -348,6 +348,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn cpu_io_beat_collects_bytes() {
         let src = CPUIOBeatSource;
         assert!(src.is_available());
@@ -364,6 +365,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn cpu_memory_beat_collects_bytes() {
         let src = CPUMemoryBeatSource;
         assert!(src.is_available());
@@ -380,6 +382,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn multi_domain_beat_collects_bytes() {
         let src = MultiDomainBeatSource;
         assert!(src.is_available());

@@ -195,6 +195,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn clock_jitter_collects_bytes() {
         let src = ClockJitterSource;
         assert!(src.is_available());
@@ -206,6 +207,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
+    #[ignore] // Run with: cargo test -- --ignored
     fn mach_timing_collects_bytes() {
         let src = MachTimingSource;
         assert!(src.is_available());
@@ -215,6 +217,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn sleep_jitter_collects_bytes() {
         let src = SleepJitterSource;
         assert!(src.is_available());

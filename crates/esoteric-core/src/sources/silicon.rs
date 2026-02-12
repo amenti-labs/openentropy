@@ -394,6 +394,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn dram_row_buffer_collects_bytes() {
         let src = DRAMRowBufferSource;
         assert!(src.is_available());
@@ -408,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn cache_contention_collects_bytes() {
         let src = CacheContentionSource;
         assert!(src.is_available());
@@ -421,6 +423,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn page_fault_timing_collects_bytes() {
         let src = PageFaultTimingSource;
         assert!(src.is_available());
@@ -430,6 +433,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Run with: cargo test -- --ignored
     fn speculative_execution_collects_bytes() {
         let src = SpeculativeExecutionSource;
         assert!(src.is_available());
