@@ -14,6 +14,11 @@ edition = "2024"
 license = "MIT"
 authors = ["Amenti Labs"]
 repository = "https://github.com/amenti-labs/esoteric-entropy"
+homepage = "https://github.com/amenti-labs/esoteric-entropy"
+description = "Your computer is a quantum noise observatory — harvest entropy from 30 unconventional hardware sources"
+keywords = ["entropy", "randomness", "hardware", "TRNG", "security"]
+categories = ["cryptography", "hardware-support", "os"]
+readme = "README.md"
 
 [workspace.dependencies]
 # Core

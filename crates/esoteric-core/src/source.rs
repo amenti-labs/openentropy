@@ -1,8 +1,11 @@
 //! Abstract entropy source trait and runtime state.
+//!
+//! Every entropy source implements the [`EntropySource`] trait, which provides
+//! metadata via [`SourceInfo`], availability checking, and raw sample collection.
 
 use std::time::Duration;
 
-/// Category of entropy source.
+/// Category of entropy source, used for classification and filtering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceCategory {
     Timing,
@@ -29,13 +32,23 @@ impl std::fmt::Display for SourceCategory {
 }
 
 /// Metadata about an entropy source.
+///
+/// Each source declares its name, a human-readable description, a physics
+/// explanation of how it harvests entropy, its category, platform requirements,
+/// and an estimated entropy rate in bits per sample.
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
+    /// Unique identifier (e.g. `"clock_jitter"`).
     pub name: &'static str,
+    /// One-line human-readable description.
     pub description: &'static str,
+    /// Physics explanation of the entropy mechanism.
     pub physics: &'static str,
+    /// Source category for classification.
     pub category: SourceCategory,
+    /// Platform requirements (e.g. `["macos"]`).
     pub platform_requirements: &'static [&'static str],
+    /// Estimated entropy rate in bits per sample.
     pub entropy_rate_estimate: f64,
 }
 

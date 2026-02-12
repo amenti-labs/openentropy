@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.0 — 2026-02-12
+
+### Complete Rust Rewrite
+
+The entire project has been rewritten in Rust as a Cargo workspace with 5 crates:
+`esoteric-core`, `esoteric-cli`, `esoteric-server`, `esoteric-tests`, and `esoteric-python`.
+
+### Highlights
+- **30 entropy sources** across 7 categories (timing, system, network, hardware, silicon, cross-domain, novel), all with SHA-256 conditioning
+- **31 NIST SP 800-22 statistical tests** in a dedicated test suite crate
+- **CLI with 9 commands**: `scan`, `probe`, `bench`, `stream`, `device`, `server`, `monitor`, `report`, `pool`
+- **Interactive TUI monitor** built with ratatui — live charts, source toggling, RNG display
+- **HTTP server** (axum) with ANU QRNG API compatibility for quantum-llama.cpp integration
+- **PyO3 Python bindings** via maturin for seamless Python interop
+- **Zero clippy warnings**, cargo fmt clean across the entire workspace
+- **24/27 available sources achieve Grade A** entropy quality
+
+### Crate Breakdown
+| Crate | Description |
+|-------|-------------|
+| `esoteric-core` | EntropySource trait, 30 sources, pool, SHA-256 conditioning, platform detection |
+| `esoteric-cli` | clap-based CLI with 9 commands including interactive TUI monitor |
+| `esoteric-server` | axum HTTP server with ANU QRNG-compatible `/api/v1/entropy` endpoint |
+| `esoteric-tests` | 31 NIST SP 800-22 statistical tests (frequency, runs, spectral, matrix rank, etc.) |
+| `esoteric-python` | PyO3 bindings exposing sources, pool, and test suite to Python |
+
+### Meta
+- Edition: Rust 2024
+- Author: Amenti Labs
+- License: MIT (unchanged)
+
+---
+
 ## 0.2.0 — 2026-02-11
 
 ### New Features
@@ -13,7 +46,7 @@
 - Added 15 new sources since v0.1.0:
   - Silicon microarchitecture: DRAM row buffer, cache contention, page fault timing, speculative execution
   - IORegistry deep mining
-  - Cross-domain beat frequencies: CPU↔IO, CPU↔memory, multi-domain
+  - Cross-domain beat frequencies: CPU/IO, CPU/memory, multi-domain
   - Compression/hash timing oracles
   - Novel: GCD dispatch, dyld timing, VM page, Spotlight timing
 
@@ -21,7 +54,7 @@
 - NIST test battery: 28/31 pass on conditioned pool (Grade A)
 - Source filter support on all CLI commands (`--sources`)
 - Professional documentation overhaul (ARCHITECTURE, API, SOURCES, OLLAMA_INTEGRATION)
-- Updated CI: macOS + Ubuntu, Python 3.10–3.13, ruff + pytest + build
+- Updated CI: macOS + Ubuntu, Python 3.10-3.13, ruff + pytest + build
 - Repo cleanup: removed stale files, updated .gitignore
 
 ### Meta

@@ -286,31 +286,51 @@ fn getrandom(buf: &mut [u8]) {
     }
 }
 
+/// Overall health report for the entropy pool.
 #[derive(Debug, Clone)]
 pub struct HealthReport {
+    /// Number of healthy sources.
     pub healthy: usize,
+    /// Total number of registered sources.
     pub total: usize,
+    /// Total raw bytes collected across all sources.
     pub raw_bytes: u64,
+    /// Total conditioned output bytes produced.
     pub output_bytes: u64,
+    /// Current internal buffer size in bytes.
     pub buffer_size: usize,
+    /// Per-source health details.
     pub sources: Vec<SourceHealth>,
 }
 
+/// Health status of a single entropy source.
 #[derive(Debug, Clone)]
 pub struct SourceHealth {
+    /// Source name.
     pub name: String,
+    /// Whether the source is currently healthy (entropy > 1.0 bits/byte).
     pub healthy: bool,
+    /// Total bytes collected from this source.
     pub bytes: u64,
+    /// Shannon entropy of the last collection (bits per byte, max 8.0).
     pub entropy: f64,
+    /// Time taken for the last collection in seconds.
     pub time: f64,
+    /// Number of collection failures.
     pub failures: u64,
 }
 
+/// Snapshot of source metadata for external consumption.
 #[derive(Debug, Clone)]
 pub struct SourceInfoSnapshot {
+    /// Source name.
     pub name: String,
+    /// Human-readable description.
     pub description: String,
+    /// Physics explanation.
     pub physics: String,
+    /// Source category.
     pub category: String,
+    /// Estimated entropy rate.
     pub entropy_rate_estimate: f64,
 }

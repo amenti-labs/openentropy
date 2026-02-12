@@ -1,17 +1,18 @@
 <div align="center">
 
-# 🔬 esoteric-entropy
+# esoteric-entropy
 
 **Your computer is a quantum noise observatory.**
 
+[![Crates.io](https://img.shields.io/crates/v/esoteric-entropy.svg)](https://crates.io/crates/esoteric-entropy)
+[![docs.rs](https://img.shields.io/docsrs/esoteric-core)](https://docs.rs/esoteric-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green.svg)](https://python.org)
+[![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/esoteric-entropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/esoteric-entropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
-[![NIST Tests](https://img.shields.io/badge/NIST-28%2F31%20Pass-brightgreen.svg)]()
 
-*Harvests entropy from 30 unconventional hardware sources hiding inside your Mac — clock jitter, kernel counters, DRAM row buffers, GPU scheduling, cache contention, and more.*
+*Harvests entropy from 30 unconventional hardware sources hiding inside your computer -- clock jitter, kernel counters, DRAM row buffers, GPU scheduling, cache contention, and more.*
 
-**Built for Apple Silicon MacBooks and Mac desktops. No special hardware. No API keys. Just physics.**
+**Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
 **By [Amenti Labs](https://github.com/amenti-labs)**
 
@@ -19,385 +20,454 @@
 
 ---
 
-## Quick Install
+## Quick Start
+
+### CLI (Rust)
+
+```bash
+cargo install esoteric-entropy
+```
+
+```bash
+esoteric-entropy scan       # discover entropy sources on your machine
+esoteric-entropy bench      # benchmark all sources
+esoteric-entropy monitor    # live TUI dashboard
+```
+
+### Python SDK
 
 ```bash
 pip install esoteric-entropy
 ```
 
-With all optional hardware sources:
-
-```bash
-pip install esoteric-entropy[all]
-```
-
-## Quick Usage
-
 ```python
 from esoteric_entropy import EntropyPool
 
-pool = EntropyPool.auto()          # discover all sources
-data = pool.get_random_bytes(256)  # 256 bytes of conditioned entropy
-```
-
-### CLI
-
-```bash
-esoteric-entropy scan                          # discover sources
-esoteric-entropy stream --format raw > rng.bin # pipe entropy
-esoteric-entropy device /tmp/esoteric-rng &    # named pipe for ollama
-esoteric-entropy server --port 8042            # HTTP API server
-```
-
-### NumPy Integration
-
-```python
-from esoteric_entropy import EsotericRandom
-
-rng = EsotericRandom()
-rng.random(10)            # 10 floats from hardware entropy
-rng.integers(0, 256, 100) # 100 random ints
-rng.standard_normal(1000) # Gaussian samples
+pool = EntropyPool.auto()
+data = pool.get_random_bytes(256)
+print(f"{len(data)} random bytes from {pool.source_count} sources")
 ```
 
 ---
 
-## Platform Support
+## What Makes This Different
 
-**Primary: macOS on Apple Silicon** (M1/M2/M3/M4 MacBooks, Mac Mini, Mac Studio, Mac Pro)
+Most random number generators are **pseudorandom** -- deterministic algorithms seeded once. Esoteric-entropy is different. It continuously harvests **real physical noise** from your computer's hardware:
 
-| Platform | Sources | Notes |
-|----------|:-------:|-------|
-| **MacBook (M-series)** | **30/30** | Full suite — WiFi, BLE, camera, mic, sensors, all silicon sources |
-| **Mac Mini/Studio/Pro** | 27-28/30 | Most sources — no built-in camera, mic, or motion sensors |
-| **Intel Mac** | ~20/30 | Timing, system, network sources work; some silicon sources are ARM-specific |
-| **Linux** | 10-15/30 | Timing, network, disk, process sources; system sources use `/proc` (coming soon) |
+- **Timing jitter** from clock phase noise, scheduling nondeterminism, and nanosleep drift
+- **Silicon microarchitecture** effects: DRAM row buffer conflicts, CPU cache contention, speculative execution variance, page fault latency
+- **Thermal fluctuations** in sensor readouts, GPU dispatch scheduling, disk I/O latency
+- **Network nondeterminism** from DNS resolution timing and TCP handshake variance
+- **Cross-domain beat frequencies** where CPU, memory, and I/O subsystems interfere
 
-The package gracefully detects available hardware and only activates sources that work on your machine. MacBooks get the richest entropy because they pack the most sensors into one device — WiFi, Bluetooth, camera, microphone, accelerometer, gyroscope, magnetometer, ambient light sensor, and the full Apple Silicon SoC.
-
----
-
-## How It Works
-
-Every computer is a noisy analog system pretending to be digital. Esoteric-entropy listens to the noise:
-
-1. **Harvest** — 30 source classes extract raw entropy from timing jitter, thermal fluctuations, memory access patterns, network latency, and silicon microarchitecture effects
-2. **Pool** — Independent streams are XOR-combined with entropy-rate weighting
-3. **Condition** — SHA-256 conditioning (NIST SP 800-90B) produces cryptographic-quality output
-4. **Monitor** — Continuous per-source health tracking with graceful degradation
-
-```
-┌─────────────────────────────────────────────────────┐
-│                 ENTROPY SOURCES (30)                 │
-│                                                     │
-│  ⏱ Timing    🖥 System    🌐 Network   🔧 Hardware  │
-│  🧬 Silicon   🔀 Cross     🆕 Novel                  │
-└──────────────────────┬──────────────────────────────┘
-                       │ raw samples (uint8)
-                       ▼
-              ┌────────────────┐
-              │  ENTROPY POOL  │
-              │  XOR combine   │
-              │  health monitor│
-              └───────┬────────┘
-                      │
-                      ▼
-              ┌────────────────┐
-              │  CONDITIONING  │
-              │  SHA-256 (NIST)│
-              │  counter mode  │
-              └───────┬────────┘
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-     get_bytes()   stream     device/server
-       (API)       (stdout)   (FIFO/HTTP)
-```
+Every source exploits a different physical phenomenon. The pool XOR-combines independent streams and applies SHA-256 conditioning (NIST SP 800-90B) to produce cryptographic-quality output. No single source failure can compromise the pool.
 
 ---
 
 ## Source Catalog
 
-30 entropy sources across 7 categories:
+30 entropy sources across 7 categories. Benchmark results from `esoteric-entropy bench` on Apple Silicon:
 
-### ⏱ Timing Sources
+### Timing (3 sources)
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `clock_jitter` | Phase noise between perf_counter and monotonic clocks | ~500 b/s |
-| `mach_timing` | Mach absolute time LSB jitter (Apple Silicon) | ~1000 b/s |
-| `sleep_jitter` | Scheduling jitter in nanosleep() calls | ~200 b/s |
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `clock_jitter` | 6.507 | 0.00s | Phase noise between performance counter and monotonic clocks |
+| `mach_timing` | 7.832 | 0.00s | Mach absolute time LSB jitter (Apple Silicon) |
+| `sleep_jitter` | 7.963 | 0.00s | Scheduling jitter in nanosleep() calls |
 
-### 🖥 System Sources
+### System (3 sources)
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `sysctl` | Kernel counter fluctuations (50+ sysctl keys) | ~2000 b/s |
-| `vmstat` | VM subsystem page fault / swap counters | ~500 b/s |
-| `process` | Process table snapshot entropy | ~300 b/s |
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `sysctl_deltas` | 7.968 | 0.28s | Kernel counter fluctuations across 50+ sysctl keys |
+| `vmstat_deltas` | 7.965 | 0.38s | VM subsystem page fault and swap counters |
+| `process_table` | 7.971 | 1.99s | Process table snapshot entropy |
 
-### 🌐 Network Sources
+### Network (2 sources)
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `dns_timing` | DNS resolution timing jitter | ~400 b/s |
-| `tcp_connect` | TCP handshake timing variance | ~300 b/s |
-| `wifi_rssi` | WiFi signal strength noise floor | ~200 b/s |
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
+| `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
 
-### 🔧 Hardware Sources
+### Hardware (6 sources)
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `disk_io` | Block device I/O timing jitter | ~500 b/s |
-| `memory_timing` | DRAM access timing variations | ~800 b/s |
-| `gpu_timing` | GPU compute dispatch scheduling jitter | ~600 b/s |
-| `audio_noise` | Microphone thermal noise floor | ~1000 b/s |
-| `camera_noise` | Camera sensor dark current noise | ~2000 b/s |
-| `sensor_noise` | SMC sensor readout jitter | ~400 b/s |
-| `bluetooth_noise` | BLE ambient RF noise | ~200 b/s |
-| `ioregistry` | IOKit registry value mining | ~500 b/s |
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
+| `memory_timing` | 5.056 | 0.01s | DRAM access timing variations |
+| `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
+| `sensor_noise` | 7.997 | 0.97s | SMC sensor readout jitter |
+| `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
+| `ioregistry` | 7.964 | 2.15s | IOKit registry value mining |
 
-### 🧬 Silicon Microarchitecture
+> `wifi_rssi`, `audio_noise`, and `camera_noise` are also available on machines with the corresponding hardware but are platform-dependent and not always present.
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `dram_row_buffer` | DRAM row buffer conflict timing | ~600 b/s |
-| `cache_contention` | CPU cache line contention noise | ~800 b/s |
-| `page_fault_timing` | Virtual memory page fault latency | ~400 b/s |
-| `speculative_exec` | Branch prediction / speculative execution jitter | ~500 b/s |
+### Silicon Microarchitecture (4 sources)
 
-### 🔀 Cross-Domain Beat Frequencies
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `dram_row_buffer` | 7.959 | 0.00s | DRAM row buffer conflict timing |
+| `cache_contention` | 7.960 | 0.01s | CPU cache line contention noise |
+| `page_fault_timing` | 7.967 | 0.01s | Virtual memory page fault latency |
+| `speculative_execution` | 7.967 | 0.00s | Branch prediction / speculative execution jitter |
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `cpu_io_beat` | CPU ↔ I/O subsystem beat frequency | ~300 b/s |
-| `cpu_memory_beat` | CPU ↔ memory controller beat pattern | ~400 b/s |
-| `multi_domain_beat` | Multi-subsystem interference pattern | ~500 b/s |
+### Cross-Domain Beat Frequencies (3 sources)
 
-### 🆕 Novel Sources
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `cpu_io_beat` | 6.707 | 0.04s | CPU and I/O subsystem beat frequency |
+| `cpu_memory_beat` | 6.256 | 0.00s | CPU and memory controller beat pattern |
+| `multi_domain_beat` | 3.867 | 0.00s | Multi-subsystem interference pattern |
 
-| Source | Description | Entropy Rate |
-|--------|-------------|:------------:|
-| `compression_timing` | zlib compression timing oracle | ~300 b/s |
-| `hash_timing` | SHA-256 hash timing data-dependency | ~400 b/s |
-| `dispatch_queue` | GCD dispatch queue scheduling jitter | ~500 b/s |
-| `dyld_timing` | Dynamic linker dlsym() timing | ~300 b/s |
-| `vm_page_timing` | Mach VM page allocation timing | ~400 b/s |
-| `spotlight_timing` | Spotlight metadata query timing | ~200 b/s |
+### Novel (6 sources)
 
----
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `compression_timing` | 7.966 | 1.02s | zlib compression timing oracle |
+| `hash_timing` | 7.122 | 0.04s | SHA-256 hash timing data-dependency |
+| `dispatch_queue` | 6.688 | 0.09s | GCD dispatch queue scheduling jitter |
+| `dyld_timing` | 7.967 | 1.35s | Dynamic linker dlsym() timing |
+| `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
+| `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
 
-## NIST Test Results
-
-Conditioned pool output tested with NIST SP 800-22 inspired battery:
-
-| Test | Result | p-value |
-|------|:------:|:-------:|
-| Frequency (Monobit) | ✅ Pass | 0.73 |
-| Block Frequency | ✅ Pass | 0.81 |
-| Runs Test | ✅ Pass | 0.65 |
-| Longest Run of Ones | ✅ Pass | 0.58 |
-| Serial Test | ✅ Pass | 0.71 |
-| Approximate Entropy | ✅ Pass | 0.69 |
-| Cumulative Sums | ✅ Pass | 0.77 |
-| Shannon Entropy | ✅ Pass | 7.997/8.0 |
-| Min-Entropy | ✅ Pass | 7.91/8.0 |
-| Chi-Squared | ✅ Pass | 0.82 |
-| Permutation Entropy | ✅ Pass | 0.94 |
-| Compression Ratio | ✅ Pass | 1.002 |
-| ... | ... | ... |
-| **Total** | **28/31** | **Grade A** |
-
-*3 marginal failures are in raw individual source tests; the conditioned pool passes all.*
+Shannon entropy H is measured on a scale of 0-8 bits per byte. Grade A sources score H >= 7.9.
 
 ---
 
 ## CLI Reference
 
+The binary is called `esoteric-entropy` and provides 9 commands:
+
 ### `esoteric-entropy scan`
+
 Discover available entropy sources on this machine.
 
+```bash
+esoteric-entropy scan
+```
+
 ### `esoteric-entropy probe <source>`
+
 Test a specific source and show quality statistics.
 
+```bash
+esoteric-entropy probe mach_timing
+```
+
 ### `esoteric-entropy bench`
-Benchmark all available sources with ranked report.
+
+Benchmark all available sources with a ranked report.
+
+```bash
+esoteric-entropy bench
+```
 
 ### `esoteric-entropy stream`
+
 Continuous entropy output to stdout.
 
 ```bash
-# Raw bytes to file
-esoteric-entropy stream --format raw --bytes 1048576 > entropy.bin
-
-# Hex output, rate-limited
-esoteric-entropy stream --format hex --rate 1024
-
-# Pipe to another tool
-esoteric-entropy stream --format raw | openssl enc -aes-256-cbc -pass stdin
+esoteric-entropy stream --format hex --bytes 256         # hex output
+esoteric-entropy stream --format raw --bytes 1024 > /dev/random  # raw bytes
+esoteric-entropy stream --format base64 --rate 1024      # rate-limited base64
 ```
 
-Options: `--format raw|hex|base64`, `--rate N` (bytes/sec), `--bytes N`, `--sources filter`
+Options: `--format raw|hex|base64`, `--rate N` (bytes/sec), `--bytes N` (0 = infinite), `--sources filter`
 
 ### `esoteric-entropy device <path>`
-Create a named pipe (FIFO) for entropy consumers.
+
+Create a named pipe (FIFO) that continuously provides entropy. Useful for feeding entropy to other programs.
 
 ```bash
-# Start entropy device
-esoteric-entropy device /tmp/esoteric-rng &
-
-# Use with ollama-auxrng
-OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+esoteric-entropy device /tmp/entropy-fifo
 ```
 
 Options: `--buffer-size N`, `--sources filter`
 
 ### `esoteric-entropy server`
-HTTP server with ANU QRNG-compatible API.
+
+HTTP entropy server with ANU QRNG-compatible API.
 
 ```bash
-esoteric-entropy server --port 8042
-
-# Query random data
-curl "http://localhost:8042/api/v1/random?length=256&type=uint8"
-curl "http://localhost:8042/health"
-curl "http://localhost:8042/sources"
+esoteric-entropy server --port 8080
 ```
 
-Options: `--port N`, `--host addr`, `--sources filter`
+Options: `--port N` (default 8042), `--host addr` (default 127.0.0.1), `--sources filter`
 
 ### `esoteric-entropy monitor`
-**Interactive live dashboard** — the showpiece of the package.
+
+Live interactive TUI dashboard -- the showpiece of the project.
 
 ```bash
-# Launch the full dashboard
 esoteric-entropy monitor
-
-# Fast refresh (0.25s)
 esoteric-entropy monitor --refresh 0.25
-
-# Filter to specific sources
-esoteric-entropy monitor --sources silicon,compression,timing
+esoteric-entropy monitor --sources silicon,timing
 ```
 
-**Keyboard controls:**
+Keyboard controls:
 
 | Key | Action |
 |-----|--------|
-| **Space** | Toggle selected source on/off |
-| **i** | Show/hide physics info for selected source |
-| **a** | Enable all sources |
-| **n** | Disable all sources |
-| **f** | Cycle refresh speed (2s → 1s → 0.5s → 0.25s) |
-| **r** | Force immediate refresh |
-| **↑↓** | Navigate source list |
-| **q** | Quit |
-
-The dashboard shows:
-- **Source table** — all sources with live Shannon entropy, sparklines, and hash-to-float values
-- **Line chart** — historical entropy per source (hashed to 0–1) using plotext
-- **RNG output** — live integer, float, and hex from the conditioned pool
-- **Pool status** — grade, score, throughput
-- **Info panel** — press `i` to see the physics behind how each source derives its entropy
+| Space | Toggle selected source on/off |
+| i | Show/hide physics info for selected source |
+| a | Enable all sources |
+| n | Disable all sources |
+| f | Cycle refresh speed (2s / 1s / 0.5s / 0.25s) |
+| r | Force immediate refresh |
+| Up/Down | Navigate source list |
+| q | Quit |
 
 ### `esoteric-entropy report`
-Run the full NIST-inspired test battery and generate a Markdown report.
+
+Run the full NIST SP 800-22 inspired test battery and generate a report.
+
+```bash
+esoteric-entropy report
+esoteric-entropy report --source mach_timing --samples 50000
+esoteric-entropy report --output report.md
+```
+
+Options: `--samples N`, `--source name`, `--output path`
 
 ### `esoteric-entropy pool`
+
 Show entropy pool health metrics.
 
----
-
-## Ollama Integration
-
-### With ollama-auxrng
-
 ```bash
-# Terminal 1: Start entropy device
-esoteric-entropy device /tmp/esoteric-rng &
-
-# Terminal 2: Run ollama with hardware entropy
-OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+esoteric-entropy pool
 ```
-
-### With quantum-llama.cpp
-
-```bash
-# Terminal 1: Start entropy server
-esoteric-entropy server --port 8042
-
-# Terminal 2: Point quantum-llama.cpp at it
-./llama-cli -m model.gguf --qrng-url http://localhost:8042/api/v1/random
-```
-
-See [docs/OLLAMA_INTEGRATION.md](docs/OLLAMA_INTEGRATION.md) for detailed setup.
 
 ---
 
-## API Reference
+## Rust API
 
-### `EntropyPool`
+Add `esoteric-core` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+esoteric-core = "0.3"
+```
+
+```rust
+use esoteric_core::{EntropyPool, detect_available_sources};
+
+let pool = EntropyPool::auto();
+let random_bytes = pool.get_random_bytes(256);
+let health = pool.health_report();
+println!("{} sources, {} bytes collected", health.total, health.raw_bytes);
+```
+
+The `esoteric-core` crate exposes:
+
+- `EntropyPool` -- thread-safe multi-source entropy pool with SHA-256 conditioning
+- `EntropySource` trait -- implement your own entropy sources
+- `detect_available_sources()` -- platform-aware source discovery
+- `quick_shannon()` / `quick_quality()` -- entropy quality analysis utilities
+- `SourceCategory` / `SourceInfo` -- source metadata types
+
+---
+
+## Python SDK
+
+The Python package is built with PyO3 and maturin, providing native Rust performance with a Pythonic API.
+
+```bash
+pip install esoteric-entropy
+```
 
 ```python
 from esoteric_entropy import EntropyPool
 
-pool = EntropyPool.auto()              # auto-discover sources
-pool = EntropyPool(seed=b"optional")   # with custom seed
-pool.add_source(source, weight=1.0)    # add source manually
+pool = EntropyPool.auto()
+data = pool.get_random_bytes(256)
+print(f"{len(data)} random bytes from {pool.source_count} sources")
 
-data = pool.get_random_bytes(256)      # conditioned output
-pool.collect_all()                     # manual collection
-pool.health_report()                   # dict of health metrics
-pool.print_health()                    # pretty-print health
+# Health monitoring
+report = pool.health_report()
+print(f"Healthy sources: {report['healthy']}/{report['total']}")
+
+# Parallel collection with timeout
+pool.collect_all(parallel=True, timeout=10.0)
 ```
 
-### `EsotericRandom` (NumPy Generator)
+---
 
-```python
-from esoteric_entropy import EsotericRandom
+## HTTP Server and Ollama Integration
 
-rng = EsotericRandom()
-rng.random(10)                  # uniform floats
-rng.integers(0, 100, size=50)   # random ints
-rng.bytes(32)                   # raw bytes
-rng.standard_normal(1000)       # Gaussian
-rng.choice([1, 2, 3], size=10)  # random choice
+### Server API
+
+Start the server and query entropy over HTTP:
+
+```bash
+esoteric-entropy server --port 8080
 ```
 
-### `EntropySource` (base class)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/random?length=1024&type=hex16` | Random data (hex16, uint8, uint16) |
+| `GET /health` | Pool health status |
+| `GET /sources` | List all sources with stats |
+| `GET /pool/status` | Detailed pool metrics |
 
-```python
-from esoteric_entropy.sources.base import EntropySource
-
-class MySource(EntropySource):
-    name = "my_source"
-    description = "What physical phenomenon this captures"
-    
-    def is_available(self) -> bool: ...
-    def collect(self, n_samples=1000) -> np.ndarray: ...
-    def entropy_quality(self) -> dict: ...
+```bash
+curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
+curl "http://localhost:8080/health"
+curl "http://localhost:8080/sources"
+curl "http://localhost:8080/pool/status"
 ```
 
-See [docs/API.md](docs/API.md) for complete reference.
+The API is compatible with the ANU QRNG format, so any client expecting that protocol will work.
+
+### Ollama Integration
+
+Feed hardware entropy into LLM inference via a named pipe:
+
+```bash
+# Terminal 1: Start entropy device
+esoteric-entropy device /tmp/esoteric-rng
+
+# Terminal 2: Run Ollama with hardware entropy
+OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+```
+
+Or via HTTP with quantum-llama.cpp:
+
+```bash
+# Terminal 1: Start entropy server
+esoteric-entropy server --port 8080
+
+# Terminal 2: Point quantum-llama.cpp at it
+./llama-cli -m model.gguf --qrng-url http://localhost:8080/api/v1/random
+```
+
+---
+
+## Architecture
+
+Esoteric-entropy is a Rust workspace with 5 crates:
+
+| Crate | Description |
+|-------|-------------|
+| `esoteric-core` | Core entropy harvesting library -- sources, pool, conditioning |
+| `esoteric-cli` | CLI binary with 9 commands and interactive TUI dashboard |
+| `esoteric-server` | Axum-based HTTP entropy server (ANU QRNG API compatible) |
+| `esoteric-tests` | NIST SP 800-22 inspired randomness test battery |
+| `esoteric-python` | Python bindings via PyO3/maturin |
+
+Data flow:
+
+```
++-------------------------------------------------------+
+|              ENTROPY SOURCES (30)                      |
+|                                                       |
+|  Timing    System    Network    Hardware               |
+|  Silicon   Cross-Domain   Novel                        |
++---------------------------+---------------------------+
+                            | raw samples (u8)
+                            v
+                  +--------------------+
+                  |   ENTROPY POOL     |
+                  |   XOR combine      |
+                  |   health monitor   |
+                  +--------+-----------+
+                           |
+                           v
+                  +--------------------+
+                  |   CONDITIONING     |
+                  |   SHA-256 (NIST)   |
+                  |   counter mode     |
+                  +--------+-----------+
+                           |
+            +--------------+--------------+
+            |              |              |
+            v              v              v
+       Rust API       CLI / TUI      Server / FIFO
+    (esoteric-core)  (esoteric-cli)  (esoteric-server)
+            |
+            v
+     Python bindings
+    (esoteric-python)
+```
+
+The pool is thread-safe (`Mutex`-guarded state) and supports parallel collection across all sources. SHA-256 conditioning in counter mode ensures that even if individual sources produce biased output, the combined conditioned stream is cryptographic quality.
+
+---
+
+## Platform Support
+
+**Primary target: macOS on Apple Silicon** (M1/M2/M3/M4)
+
+| Platform | Sources | Notes |
+|----------|:-------:|-------|
+| **MacBook (M-series)** | **30/30** | Full suite -- WiFi, BLE, camera, mic, sensors, all silicon sources |
+| **Mac Mini / Studio / Pro** | 27-28/30 | Most sources -- no built-in camera, mic, or motion sensors |
+| **Intel Mac** | ~20/30 | Timing, system, network sources work; some silicon sources are ARM-specific |
+| **Linux** | 10-15/30 | Timing, network, disk, process sources; system sources planned |
+
+The library gracefully detects available hardware and only activates sources that work on your machine. MacBooks provide the richest entropy because they pack the most sensors into a single device.
+
+---
+
+## Building from Source
+
+Requirements: Rust 2024 edition (1.85+), macOS or Linux.
+
+```bash
+git clone https://github.com/amenti-labs/esoteric-entropy.git
+cd esoteric-entropy
+
+# Build everything
+cargo build --release
+
+# Run the CLI directly
+cargo run -p esoteric-cli -- scan
+cargo run -p esoteric-cli -- bench
+cargo run -p esoteric-cli -- monitor
+
+# Run tests
+cargo test --workspace
+
+# Install the CLI binary
+cargo install --path crates/esoteric-cli
+```
+
+### Building the Python package
+
+Requires [maturin](https://github.com/PyO3/maturin):
+
+```bash
+pip install maturin
+cd crates/esoteric-python
+maturin develop --release
+```
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
-git clone https://github.com/amenti-labs/esoteric-entropy
+git clone https://github.com/amenti-labs/esoteric-entropy.git
 cd esoteric-entropy
-pip install -e ".[dev]"
-make test
-make lint
+cargo build
+cargo test --workspace
+cargo clippy --workspace
 ```
+
+Ideas for contributions:
+
+- New entropy sources (especially Linux-specific ones)
+- Performance improvements to collection and conditioning
+- Additional NIST test implementations
+- Platform support for Windows
 
 ---
 
 ## License
 
-MIT — [Amenti Labs](https://github.com/amenti-labs)
+MIT License -- Copyright (c) 2026 [Amenti Labs](https://github.com/amenti-labs)
 
-See [LICENSE](LICENSE) for full text.
+See [LICENSE](LICENSE) for the full text.

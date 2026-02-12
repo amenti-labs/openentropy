@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "esoteric-entropy"
-version = "0.2.0"
+version = "0.3.0"
 description = "Your computer is a quantum noise observatory. This library knows where to listen."
 readme = "README.md"
 license = "MIT"
@@ -36,11 +36,19 @@ macos = [
     "pyobjc-framework-CoreWLAN>=9.0",
     "pyobjc-framework-CoreBluetooth>=9.0",
 ]
+tui = [
+    "textual>=0.15.0",
+    "plotext>=5.0",
+    "rich>=13.0",
+]
 all = [
     "sounddevice>=0.4",
     "opencv-python>=4.0",
     "pyobjc-framework-CoreWLAN>=9.0",
     "pyobjc-framework-CoreBluetooth>=9.0",
+    "textual>=0.15.0",
+    "plotext>=5.0",
+    "rich>=13.0",
 ]
 dev = ["pytest>=7.0", "ruff>=0.4"]
 

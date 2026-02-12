@@ -1,88 +1,164 @@
 # Contributing to esoteric-entropy
 
-## Development Setup
+## Prerequisites
+
+- **Rust 1.80+** (edition 2024)
+- **macOS** (primary platform; most entropy sources require Darwin APIs)
+- **Python 3.10+** (only needed for PyO3 bindings)
+- **maturin** (only needed for Python bindings: `pip install maturin`)
+
+## Workspace Layout
+
+```
+Cargo.toml                    # Workspace root
+crates/
+├── esoteric-core/            # EntropySource trait, 30 sources, pool, conditioning
+│   └── src/
+│       ├── source.rs         # EntropySource trait definition
+│       ├── sources/          # All 30 source implementations
+│       │   └── mod.rs        # Source registry (all_sources())
+│       ├── pool.rs           # Multi-source entropy pool
+│       ├── conditioning.rs   # SHA-256 conditioning
+│       ├── platform.rs       # Platform detection
+│       └── lib.rs
+├── esoteric-cli/             # CLI binary (clap) with 9 commands
+├── esoteric-server/          # HTTP server (axum) with ANU QRNG API
+├── esoteric-tests/           # NIST SP 800-22 statistical test suite
+└── esoteric-python/          # PyO3 bindings via maturin
+```
+
+## Building
+
+Build all crates except the Python bindings:
 
 ```bash
-git clone https://github.com/amenti-labs/esoteric-entropy
-cd esoteric-entropy
-pip install -e ".[dev]"
-make test
-make lint
+cargo build --workspace --exclude esoteric-python
 ```
 
-## Project Structure
+Release build:
 
+```bash
+cargo build --release --workspace --exclude esoteric-python
 ```
-esoteric_entropy/
-├── __init__.py          # Public API exports
-├── pool.py              # Multi-source entropy pool
-├── conditioning.py      # Whitening algorithms
-├── platform.py          # Source auto-discovery
-├── cli.py               # CLI commands
-├── http_server.py       # HTTP server (stdlib)
-├── numpy_compat.py      # NumPy Generator adapter
-├── test_suite.py        # NIST-inspired test battery
-├── stats.py             # Statistical utilities
-├── report.py            # Report generation
-└── sources/
-    ├── base.py          # EntropySource ABC
-    └── *.py             # Source implementations (20 modules, 30 classes)
 
-tests/                   # pytest test suite
-docs/                    # Documentation
-explore/                 # Experimental source prototypes
+## Testing
+
+```bash
+cargo test --workspace --exclude esoteric-python
+```
+
+Run a specific test:
+
+```bash
+cargo test -p esoteric-core clock_jitter
+```
+
+## Linting
+
+```bash
+cargo clippy --workspace --exclude esoteric-python -- -D warnings
+```
+
+## Formatting
+
+```bash
+cargo fmt --all
+```
+
+Check formatting without modifying files:
+
+```bash
+cargo fmt --all -- --check
+```
+
+## Python Bindings
+
+The `esoteric-python` crate uses PyO3 and maturin. It is excluded from normal workspace builds because it requires a Python environment.
+
+```bash
+cd crates/esoteric-python
+maturin develop
+```
+
+To build a release wheel:
+
+```bash
+cd crates/esoteric-python
+maturin build --release
 ```
 
 ## Adding a New Entropy Source
 
-1. Create `esoteric_entropy/sources/your_source.py`
-2. Subclass `EntropySource`:
+1. **Create a source module** in `crates/esoteric-core/src/sources/`. If your source fits an existing category file (e.g., `timing.rs`, `silicon.rs`), add it there. Otherwise create a new file.
 
-```python
-from esoteric_entropy.sources.base import EntropySource
-import numpy as np
+2. **Implement the `EntropySource` trait**:
 
-class YourSource(EntropySource):
-    name = "your_source"
-    description = "What physical phenomenon this captures"
-    platform_requirements = ["darwin"]  # or [] for cross-platform
-    entropy_rate_estimate = 500.0  # bits/second
+```rust
+use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-    def is_available(self) -> bool:
-        return True  # check hardware/software requirements
+static INFO: SourceInfo = SourceInfo {
+    name: "your_source",
+    description: "Brief description of the source",
+    physics: "Explanation of the physical phenomenon providing entropy",
+    category: SourceCategory::Novel, // pick the right category
+    platform_requirements: &["darwin"],
+    entropy_rate_estimate: 500.0, // bits/second estimate
+};
 
-    def collect(self, n_samples: int = 1000) -> np.ndarray:
-        # Collect raw samples, return uint8 array
-        ...
+pub struct YourSource;
 
-    def entropy_quality(self) -> dict:
-        data = self.collect(1000)
-        return self._quick_quality(data, self.name)
+impl EntropySource for YourSource {
+    fn info(&self) -> &SourceInfo {
+        &INFO
+    }
+
+    fn is_available(&self) -> bool {
+        // Return false if required hardware/OS features are missing
+        true
+    }
+
+    fn collect(&self, n_samples: usize) -> Vec<u8> {
+        // Collect raw entropy bytes from your source
+        let mut samples = Vec::with_capacity(n_samples);
+        // ... collection logic ...
+        samples
+    }
+}
 ```
 
-3. Register in `esoteric_entropy/sources/__init__.py` (add to imports and `ALL_SOURCES`)
-4. Add tests in `tests/test_sources.py`
-5. Document in `docs/SOURCES.md` with physics explanation
+3. **Register the source** in `crates/esoteric-core/src/sources/mod.rs`:
+   - Add `pub mod your_module;` to the module declarations
+   - Add `Box::new(your_module::YourSource)` to the `all_sources()` vector
+
+4. **Add tests** in the appropriate test module or in `crates/esoteric-tests/`.
+
+5. **Verify**:
+   ```bash
+   cargo clippy --workspace --exclude esoteric-python -- -D warnings
+   cargo test --workspace --exclude esoteric-python
+   ```
 
 ## Guidelines
 
-- Every source must handle unavailable hardware gracefully (`is_available()` → `False`)
-- Type hints on all public functions
-- Docstrings explaining the physics behind the entropy source
-- No hardcoded paths — use platform detection
+- Every source must handle unavailable hardware gracefully (`is_available()` returns `false`)
+- The `EntropySource` trait requires `Send + Sync` -- no interior mutability without proper synchronization
+- Use `&'static str` for metadata fields, not `String`
+- Document the physics behind the entropy source in the `physics` field of `SourceInfo`
+- No hardcoded paths -- use platform detection from `crate::platform`
 - Use full paths for system binaries: `/usr/sbin/ioreg`, `/usr/sbin/sysctl`
+- Zero clippy warnings: run `cargo clippy -- -D warnings` before submitting
 
-## Running Tests
+## Commit Style
 
-```bash
-make test          # run all tests
-make lint          # ruff check
-pytest tests/ -v   # verbose test output
-pytest tests/test_sources.py -k "clock"  # run specific test
-```
+- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`
+- Keep the subject line under 72 characters
+- Reference issues when applicable: `fix: handle missing sysctl key (#42)`
 
-## Code Style
+## Pull Request Guidelines
 
-- Ruff for linting and formatting
-- Line length: 100
-- Python 3.10+ (use `X | Y` union syntax, not `Union[X, Y]`)
+- One logical change per PR
+- All CI checks must pass (fmt, clippy, test, build)
+- Include a brief description of what changed and why
+- If adding a new entropy source, include probe output showing it works on your machine
+- If changing the public API, update the Python bindings crate if applicable
+- Squash-merge is preferred for clean history
