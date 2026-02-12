@@ -137,9 +137,7 @@ fn calculate_quality_score(results: &Bound<'_, PyList>) -> PyResult<f64> {
                 .get_item("passed")?
                 .map(|v| v.extract::<bool>())
                 .unwrap_or(Ok(false))?,
-            p_value: d
-                .get_item("p_value")?
-                .and_then(|v| v.extract::<f64>().ok()),
+            p_value: d.get_item("p_value")?.and_then(|v| v.extract::<f64>().ok()),
             statistic: d
                 .get_item("statistic")?
                 .map(|v| v.extract::<f64>())

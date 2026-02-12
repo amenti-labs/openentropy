@@ -4,9 +4,9 @@
 //! Each test returns a [`TestResult`] with a p-value (where applicable), a pass/fail
 //! determination, and a letter grade (A through F).
 
-use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use rustfft::{num_complex::Complex, FftPlanner};
+use flate2::write::ZlibEncoder;
+use rustfft::{FftPlanner, num_complex::Complex};
 use statrs::distribution::{ChiSquared, ContinuousCDF, DiscreteCDF, Normal, Poisson};
 use statrs::function::erf::erfc;
 use std::collections::HashMap;
@@ -94,7 +94,10 @@ pub fn monobit_frequency(data: &[u8]) -> TestResult {
     if n < 100 {
         return insufficient(name, 100, n);
     }
-    let s: i64 = bits.iter().map(|&b| if b == 1 { 1i64 } else { -1i64 }).sum();
+    let s: i64 = bits
+        .iter()
+        .map(|&b| if b == 1 { 1i64 } else { -1i64 })
+        .sum();
     let s_obs = (s as f64).abs() / (n as f64).sqrt();
     let p = erfc(s_obs / 2.0_f64.sqrt());
     TestResult {
@@ -1072,8 +1075,8 @@ pub fn non_overlapping_template(data: &[u8]) -> TestResult {
         }
     }
     let expected = n as f64 / (1u64 << m) as f64;
-    let var = n as f64 * (1.0 / (1u64 << m) as f64
-        - (2.0 * m as f64 - 1.0) / (1u64 << (2 * m)) as f64);
+    let var =
+        n as f64 * (1.0 / (1u64 << m) as f64 - (2.0 * m as f64 - 1.0) / (1u64 << (2 * m)) as f64);
     let var = if var <= 0.0 { 1.0 } else { var };
     let z = (count as f64 - expected) / var.sqrt();
     let norm = Normal::standard();
@@ -1161,8 +1164,8 @@ fn gf2_rank(matrix: &[u8], rows: usize, cols: usize) -> usize {
     let mut rank = 0;
     for col in 0..cols {
         let mut pivot = None;
-        for row in rank..rows {
-            if m[row][col] == 1 {
+        for (row, m_row) in m.iter().enumerate().take(rows).skip(rank) {
+            if m_row[col] == 1 {
                 pivot = Some(row);
                 break;
             }
@@ -1174,8 +1177,9 @@ fn gf2_rank(matrix: &[u8], rows: usize, cols: usize) -> usize {
         m.swap(rank, pivot);
         for row in 0..rows {
             if row != rank && m[row][col] == 1 {
-                for c in 0..cols {
-                    m[row][c] ^= m[rank][c];
+                let rank_row = m[rank].clone();
+                for (m_c, r_c) in m[row].iter_mut().zip(rank_row.iter()) {
+                    *m_c ^= r_c;
                 }
             }
         }
@@ -1282,7 +1286,11 @@ pub fn linear_complexity(data: &[u8]) -> TestResult {
     }
 
     let m = block_size as f64;
-    let sign = if block_size % 2 == 0 { 1.0 } else { -1.0 };
+    let sign = if block_size.is_multiple_of(2) {
+        1.0
+    } else {
+        -1.0
+    };
     let mu = m / 2.0 + (9.0 + sign) / 36.0 - (m / 3.0 + 2.0 / 9.0) / 2.0_f64.powf(m);
 
     let t_vals: Vec<f64> = complexities
@@ -1372,8 +1380,7 @@ pub fn cusum_test(data: &[u8]) -> TestResult {
     let mut s_val = 0.0;
     for k in k_start..=k_end {
         let kf = k as f64;
-        s_val += norm.cdf((4.0 * kf + 1.0) * z / sqrt_n)
-            - norm.cdf((4.0 * kf - 1.0) * z / sqrt_n);
+        s_val += norm.cdf((4.0 * kf + 1.0) * z / sqrt_n) - norm.cdf((4.0 * kf - 1.0) * z / sqrt_n);
     }
     let p = (1.0 - s_val).clamp(0.0, 1.0);
     TestResult {
@@ -1490,11 +1497,7 @@ pub fn birthday_spacing(data: &[u8]) -> TestResult {
 
     let p = if lambda > 0.0 {
         let poisson = Poisson::new(lambda).unwrap();
-        let p_upper = if dups > 0 {
-            poisson.sf(dups - 1)
-        } else {
-            1.0
-        };
+        let p_upper = if dups > 0 { poisson.sf(dups - 1) } else { 1.0 };
         let p_lower = poisson.cdf(dups);
         p_upper.max(p_lower).min(1.0)
     } else {
@@ -1612,9 +1615,7 @@ pub fn mean_variance(data: &[u8]) -> TestResult {
         passed: TestResult::pass_from_p(Some(p), 0.01),
         p_value: Some(p),
         statistic: z_mean,
-        details: format!(
-            "mean={mean:.2} (exp 127.5), var={var:.1} (exp {expected_var:.1})"
-        ),
+        details: format!("mean={mean:.2} (exp 127.5), var={var:.1} (exp {expected_var:.1})"),
         grade: TestResult::grade_from_p(Some(p)),
     }
 }

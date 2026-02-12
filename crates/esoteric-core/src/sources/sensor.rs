@@ -47,7 +47,7 @@ fn parse_ioreg_numerics(output: &str) -> HashMap<String, i64> {
 
             // Strip the ioreg tree prefix: remove leading '|', ' ', and '"' characters.
             let key_part = raw_key
-                .trim_start_matches(|c: char| c == '|' || c == ' ')
+                .trim_start_matches(['|', ' '])
                 .trim_matches('"')
                 .trim();
 
@@ -67,10 +67,7 @@ fn parse_ioreg_numerics(output: &str) -> HashMap<String, i64> {
 
 /// Run `ioreg -l -w0` and return the raw output.
 fn snapshot_ioreg() -> Option<String> {
-    let output = Command::new("ioreg")
-        .args(["-l", "-w0"])
-        .output()
-        .ok()?;
+    let output = Command::new("ioreg").args(["-l", "-w0"]).output().ok()?;
 
     if !output.status.success() {
         return None;
@@ -81,9 +78,7 @@ fn snapshot_ioreg() -> Option<String> {
 
 /// Check if ioreg shows any sensor-related data.
 fn has_sensor_data() -> bool {
-    let output = Command::new("ioreg")
-        .args(["-l", "-w0"])
-        .output();
+    let output = Command::new("ioreg").args(["-l", "-w0"]).output();
 
     match output {
         Ok(out) if out.status.success() => {

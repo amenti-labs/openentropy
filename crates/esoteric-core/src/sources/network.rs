@@ -4,7 +4,7 @@
 //! times, which arise from queuing delays, congestion, server load, NIC
 //! interrupt coalescing, and electromagnetic propagation variations.
 
-use std::net::{UdpSocket, TcpStream, SocketAddr};
+use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -71,15 +71,15 @@ fn build_dns_query(tx_id: u16, hostname: &str) -> Vec<u8> {
     let mut pkt = Vec::with_capacity(32);
     // Header
     pkt.extend_from_slice(&tx_id.to_be_bytes()); // Transaction ID
-    pkt.extend_from_slice(&[0x01, 0x00]);        // Flags: standard query, recursion desired
-    pkt.extend_from_slice(&[0x00, 0x01]);        // Questions: 1
-    pkt.extend_from_slice(&[0x00, 0x00]);        // Answer RRs: 0
-    pkt.extend_from_slice(&[0x00, 0x00]);        // Authority RRs: 0
-    pkt.extend_from_slice(&[0x00, 0x00]);        // Additional RRs: 0
+    pkt.extend_from_slice(&[0x01, 0x00]); // Flags: standard query, recursion desired
+    pkt.extend_from_slice(&[0x00, 0x01]); // Questions: 1
+    pkt.extend_from_slice(&[0x00, 0x00]); // Answer RRs: 0
+    pkt.extend_from_slice(&[0x00, 0x00]); // Authority RRs: 0
+    pkt.extend_from_slice(&[0x00, 0x00]); // Additional RRs: 0
     // Question section
     pkt.extend_from_slice(&encode_dns_name(hostname));
-    pkt.extend_from_slice(&[0x00, 0x01]);        // Type: A
-    pkt.extend_from_slice(&[0x00, 0x01]);        // Class: IN
+    pkt.extend_from_slice(&[0x00, 0x01]); // Type: A
+    pkt.extend_from_slice(&[0x00, 0x01]); // Class: IN
     pkt
 }
 
@@ -150,11 +150,7 @@ impl EntropySource for DNSTimingSource {
 
                 // Timing delta from previous query (inter-query jitter)
                 if let Some(prev) = prev_nanos {
-                    let delta = if nanos > prev {
-                        nanos - prev
-                    } else {
-                        prev - nanos
-                    };
+                    let delta = nanos.abs_diff(prev);
                     let delta_bytes = delta.to_le_bytes();
                     entropy.push(delta_bytes[0]);
                     if entropy.len() < n_samples {
@@ -261,11 +257,7 @@ impl EntropySource for TCPConnectSource {
 
                 // Timing delta from previous handshake
                 if let Some(prev) = prev_nanos {
-                    let delta = if nanos > prev {
-                        nanos - prev
-                    } else {
-                        prev - nanos
-                    };
+                    let delta = nanos.abs_diff(prev);
                     let delta_bytes = delta.to_le_bytes();
                     entropy.push(delta_bytes[0]);
                     if entropy.len() < n_samples {

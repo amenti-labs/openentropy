@@ -66,7 +66,7 @@ async fn handle_random(
     State(state): State<Arc<AppState>>,
     Query(params): Query<RandomParams>,
 ) -> Json<RandomResponse> {
-    let length = params.length.unwrap_or(1024).max(1).min(65536);
+    let length = params.length.unwrap_or(1024).clamp(1, 65536);
     let data_type = params.data_type.unwrap_or_else(|| "hex16".to_string());
 
     let pool = state.pool.lock().await;
@@ -148,9 +148,7 @@ async fn handle_sources(State(state): State<Arc<AppState>>) -> Json<SourcesRespo
     Json(SourcesResponse { sources, total })
 }
 
-async fn handle_pool_status(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let pool = state.pool.lock().await;
     let report = pool.health_report();
     Json(serde_json::json!({

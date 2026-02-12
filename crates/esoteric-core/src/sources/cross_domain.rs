@@ -233,7 +233,9 @@ impl EntropySource for CPUMemoryBeatSource {
             let t1 = mach_time();
 
             // Random memory access (likely cache miss for large buffer).
-            lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            lcg = lcg
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let idx = (lcg as usize) % MEM_BUFFER_SIZE;
             let val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
             std::hint::black_box(val);
@@ -324,7 +326,9 @@ impl EntropySource for MultiDomainBeatSource {
             let t1 = mach_time();
 
             // Domain 2: Random memory access
-            lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            lcg = lcg
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let idx = (lcg as usize) % MULTI_BUFFER_SIZE;
             let val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
             std::hint::black_box(val);

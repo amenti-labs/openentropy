@@ -121,7 +121,7 @@ fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
         let end = (offset + 64).min(raw.len());
         let chunk = &raw[offset..end];
         let mut h = Sha256::new();
-        h.update(&state);
+        h.update(state);
         h.update(chunk);
         h.update(counter.to_le_bytes());
         state = h.finalize().into();
@@ -315,11 +315,7 @@ impl EntropySource for WiFiRSSISource {
                 if i > 0 {
                     let prev = &measurements[i - 1];
                     raw.push((m.rssi.wrapping_sub(prev.rssi)) as u8);
-                    let timing_delta = if m.timing_nanos > prev.timing_nanos {
-                        m.timing_nanos - prev.timing_nanos
-                    } else {
-                        prev.timing_nanos - m.timing_nanos
-                    };
+                    let timing_delta = m.timing_nanos.abs_diff(prev.timing_nanos);
                     raw.push(timing_delta.to_le_bytes()[0]);
                     raw.push((m.rssi ^ m.noise) as u8);
                 }

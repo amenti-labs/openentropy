@@ -6,7 +6,12 @@ use sha2::{Digest, Sha256};
 ///
 /// Feeds: state || sample || counter || timestamp.
 /// Returns new state and 32 bytes of conditioned output.
-pub fn sha256_condition(state: &[u8; 32], sample: &[u8], counter: u64, extra: &[u8]) -> ([u8; 32], [u8; 32]) {
+pub fn sha256_condition(
+    state: &[u8; 32],
+    sample: &[u8],
+    counter: u64,
+    extra: &[u8],
+) -> ([u8; 32], [u8; 32]) {
     let mut h = Sha256::new();
     h.update(state);
     h.update(sample);
@@ -95,8 +100,8 @@ pub fn quick_quality(data: &[u8]) -> QualityReport {
     let shannon = quick_shannon(data);
 
     // Compression ratio
-    use flate2::write::ZlibEncoder;
     use flate2::Compression;
+    use flate2::write::ZlibEncoder;
     use std::io::Write;
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
     encoder.write_all(data).unwrap_or_default();

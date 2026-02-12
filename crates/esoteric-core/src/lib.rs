@@ -9,7 +9,7 @@ pub mod pool;
 pub mod source;
 pub mod sources;
 
-pub use conditioning::{quick_quality, quick_shannon, QualityReport};
+pub use conditioning::{QualityReport, quick_quality, quick_shannon};
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::EntropyPool;
 pub use source::{EntropySource, SourceCategory, SourceInfo};

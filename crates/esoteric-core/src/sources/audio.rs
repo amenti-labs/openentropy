@@ -55,12 +55,18 @@ impl EntropySource for AudioNoiseSource {
         // ffmpeg -f avfoundation -i ":0" -t 0.1 -f s16le -ar 44100 -ac 1 pipe:1
         let result = Command::new("ffmpeg")
             .args([
-                "-f", "avfoundation",
-                "-i", ":0",
-                "-t", CAPTURE_DURATION,
-                "-f", "s16le",
-                "-ar", SAMPLE_RATE,
-                "-ac", "1",
+                "-f",
+                "avfoundation",
+                "-i",
+                ":0",
+                "-t",
+                CAPTURE_DURATION,
+                "-f",
+                "s16le",
+                "-ar",
+                SAMPLE_RATE,
+                "-ac",
+                "1",
                 "pipe:1",
             ])
             .stdin(std::process::Stdio::null())

@@ -40,7 +40,7 @@ fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
         let end = (offset + 64).min(raw.len());
         let chunk = &raw[offset..end];
         let mut h = Sha256::new();
-        h.update(&state);
+        h.update(state);
         h.update(chunk);
         h.update(counter.to_le_bytes());
         state = h.finalize().into();

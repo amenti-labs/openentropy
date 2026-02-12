@@ -146,7 +146,7 @@ impl EntropySource for MachTimingSource {
 
         for chunk in debiased.chunks(64) {
             let mut h = Sha256::new();
-            h.update(&hasher_state);
+            h.update(hasher_state);
             h.update(chunk);
             hasher_state = h.finalize().into();
             output.extend_from_slice(&hasher_state);
@@ -260,7 +260,7 @@ fn condition_bytes_sha256(raw: &[u8], n_output: usize) -> Vec<u8> {
         let end = (offset + 64).min(raw.len());
         let chunk = &raw[offset..end];
         let mut h = Sha256::new();
-        h.update(&state);
+        h.update(state);
         h.update(chunk);
         h.update(counter.to_le_bytes());
         state = h.finalize().into();

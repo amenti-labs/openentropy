@@ -50,10 +50,7 @@ impl Default for SysctlSource {
 ///
 /// Handles both `key: value` (macOS) and `key = value` (Linux) formats.
 fn snapshot_sysctl() -> Option<HashMap<String, i64>> {
-    let output = Command::new(SYSCTL_PATH)
-        .arg("-a")
-        .output()
-        .ok()?;
+    let output = Command::new(SYSCTL_PATH).arg("-a").output().ok()?;
 
     if !output.status.success() {
         return None;

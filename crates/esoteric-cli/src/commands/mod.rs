@@ -1,12 +1,12 @@
-pub mod scan;
-pub mod probe;
 pub mod bench;
-pub mod stream;
 pub mod device;
-pub mod server;
 pub mod monitor;
-pub mod report;
 pub mod pool;
+pub mod probe;
+pub mod report;
+pub mod scan;
+pub mod server;
+pub mod stream;
 
 use esoteric_core::EntropyPool;
 

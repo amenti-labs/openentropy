@@ -73,7 +73,10 @@ pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>)
 
     // Summary table
     println!("\n{}", "=".repeat(60));
-    println!("{:<25} {:>6} {:>6} {:>8}", "Source", "Score", "Grade", "Pass");
+    println!(
+        "{:<25} {:>6} {:>6} {:>8}",
+        "Source", "Score", "Grade", "Pass"
+    );
     println!("{}", "-".repeat(60));
 
     let mut sorted = all_results.clone();
@@ -108,15 +111,10 @@ pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>)
     }
 }
 
-fn generate_report(
-    results: &[(String, Vec<u8>, Vec<esoteric_tests::TestResult>)],
-) -> String {
+fn generate_report(results: &[(String, Vec<u8>, Vec<esoteric_tests::TestResult>)]) -> String {
     let mut report = String::new();
     report.push_str("# Esoteric Entropy — NIST Randomness Test Report\n\n");
-    report.push_str(&format!(
-        "Generated: {}\n\n",
-        chrono_now()
-    ));
+    report.push_str(&format!("Generated: {}\n\n", chrono_now()));
 
     for (name, data, tests) in results {
         let score = esoteric_tests::calculate_quality_score(tests);

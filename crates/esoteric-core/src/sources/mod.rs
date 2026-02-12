@@ -1,23 +1,23 @@
 //! All 30 entropy source implementations.
 
-pub mod timing;
-pub mod sysctl;
-pub mod vmstat;
-pub mod network;
-pub mod wifi;
-pub mod disk;
-pub mod memory;
-pub mod gpu;
 pub mod audio;
-pub mod camera;
-pub mod sensor;
 pub mod bluetooth;
-pub mod silicon;
-pub mod ioregistry;
-pub mod cross_domain;
+pub mod camera;
 pub mod compression;
+pub mod cross_domain;
+pub mod disk;
+pub mod gpu;
+pub mod ioregistry;
+pub mod memory;
+pub mod network;
 pub mod novel;
 pub mod process;
+pub mod sensor;
+pub mod silicon;
+pub mod sysctl;
+pub mod timing;
+pub mod vmstat;
+pub mod wifi;
 
 use crate::source::EntropySource;
 

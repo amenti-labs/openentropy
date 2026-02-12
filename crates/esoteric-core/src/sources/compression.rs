@@ -7,8 +7,8 @@
 use std::io::Write;
 use std::time::Instant;
 
-use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};

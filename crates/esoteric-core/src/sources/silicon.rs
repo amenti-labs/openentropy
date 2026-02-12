@@ -55,7 +55,7 @@ fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
         let end = (offset + 64).min(raw.len());
         let chunk = &raw[offset..end];
         let mut h = Sha256::new();
-        h.update(&state);
+        h.update(state);
         h.update(chunk);
         h.update(counter.to_le_bytes());
         state = h.finalize().into();
@@ -78,7 +78,10 @@ fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
         return Vec::new();
     }
 
-    let deltas: Vec<u64> = timings.windows(2).map(|w| w[1].wrapping_sub(w[0])).collect();
+    let deltas: Vec<u64> = timings
+        .windows(2)
+        .map(|w| w[1].wrapping_sub(w[0]))
+        .collect();
 
     // XOR consecutive deltas for whitening
     let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
@@ -471,9 +474,18 @@ mod tests {
     #[test]
     fn source_info_categories() {
         assert_eq!(DRAMRowBufferSource.info().category, SourceCategory::Silicon);
-        assert_eq!(CacheContentionSource.info().category, SourceCategory::Silicon);
-        assert_eq!(PageFaultTimingSource.info().category, SourceCategory::Silicon);
-        assert_eq!(SpeculativeExecutionSource.info().category, SourceCategory::Silicon);
+        assert_eq!(
+            CacheContentionSource.info().category,
+            SourceCategory::Silicon
+        );
+        assert_eq!(
+            PageFaultTimingSource.info().category,
+            SourceCategory::Silicon
+        );
+        assert_eq!(
+            SpeculativeExecutionSource.info().category,
+            SourceCategory::Silicon
+        );
     }
 
     #[test]

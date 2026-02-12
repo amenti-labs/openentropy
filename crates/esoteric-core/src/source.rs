@@ -47,7 +47,7 @@ pub trait EntropySource: Send + Sync {
     /// Check if this source can operate on the current machine.
     fn is_available(&self) -> bool;
 
-    /// Collect raw entropy samples. Returns a Vec<u8> of up to `n_samples` bytes.
+    /// Collect raw entropy samples. Returns a `Vec<u8>` of up to `n_samples` bytes.
     fn collect(&self, n_samples: usize) -> Vec<u8>;
 
     /// Convenience: name from info.

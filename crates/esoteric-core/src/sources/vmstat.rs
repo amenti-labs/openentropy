@@ -52,10 +52,7 @@ fn vm_stat_path() -> Option<String> {
     }
 
     // Fall back to searching PATH via `which`
-    let output = Command::new("which")
-        .arg("vm_stat")
-        .output()
-        .ok()?;
+    let output = Command::new("which").arg("vm_stat").output().ok()?;
 
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -78,9 +75,7 @@ fn vm_stat_path() -> Option<String> {
 ///
 /// We strip the trailing period and parse the integer.
 fn snapshot_vmstat(path: &str) -> Option<HashMap<String, i64>> {
-    let output = Command::new(path)
-        .output()
-        .ok()?;
+    let output = Command::new(path).output().ok()?;
 
     if !output.status.success() {
         return None;

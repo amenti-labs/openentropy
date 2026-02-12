@@ -1,8 +1,8 @@
 //! Novel entropy sources: dispatch queue scheduling, dynamic linker timing,
 //! VM page fault timing, and Spotlight metadata query timing.
 
-use std::ptr;
 use std::process::Command;
+use std::ptr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -159,10 +159,7 @@ const DYLD_LIBRARIES: &[&str] = &[
 
 /// Libraries to cycle through on Linux.
 #[cfg(target_os = "linux")]
-const DYLD_LIBRARIES: &[&str] = &[
-    "libc.so.6",
-    "libm.so.6",
-];
+const DYLD_LIBRARIES: &[&str] = &["libc.so.6", "libm.so.6"];
 
 /// Fallback for other platforms.
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]

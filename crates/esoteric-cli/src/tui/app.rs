@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
 
@@ -54,32 +54,31 @@ impl App {
             terminal.draw(|f| super::ui::draw(f, self))?;
 
             let timeout = self.refresh_rate.saturating_sub(last_tick.elapsed());
-            if event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => self.running = false,
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                if self.selected > 0 {
-                                    self.selected -= 1;
-                                }
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                if let Some(ref h) = self.health {
-                                    if self.selected < h.sources.len().saturating_sub(1) {
-                                        self.selected += 1;
-                                    }
-                                }
-                            }
-                            KeyCode::Char('i') => self.show_info = !self.show_info,
-                            KeyCode::Char('r') => {
-                                // Force refresh
-                                self.tick();
-                                last_tick = Instant::now();
-                            }
-                            _ => {}
+            if event::poll(timeout)?
+                && let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => self.running = false,
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if self.selected > 0 {
+                            self.selected -= 1;
                         }
                     }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if let Some(ref h) = self.health
+                            && self.selected < h.sources.len().saturating_sub(1)
+                        {
+                            self.selected += 1;
+                        }
+                    }
+                    KeyCode::Char('i') => self.show_info = !self.show_info,
+                    KeyCode::Char('r') => {
+                        // Force refresh
+                        self.tick();
+                        last_tick = Instant::now();
+                    }
+                    _ => {}
                 }
             }
 
@@ -113,7 +112,11 @@ impl App {
 
         // Generate RNG sample
         let bytes = self.pool.get_random_bytes(16);
-        self.rng_output = bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ");
+        self.rng_output = bytes
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(" ");
     }
 
     pub fn health(&self) -> Option<&HealthReport> {

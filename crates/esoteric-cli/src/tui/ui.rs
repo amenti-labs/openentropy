@@ -1,9 +1,6 @@
 //! TUI rendering.
 
-use ratatui::{
-    prelude::*,
-    widgets::*,
-};
+use ratatui::{prelude::*, widgets::*};
 
 use super::app::App;
 
@@ -11,7 +8,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title bar
+            Constraint::Length(3), // Title bar
             Constraint::Min(10),   // Main content
             Constraint::Length(3), // RNG output
             Constraint::Length(1), // Status bar
@@ -94,10 +91,7 @@ fn draw_source_table(f: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let title = format!(
-        " Sources ({}/{} healthy) ",
-        health.healthy, health.total
-    );
+    let title = format!(" Sources ({}/{} healthy) ", health.healthy, health.total);
 
     let table = Table::new(
         rows,
@@ -169,11 +163,13 @@ fn draw_entropy_chart(f: &mut Frame, area: Rect, app: &App) {
         .map(|(i, &v)| (i as f64, v))
         .collect();
 
-    let datasets = vec![Dataset::default()
-        .name("avg H")
-        .marker(symbols::Marker::Braille)
-        .style(Style::default().fg(Color::Cyan))
-        .data(&data)];
+    let datasets = vec![
+        Dataset::default()
+            .name("avg H")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Cyan))
+            .data(&data),
+    ];
 
     let x_max = (history.len() as f64).max(10.0);
     let chart = Chart::new(datasets)
@@ -182,16 +178,15 @@ fn draw_entropy_chart(f: &mut Frame, area: Rect, app: &App) {
                 .borders(Borders::ALL)
                 .title(" Entropy History (bits/byte) "),
         )
-        .x_axis(
-            Axis::default()
-                .bounds([0.0, x_max])
-                .labels(vec![Line::from("0"), Line::from(format!("{}", history.len()))]),
-        )
-        .y_axis(
-            Axis::default()
-                .bounds([0.0, 8.0])
-                .labels(vec![Line::from("0"), Line::from("4"), Line::from("8")]),
-        );
+        .x_axis(Axis::default().bounds([0.0, x_max]).labels(vec![
+            Line::from("0"),
+            Line::from(format!("{}", history.len())),
+        ]))
+        .y_axis(Axis::default().bounds([0.0, 8.0]).labels(vec![
+            Line::from("0"),
+            Line::from("4"),
+            Line::from("8"),
+        ]));
 
     f.render_widget(chart, area);
 }
@@ -217,7 +212,6 @@ fn draw_status_bar(f: &mut Frame, area: Rect, app: &App) {
         " Loading...".to_string()
     };
 
-    let bar = Paragraph::new(status)
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    let bar = Paragraph::new(status).style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }

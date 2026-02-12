@@ -89,13 +89,7 @@ impl EntropySource for ProcessSource {
     fn is_available(&self) -> bool {
         // `ps` is available on virtually all Unix-like systems.
         // Attempt a quick check.
-        Command::new("ps")
-            .arg("--version")
-            .output()
-            .is_ok()
-            || Command::new("ps")
-                .output()
-                .is_ok()
+        Command::new("ps").arg("--version").output().is_ok() || Command::new("ps").output().is_ok()
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

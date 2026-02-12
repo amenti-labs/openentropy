@@ -49,11 +49,16 @@ impl EntropySource for CameraNoiseSource {
         // ffmpeg -f avfoundation -i "0" -frames:v 1 -f rawvideo -pix_fmt gray pipe:1
         let result = Command::new("ffmpeg")
             .args([
-                "-f", "avfoundation",
-                "-i", "0",
-                "-frames:v", "1",
-                "-f", "rawvideo",
-                "-pix_fmt", "gray",
+                "-f",
+                "avfoundation",
+                "-i",
+                "0",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "gray",
                 "pipe:1",
             ])
             .stdin(std::process::Stdio::null())

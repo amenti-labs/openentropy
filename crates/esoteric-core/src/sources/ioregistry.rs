@@ -40,10 +40,7 @@ pub struct IORegistryEntropySource;
 /// Run `ioreg -l -w0` and parse lines matching `"key" = number` patterns into
 /// a HashMap of key -> value.
 fn snapshot_ioreg() -> Option<HashMap<String, i64>> {
-    let output = Command::new(IOREG_PATH)
-        .args(["-l", "-w0"])
-        .output()
-        .ok()?;
+    let output = Command::new(IOREG_PATH).args(["-l", "-w0"]).output().ok()?;
 
     if !output.status.success() {
         return None;

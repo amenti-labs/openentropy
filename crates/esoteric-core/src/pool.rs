@@ -37,7 +37,7 @@ impl EntropyPool {
                 // Use OS entropy for initial state
                 let mut os_random = [0u8; 32];
                 getrandom(&mut os_random);
-                h.update(&os_random);
+                h.update(os_random);
             }
             let digest: [u8; 32] = h.finalize().into();
             digest
@@ -63,7 +63,8 @@ impl EntropyPool {
 
     /// Register an entropy source.
     pub fn add_source(&mut self, source: Box<dyn EntropySource>, weight: f64) {
-        self.sources.push(Mutex::new(SourceState::new(source, weight)));
+        self.sources
+            .push(Mutex::new(SourceState::new(source, weight)));
     }
 
     /// Number of registered sources.
@@ -122,9 +123,7 @@ impl EntropyPool {
     fn collect_one(ss_mutex: &Mutex<SourceState>) -> Vec<u8> {
         let mut ss = ss_mutex.lock().unwrap();
         let t0 = Instant::now();
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ss.source.collect(1000)
-        })) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ss.source.collect(1000))) {
             Ok(data) if !data.is_empty() => {
                 ss.last_collect_time = t0.elapsed();
                 ss.total_bytes += data.len() as u64;
@@ -176,7 +175,7 @@ impl EntropyPool {
             // SHA-256 conditioning
             let mut h = Sha256::new();
             let state = self.state.lock().unwrap();
-            h.update(&*state);
+            h.update(*state);
             drop(state);
             h.update(&sample);
             h.update(cnt.to_le_bytes());
@@ -189,7 +188,7 @@ impl EntropyPool {
             // Mix in OS entropy as safety net
             let mut os_random = [0u8; 8];
             getrandom(&mut os_random);
-            h.update(&os_random);
+            h.update(os_random);
 
             let digest: [u8; 32] = h.finalize().into();
             *self.state.lock().unwrap() = digest;
