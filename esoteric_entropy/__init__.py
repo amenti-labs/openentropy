@@ -8,10 +8,34 @@ kernel counters, memory timing, GPU scheduling, network latency, and more.
 __version__ = "0.2.0"
 __author__ = "Amenti Labs"
 
-from esoteric_entropy.pool import EntropyPool
+# Try to use the Rust backend (via PyO3) if available, fall back to pure Python.
+try:
+    from esoteric_entropy.esoteric_entropy import (
+        EntropyPool,
+        detect_available_sources,
+        run_all_tests,
+        calculate_quality_score,
+        version as _rust_version,
+    )
+    __rust_backend__ = True
+    __version__ = _rust_version()
+except ImportError:
+    from esoteric_entropy.pool import EntropyPool
+    __rust_backend__ = False
+
 from esoteric_entropy.sources.base import EntropySource
 
-__all__ = ["EntropyPool", "EntropySource", "EsotericBitGenerator", "EsotericRandom", "__version__"]
+__all__ = [
+    "EntropyPool",
+    "EntropySource",
+    "EsotericBitGenerator",
+    "EsotericRandom",
+    "__version__",
+    "__rust_backend__",
+]
+
+if __rust_backend__:
+    __all__ += ["detect_available_sources", "run_all_tests", "calculate_quality_score"]
 
 
 def EsotericBitGenerator(**kwargs):
