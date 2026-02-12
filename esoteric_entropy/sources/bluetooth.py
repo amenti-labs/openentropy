@@ -31,7 +31,6 @@ def _scan_ble_corewlan(duration: float = 5.0) -> list[int]:
     try:
         import objc
         from Foundation import NSRunLoop, NSDate, NSObject
-        from dispatch import dispatch_queue_create
     except ImportError:
         raise ImportError("pyobjc not available")
 
@@ -55,7 +54,9 @@ def _scan_ble_corewlan(duration: float = 5.0) -> list[int]:
         def centralManagerDidUpdateState_(self, central):
             # State 5 = PoweredOn
             if central.state() == 5:
-                central.scanForPeripheralsWithServices_options_(None, None)
+                central.scanForPeripheralsWithServices_options_(None, {
+                    objc.lookUpClass('CBCentralManager').alloc(): True
+                } if False else None)
             elif central.state() == 4:
                 # PoweredOff
                 scan_done.set()
@@ -66,8 +67,8 @@ def _scan_ble_corewlan(duration: float = 5.0) -> list[int]:
             rssi_values.append(int(rssi))
 
     delegate = BLEDelegate.alloc().init()
-    queue = dispatch_queue_create(b"ble_entropy", None)
-    manager = CBCentralManager.alloc().initWithDelegate_queue_(delegate, queue)
+    # Use None for queue = main queue (no dispatch module needed)
+    manager = CBCentralManager.alloc().initWithDelegate_queue_(delegate, None)
 
     # Run the event loop for the scan duration
     end_time = time.time() + duration
