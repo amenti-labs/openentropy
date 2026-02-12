@@ -220,19 +220,59 @@ impl EntropySource for SleepJitterSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let mut output = Vec::with_capacity(n_samples);
+        // Oversample 4x to get enough raw entropy for conditioning.
+        let oversample = n_samples * 4 + 64;
+        let mut raw_timings = Vec::with_capacity(oversample);
 
-        for _ in 0..n_samples {
+        for _ in 0..oversample {
             let before = Instant::now();
             thread::sleep(Duration::ZERO);
             let elapsed_ns = before.elapsed().as_nanos() as u64;
-
-            // The LSB of the elapsed nanoseconds carries the jitter.
-            output.push(elapsed_ns as u8);
+            raw_timings.push(elapsed_ns);
         }
 
-        output
+        // Compute deltas between consecutive measurements.
+        let deltas: Vec<u64> = raw_timings
+            .windows(2)
+            .map(|w| w[1].wrapping_sub(w[0]))
+            .collect();
+
+        // XOR adjacent deltas for whitening.
+        let mut raw = Vec::with_capacity(deltas.len());
+        for pair in deltas.windows(2) {
+            let xored = pair[0] ^ pair[1];
+            raw.push(xored as u8);
+        }
+
+        // SHA-256 condition the raw bytes for better entropy density.
+        condition_bytes_sha256(&raw, n_samples)
     }
+}
+
+/// SHA-256 condition raw bytes to improve entropy density.
+/// Uses chained hashing so cycling through raw data produces unique output.
+fn condition_bytes_sha256(raw: &[u8], n_output: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(n_output);
+    let mut state = [0u8; 32];
+    let mut offset = 0;
+    let mut counter: u64 = 0;
+    while output.len() < n_output {
+        let end = (offset + 64).min(raw.len());
+        let chunk = &raw[offset..end];
+        let mut h = Sha256::new();
+        h.update(&state);
+        h.update(chunk);
+        h.update(counter.to_le_bytes());
+        state = h.finalize().into();
+        output.extend_from_slice(&state);
+        offset += 64;
+        counter += 1;
+        if offset >= raw.len() {
+            offset = 0;
+        }
+    }
+    output.truncate(n_output);
+    output
 }
 
 #[cfg(test)]

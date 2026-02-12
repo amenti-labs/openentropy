@@ -9,10 +9,15 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use sha2::{Digest, Sha256};
+
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 const MEASUREMENT_DELAY: Duration = Duration::from_millis(10);
 const SAMPLES_PER_COLLECT: usize = 8;
+
+/// Timeout for external WiFi commands.
+const WIFI_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Entropy source that harvests WiFi RSSI and noise floor fluctuations.
 ///
@@ -62,19 +67,85 @@ struct WifiMeasurement {
     timing_nanos: u128,
 }
 
+/// Run a command with a timeout. Returns (stdout_option, elapsed_ns).
+/// Always returns elapsed time even if the command fails or times out.
+fn run_command_timed(cmd: &str, args: &[&str], timeout: Duration) -> (Option<String>, u64) {
+    let t0 = Instant::now();
+
+    let child = Command::new(cmd)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    let mut child = match child {
+        Ok(c) => c,
+        Err(_) => return (None, t0.elapsed().as_nanos() as u64),
+    };
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let elapsed = t0.elapsed().as_nanos() as u64;
+                if !status.success() {
+                    return (None, elapsed);
+                }
+                let stdout = child
+                    .wait_with_output()
+                    .ok()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
+                return (stdout, elapsed);
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return (None, t0.elapsed().as_nanos() as u64);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => return (None, t0.elapsed().as_nanos() as u64),
+        }
+    }
+}
+
+/// SHA-256 condition raw bytes to improve entropy density.
+/// Uses chained hashing so cycling through raw data produces unique output.
+fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(n_output);
+    let mut state = [0u8; 32];
+    let mut offset = 0;
+    let mut counter: u64 = 0;
+    while output.len() < n_output {
+        let end = (offset + 64).min(raw.len());
+        let chunk = &raw[offset..end];
+        let mut h = Sha256::new();
+        h.update(&state);
+        h.update(chunk);
+        h.update(counter.to_le_bytes());
+        state = h.finalize().into();
+        output.extend_from_slice(&state);
+        offset += 64;
+        counter += 1;
+        if offset >= raw.len() {
+            offset = 0;
+        }
+    }
+    output.truncate(n_output);
+    output
+}
+
 /// Discover the Wi-Fi hardware device name (e.g. "en0") by parsing
 /// `networksetup -listallhardwareports`.
 fn discover_wifi_device() -> Option<String> {
-    let output = Command::new("/usr/sbin/networksetup")
-        .arg("-listallhardwareports")
-        .output()
-        .ok()?;
+    let (output, _) = run_command_timed(
+        "/usr/sbin/networksetup",
+        &["-listallhardwareports"],
+        WIFI_COMMAND_TIMEOUT,
+    );
 
-    if !output.status.success() {
-        return None;
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let text = output?;
     let mut found_wifi = false;
 
     for line in text.lines() {
@@ -97,39 +168,47 @@ fn discover_wifi_device() -> Option<String> {
 }
 
 /// Try to read RSSI/noise via `ipconfig getsummary <device>`.
-fn read_via_ipconfig(device: &str) -> Option<(i32, i32)> {
-    let output = Command::new("/usr/sbin/ipconfig")
-        .args(["getsummary", device])
-        .output()
-        .ok()?;
+/// Returns ((rssi, noise), elapsed_ns) on success, or just elapsed_ns on failure.
+fn read_via_ipconfig(device: &str) -> (Option<(i32, i32)>, u64) {
+    let (output, elapsed) = run_command_timed(
+        "/usr/sbin/ipconfig",
+        &["getsummary", device],
+        WIFI_COMMAND_TIMEOUT,
+    );
 
-    if !output.status.success() {
-        return None;
-    }
+    let text = match output {
+        Some(t) => t,
+        None => return (None, elapsed),
+    };
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let rssi = parse_field_value(&text, "RSSI")?;
-    let noise = parse_field_value(&text, "Noise").unwrap_or(rssi - 30); // estimate if absent
-    Some((rssi, noise))
+    let rssi = match parse_field_value(&text, "RSSI") {
+        Some(v) => v,
+        None => return (None, elapsed),
+    };
+    let noise = parse_field_value(&text, "Noise").unwrap_or(rssi - 30);
+    (Some((rssi, noise)), elapsed)
 }
 
 /// Try to read RSSI/noise via the `airport -I` command.
-fn read_via_airport() -> Option<(i32, i32)> {
-    let output = Command::new(
+/// Returns ((rssi, noise), elapsed_ns) on success, or just elapsed_ns on failure.
+fn read_via_airport() -> (Option<(i32, i32)>, u64) {
+    let (output, elapsed) = run_command_timed(
         "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
-    )
-    .arg("-I")
-    .output()
-    .ok()?;
+        &["-I"],
+        WIFI_COMMAND_TIMEOUT,
+    );
 
-    if !output.status.success() {
-        return None;
-    }
+    let text = match output {
+        Some(t) => t,
+        None => return (None, elapsed),
+    };
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let rssi = parse_field_value(&text, "agrCtlRSSI")?;
+    let rssi = match parse_field_value(&text, "agrCtlRSSI") {
+        Some(v) => v,
+        None => return (None, elapsed),
+    };
     let noise = parse_field_value(&text, "agrCtlNoise").unwrap_or(rssi - 30);
-    Some((rssi, noise))
+    (Some((rssi, noise)), elapsed)
 }
 
 /// Parse a line of the form `  key: value` or `key : value` and return the
@@ -152,21 +231,36 @@ fn parse_field_value(text: &str, field: &str) -> Option<i32> {
 }
 
 /// Take a single RSSI/noise measurement using the best available method.
-fn measure_once(device: &Option<String>) -> Option<WifiMeasurement> {
+/// Always returns timing even if RSSI reading fails (for timing entropy).
+fn measure_once(device: &Option<String>) -> WifiMeasurement {
     let start = Instant::now();
 
-    let (rssi, noise) = if let Some(dev) = device {
-        read_via_ipconfig(dev).or_else(read_via_airport)?
+    let result = if let Some(dev) = device {
+        let (ipconfig_result, elapsed1) = read_via_ipconfig(dev);
+        if let Some(vals) = ipconfig_result {
+            Some((vals, elapsed1))
+        } else {
+            let (airport_result, elapsed2) = read_via_airport();
+            airport_result.map(|vals| (vals, elapsed1 + elapsed2))
+        }
     } else {
-        read_via_airport()?
+        let (airport_result, elapsed) = read_via_airport();
+        airport_result.map(|vals| (vals, elapsed))
     };
 
     let timing_nanos = start.elapsed().as_nanos();
-    Some(WifiMeasurement {
-        rssi,
-        noise,
-        timing_nanos,
-    })
+    match result {
+        Some(((rssi, noise), _)) => WifiMeasurement {
+            rssi,
+            noise,
+            timing_nanos,
+        },
+        None => WifiMeasurement {
+            rssi: 0,
+            noise: 0,
+            timing_nanos,
+        },
+    }
 }
 
 impl EntropySource for WiFiRSSISource {
@@ -176,86 +270,68 @@ impl EntropySource for WiFiRSSISource {
 
     fn is_available(&self) -> bool {
         let device = discover_wifi_device();
-        measure_once(&device).is_some()
+        let m = measure_once(&device);
+        // Available if we got a real RSSI (not the zero fallback)
+        m.rssi != 0 || m.noise != 0
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let mut entropy = Vec::with_capacity(n_samples);
+        let mut raw = Vec::with_capacity(n_samples * 4);
         let device = discover_wifi_device();
 
         let mut measurements = Vec::with_capacity(SAMPLES_PER_COLLECT);
 
-        // Collect a burst of RSSI measurements with small delays between them.
-        // We keep collecting bursts until we have enough entropy bytes.
-        while entropy.len() < n_samples {
+        // Collect bursts of measurements. Always extract timing entropy
+        // even if RSSI reading fails (timeout timing is still entropic).
+        // Cap at 4 bursts since each measurement uses commands with timeouts.
+        // SHA-256 conditioning stretches the collected entropy.
+        let max_bursts = 4;
+        for _ in 0..max_bursts {
             measurements.clear();
 
             for _ in 0..SAMPLES_PER_COLLECT {
-                if let Some(m) = measure_once(&device) {
-                    measurements.push(m);
-                }
+                let m = measure_once(&device);
+                measurements.push(m);
                 thread::sleep(MEASUREMENT_DELAY);
             }
 
-            if measurements.is_empty() {
-                // No measurements possible; bail out.
-                break;
-            }
-
-            // Extract entropy from the burst:
             for i in 0..measurements.len() {
-                if entropy.len() >= n_samples {
-                    break;
-                }
                 let m = &measurements[i];
 
-                // 1. RSSI least-significant byte
-                entropy.push(m.rssi as u8);
-                if entropy.len() >= n_samples {
-                    break;
+                // Always extract timing entropy (works even on timeout)
+                let t_bytes = m.timing_nanos.to_le_bytes();
+                raw.push(t_bytes[0]);
+                raw.push(t_bytes[1]);
+                raw.push(t_bytes[2]);
+                raw.push(t_bytes[3]);
+
+                // Extract RSSI/noise if we got real values
+                if m.rssi != 0 || m.noise != 0 {
+                    raw.push(m.rssi as u8);
+                    raw.push(m.noise as u8);
                 }
 
-                // 2. Noise floor least-significant byte
-                entropy.push(m.noise as u8);
-                if entropy.len() >= n_samples {
-                    break;
-                }
-
-                // 3. Measurement timing jitter (LSB of nanoseconds)
-                let timing_bytes = m.timing_nanos.to_le_bytes();
-                entropy.push(timing_bytes[0]);
-                if entropy.len() >= n_samples {
-                    break;
-                }
-
-                // 4. RSSI delta from previous measurement (inter-sample jitter)
+                // Deltas from previous measurement
                 if i > 0 {
                     let prev = &measurements[i - 1];
-                    let rssi_delta = (m.rssi - prev.rssi) as u8;
-                    entropy.push(rssi_delta);
-                    if entropy.len() >= n_samples {
-                        break;
-                    }
-
-                    // 5. Timing delta
+                    raw.push((m.rssi.wrapping_sub(prev.rssi)) as u8);
                     let timing_delta = if m.timing_nanos > prev.timing_nanos {
                         m.timing_nanos - prev.timing_nanos
                     } else {
                         prev.timing_nanos - m.timing_nanos
                     };
-                    entropy.push(timing_delta.to_le_bytes()[0]);
-                    if entropy.len() >= n_samples {
-                        break;
-                    }
-
-                    // 6. XOR of RSSI and noise (cross-domain mixing)
-                    entropy.push((m.rssi ^ m.noise) as u8);
+                    raw.push(timing_delta.to_le_bytes()[0]);
+                    raw.push((m.rssi ^ m.noise) as u8);
                 }
+            }
+
+            if raw.len() >= n_samples * 2 {
+                break;
             }
         }
 
-        entropy.truncate(n_samples);
-        entropy
+        // SHA-256 condition the raw bytes for better entropy density.
+        condition_bytes(&raw, n_samples)
     }
 }
 

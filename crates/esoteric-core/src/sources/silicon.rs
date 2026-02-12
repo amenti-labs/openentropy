@@ -5,6 +5,7 @@
 use std::time::Instant;
 
 use rand::Rng;
+use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
@@ -43,13 +44,38 @@ fn mach_time() -> u64 {
 // Shared helper: extract entropy from timing deltas
 // ---------------------------------------------------------------------------
 
+/// SHA-256 condition raw bytes to improve entropy density.
+/// Uses chained hashing so cycling through raw data produces unique output.
+fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(n_output);
+    let mut state = [0u8; 32];
+    let mut offset = 0;
+    let mut counter: u64 = 0;
+    while output.len() < n_output {
+        let end = (offset + 64).min(raw.len());
+        let chunk = &raw[offset..end];
+        let mut h = Sha256::new();
+        h.update(&state);
+        h.update(chunk);
+        h.update(counter.to_le_bytes());
+        state = h.finalize().into();
+        output.extend_from_slice(&state);
+        offset += 64;
+        counter += 1;
+        if offset >= raw.len() {
+            offset = 0;
+        }
+    }
+    output.truncate(n_output);
+    output
+}
+
 /// Takes a slice of raw timestamps, computes consecutive deltas, XORs
-/// adjacent deltas for whitening, and extracts the lowest byte of each
-/// XOR'd value.
+/// adjacent deltas for whitening, extracts the lowest byte of each
+/// XOR'd value, then SHA-256 conditions the result.
 fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
-    let mut result = Vec::new();
     if timings.len() < 2 {
-        return result;
+        return Vec::new();
     }
 
     let deltas: Vec<u64> = timings.windows(2).map(|w| w[1].wrapping_sub(w[0])).collect();
@@ -57,14 +83,14 @@ fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
     // XOR consecutive deltas for whitening
     let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
 
-    // Extract LSBs (lowest byte)
+    // Extract LSBs (lowest byte) into raw buffer
+    let mut raw = Vec::with_capacity(xored.len());
     for &x in &xored {
-        result.push((x & 0xFF) as u8);
-        if result.len() >= n_samples {
-            break;
-        }
+        raw.push((x & 0xFF) as u8);
     }
-    result
+
+    // SHA-256 condition for better entropy density
+    condition_bytes(&raw, n_samples)
 }
 
 // ---------------------------------------------------------------------------
@@ -330,22 +356,25 @@ impl EntropySource for SpeculativeExecutionSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        const BATCH_SIZE: usize = 20;
-
-        let num_batches = n_samples * 2 + 64;
+        // Variable batch sizes to create different workloads per measurement.
+        let num_batches = n_samples * 4 + 64;
         let mut timings = Vec::with_capacity(num_batches);
 
         // LCG state — seeded from the high-resolution clock so every call
         // exercises a different branch sequence.
         let mut lcg_state: u64 = mach_time() ^ 0xDEAD_BEEF_CAFE_BABE;
 
-        for _ in 0..num_batches {
+        for batch_idx in 0..num_batches {
+            // Variable workload: batch size varies with index for different
+            // branch predictor pressure levels.
+            let batch_size = 10 + (batch_idx % 31);
+
             let t0 = mach_time();
 
             // Execute a batch of data-dependent branches that defeat the
             // branch predictor because outcomes depend on runtime LCG values.
             let mut accumulator: u64 = 0;
-            for _ in 0..BATCH_SIZE {
+            for _ in 0..batch_size {
                 // Advance LCG: x' = x * 6364136223846793005 + 1442695040888963407
                 lcg_state = lcg_state
                     .wrapping_mul(6364136223846793005)
@@ -363,6 +392,11 @@ impl EntropySource for SpeculativeExecutionSource {
                     accumulator ^= lcg_state.rotate_left(7);
                 } else {
                     accumulator ^= lcg_state.rotate_right(11);
+                }
+
+                // Third branch varying with batch index for extra state diversity.
+                if (lcg_state >> 32) & 0x1 != 0 {
+                    accumulator = accumulator.wrapping_add(batch_idx as u64);
                 }
             }
 

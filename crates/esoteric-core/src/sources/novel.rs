@@ -5,7 +5,7 @@ use std::ptr;
 use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
@@ -351,6 +351,9 @@ const SPOTLIGHT_FILES: &[&str] = &[
 /// Path to the mdls binary.
 const MDLS_PATH: &str = "/usr/bin/mdls";
 
+/// Timeout for mdls commands.
+const MDLS_TIMEOUT: Duration = Duration::from_secs(2);
+
 static SPOTLIGHT_TIMING_INFO: SourceInfo = SourceInfo {
     name: "spotlight_timing",
     description: "Spotlight metadata index query timing jitter via mdls",
@@ -377,25 +380,48 @@ impl EntropySource for SpotlightTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let raw_count = n_samples * 10 + 64;
+        // Cap the number of mdls calls since each has a 2s timeout.
+        // mdls usually completes fast (~5ms), so 200 calls is ~1s normally.
+        // If mdls hangs, 200 * 2s = 400s is too long, so also add an
+        // early-exit when we have enough raw timing data.
+        let raw_count = (n_samples * 10 + 64).min(200);
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
         let file_count = SPOTLIGHT_FILES.len();
 
         for i in 0..raw_count {
             let file = SPOTLIGHT_FILES[i % file_count];
 
-            // Measure the time to query Spotlight metadata for the file.
+            // Measure the time to query Spotlight metadata with a timeout.
+            // Even timeouts produce useful timing entropy.
             let t0 = Instant::now();
 
-            let result = Command::new(MDLS_PATH)
+            let child = Command::new(MDLS_PATH)
                 .args(["-name", "kMDItemFSName", file])
-                .output();
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
 
-            let elapsed_ns = t0.elapsed().as_nanos() as u64;
-
-            if result.is_ok() {
-                timings.push(elapsed_ns);
+            if let Ok(mut child) = child {
+                let deadline = Instant::now() + MDLS_TIMEOUT;
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => break,
+                        Ok(None) => {
+                            if Instant::now() >= deadline {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(_) => break,
+                    }
+                }
             }
+
+            // Always record timing — timeouts are just as entropic.
+            let elapsed_ns = t0.elapsed().as_nanos() as u64;
+            timings.push(elapsed_ns);
         }
 
         // Compute deltas between consecutive timings.
