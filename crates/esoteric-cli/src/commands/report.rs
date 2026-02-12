@@ -1,15 +1,24 @@
-use esoteric_core::platform::detect_available_sources;
 use std::time::Instant;
 
 pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>) {
-    let sources = detect_available_sources();
+    // Use make_pool which defaults to fast sources
+    let filter = source_name.or(None);
+    let pool = super::make_pool(filter);
+    let infos = pool.source_infos();
+
+    // Get sources from platform detection, filtered same way
+    let all_sources = esoteric_core::platform::detect_available_sources();
     let sources: Vec<_> = if let Some(name) = source_name {
-        sources
+        all_sources
             .into_iter()
             .filter(|s| s.name().to_lowercase().contains(&name.to_lowercase()))
             .collect()
     } else {
-        sources
+        let fast_names: Vec<_> = infos.iter().map(|i| i.name.clone()).collect();
+        all_sources
+            .into_iter()
+            .filter(|s| fast_names.iter().any(|n| n == s.name()))
+            .collect()
     };
 
     if sources.is_empty() {

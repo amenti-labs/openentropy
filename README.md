@@ -25,27 +25,41 @@
 ### CLI (Rust)
 
 ```bash
-cargo install esoteric-entropy
+# Install from source (crates.io coming soon)
+git clone https://github.com/amenti-labs/esoteric-entropy.git
+cd esoteric-entropy
+cargo install --path crates/esoteric-cli
 ```
 
 ```bash
 esoteric-entropy scan       # discover entropy sources on your machine
-esoteric-entropy bench      # benchmark all sources
+esoteric-entropy bench      # benchmark all fast sources (~1s)
 esoteric-entropy monitor    # live TUI dashboard
+esoteric-entropy stream --format hex --bytes 64   # output random bytes
+esoteric-entropy pool       # show pool health metrics
 ```
+
+> By default, only fast sources (<2s) are used. Add `--sources all` to include slow sources (DNS, TCP, GPU, BLE).
 
 ### Python SDK
 
 ```bash
-pip install esoteric-entropy
+# Requires Rust toolchain + maturin
+pip install maturin
+git clone https://github.com/amenti-labs/esoteric-entropy.git
+cd esoteric-entropy
+maturin develop --release
 ```
 
 ```python
-from esoteric_entropy import EntropyPool
+from esoteric_entropy import EntropyPool, detect_available_sources
+
+sources = detect_available_sources()
+print(f"{len(sources)} entropy sources available")
 
 pool = EntropyPool.auto()
 data = pool.get_random_bytes(256)
-print(f"{len(data)} random bytes from {pool.source_count} sources")
+print(f"{len(data)} random bytes from hardware entropy")
 ```
 
 ---
@@ -160,10 +174,12 @@ esoteric-entropy probe mach_timing
 
 ### `esoteric-entropy bench`
 
-Benchmark all available sources with a ranked report.
+Benchmark sources with a ranked report. Defaults to fast sources only.
 
 ```bash
-esoteric-entropy bench
+esoteric-entropy bench                    # fast sources (~1s)
+esoteric-entropy bench --sources all      # all 26+ sources (slow!)
+esoteric-entropy bench --sources silicon  # filter by name
 ```
 
 ### `esoteric-entropy stream`
@@ -210,37 +226,38 @@ esoteric-entropy monitor --refresh 0.25
 esoteric-entropy monitor --sources silicon,timing
 ```
 
-Keyboard controls:
+One source active at a time — navigate and select to watch live.
 
 | Key | Action |
 |-----|--------|
-| Space | Toggle selected source on/off |
-| i | Show/hide physics info for selected source |
-| a | Enable all sources |
-| n | Disable all sources |
-| f | Cycle refresh speed (2s / 1s / 0.5s / 0.25s) |
+| ↑/↓ | Navigate source list |
+| Space | Select/deselect source (starts collecting) |
 | r | Force immediate refresh |
-| Up/Down | Navigate source list |
 | q | Quit |
+
+The right panel shows physics info and a live entropy chart for the active source.
 
 ### `esoteric-entropy report`
 
-Run the full NIST SP 800-22 inspired test battery and generate a report.
+Run the full NIST SP 800-22 inspired test battery and generate a report. Tests raw (unconditioned) source output.
 
 ```bash
-esoteric-entropy report
-esoteric-entropy report --source mach_timing --samples 50000
-esoteric-entropy report --output report.md
+esoteric-entropy report                              # fast sources
+esoteric-entropy report --source mach_timing         # single source
+esoteric-entropy report --samples 50000 --output report.md
 ```
 
 Options: `--samples N`, `--source name`, `--output path`
 
+> Raw source scores are typically D-F. The conditioned pool output scores A (7.9+ bits/byte Shannon entropy). This is by design — conditioning is the value add.
+
 ### `esoteric-entropy pool`
 
-Show entropy pool health metrics.
+Show entropy pool health metrics with per-source stats.
 
 ```bash
-esoteric-entropy pool
+esoteric-entropy pool                    # fast sources
+esoteric-entropy pool --sources all      # all sources
 ```
 
 ---
@@ -439,12 +456,21 @@ cargo install --path crates/esoteric-cli
 
 ### Building the Python package
 
-Requires [maturin](https://github.com/PyO3/maturin):
+Requires [maturin](https://github.com/PyO3/maturin) and Python 3.10+:
 
 ```bash
 pip install maturin
-cd crates/esoteric-python
-maturin develop --release
+maturin develop --release    # install in current Python env
+
+# Verify
+python3 -c "from esoteric_entropy import EntropyPool; print(EntropyPool.auto().get_random_bytes(16).hex())"
+```
+
+To build a distributable wheel:
+
+```bash
+maturin build --release
+# Output in target/wheels/
 ```
 
 ---

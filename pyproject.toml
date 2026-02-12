@@ -1,16 +1,16 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "esoteric-entropy"
 version = "0.3.0"
-description = "Your computer is a quantum noise observatory. This library knows where to listen."
+description = "Your computer is a quantum noise observatory. Harvests entropy from 30 unconventional hardware sources."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Amenti Labs" }]
-keywords = ["entropy", "randomness", "hardware", "noise", "TRNG", "security", "QRNG"]
+keywords = ["entropy", "randomness", "hardware", "noise", "TRNG", "security", "QRNG", "rust"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -23,37 +23,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
     "Topic :: Security :: Cryptography",
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
-dependencies = ["numpy>=1.24", "click>=8.0"]
-
-[project.optional-dependencies]
-audio = ["sounddevice>=0.4"]
-camera = ["opencv-python>=4.0"]
-macos = [
-    "pyobjc-framework-CoreWLAN>=9.0",
-    "pyobjc-framework-CoreBluetooth>=9.0",
-]
-tui = [
-    "textual>=0.15.0",
-    "plotext>=5.0",
-    "rich>=13.0",
-]
-all = [
-    "sounddevice>=0.4",
-    "opencv-python>=4.0",
-    "pyobjc-framework-CoreWLAN>=9.0",
-    "pyobjc-framework-CoreBluetooth>=9.0",
-    "textual>=0.15.0",
-    "plotext>=5.0",
-    "rich>=13.0",
-]
-dev = ["pytest>=7.0", "ruff>=0.4"]
-
-[project.scripts]
-esoteric-entropy = "esoteric_entropy.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/amenti-labs/esoteric-entropy"
@@ -61,13 +35,8 @@ Repository = "https://github.com/amenti-labs/esoteric-entropy"
 Documentation = "https://github.com/amenti-labs/esoteric-entropy/tree/main/docs"
 Issues = "https://github.com/amenti-labs/esoteric-entropy/issues"
 
-[tool.ruff]
-target-version = "py310"
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP"]
-ignore = ["E501"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[tool.maturin]
+manifest-path = "crates/esoteric-python/Cargo.toml"
+python-source = "."
+module-name = "esoteric_entropy.esoteric_entropy"
+features = ["pyo3/extension-module"]
