@@ -124,8 +124,11 @@ impl App {
                 if self.active == Some(self.cursor) {
                     self.active = None; // deactivate
                 } else {
+                    // Clear history for the new source so chart starts fresh
+                    let name = &self.source_names[self.cursor];
+                    self.shared.lock().unwrap().source_history.remove(name);
                     self.active = Some(self.cursor);
-                    self.kick_collect(); // start collecting immediately
+                    self.kick_collect();
                 }
             }
             KeyCode::Char('r') => {
