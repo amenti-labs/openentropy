@@ -120,6 +120,42 @@ impl EntropyPool {
         n
     }
 
+    /// Collect entropy only from sources whose names are in the given list.
+    /// Uses parallel threads with a 5-second hard timeout per source.
+    pub fn collect_enabled(&self, enabled_names: &[String]) -> usize {
+        use std::sync::Arc;
+        let results: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+
+        std::thread::scope(|s| {
+            let handles: Vec<_> = self
+                .sources
+                .iter()
+                .filter(|ss_mutex| {
+                    let ss = ss_mutex.lock().unwrap();
+                    enabled_names.iter().any(|n| n == ss.source.info().name)
+                })
+                .map(|ss_mutex| {
+                    let results = Arc::clone(&results);
+                    s.spawn(move || {
+                        let data = Self::collect_one(ss_mutex);
+                        if !data.is_empty() {
+                            results.lock().unwrap().extend_from_slice(&data);
+                        }
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
+
+        let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+        let n = results.len();
+        self.buffer.lock().unwrap().extend_from_slice(&results);
+        n
+    }
+
     fn collect_one(ss_mutex: &Mutex<SourceState>) -> Vec<u8> {
         let mut ss = ss_mutex.lock().unwrap();
         let t0 = Instant::now();
