@@ -74,25 +74,70 @@ class EntropyPool:
 
     # ── collection ──
 
-    def collect_all(self) -> int:
-        """Collect entropy from every registered source."""
-        raw = bytearray()
-        for ss in self._sources:
-            try:
-                t0 = time.monotonic()
-                data = ss.source.collect()
-                ss.last_collect_time = time.monotonic() - t0
-                if len(data) > 0:
-                    ss.total_bytes += len(data)
-                    ss.last_entropy = EntropySource._quick_shannon(data)
-                    ss.healthy = ss.last_entropy > 1.0
-                    raw.extend(data.tobytes())
-                else:
-                    ss.failures += 1
-                    ss.healthy = False
-            except Exception:
+    def _collect_one(self, ss: SourceState) -> bytes:
+        """Collect from a single source. Returns raw bytes."""
+        try:
+            t0 = time.monotonic()
+            data = ss.source.collect()
+            ss.last_collect_time = time.monotonic() - t0
+            if len(data) > 0:
+                ss.total_bytes += len(data)
+                ss.last_entropy = EntropySource._quick_shannon(data)
+                ss.healthy = ss.last_entropy > 1.0
+                return data.tobytes()
+            else:
                 ss.failures += 1
                 ss.healthy = False
+        except Exception:
+            ss.failures += 1
+            ss.healthy = False
+        return b""
+
+    def collect_all(self, parallel: bool = False, timeout: float = 10.0) -> int:
+        """Collect entropy from every registered source.
+
+        Parameters
+        ----------
+        parallel:
+            If True, collect from all sources concurrently using threads.
+        timeout:
+            Per-source timeout in seconds (parallel mode only).
+        """
+        if not parallel:
+            raw = bytearray()
+            for ss in self._sources:
+                raw.extend(self._collect_one(ss))
+            with self._lock:
+                self._buffer.extend(raw)
+            return len(raw)
+
+        # Parallel collection using daemon threads with hard timeout
+        import threading as _th
+
+        results: list[bytes] = []
+        results_lock = _th.Lock()
+
+        def _worker(ss):
+            data = self._collect_one(ss)
+            if data:
+                with results_lock:
+                    results.append(data)
+
+        threads = []
+        for ss in self._sources:
+            t = _th.Thread(target=_worker, args=(ss,), daemon=True)
+            t.start()
+            threads.append(t)
+
+        # Wait for all threads up to timeout
+        deadline = time.monotonic() + timeout
+        for t in threads:
+            remaining = max(0.1, deadline - time.monotonic())
+            t.join(timeout=remaining)
+
+        raw = bytearray()
+        for r in results:
+            raw.extend(r)
 
         with self._lock:
             self._buffer.extend(raw)

@@ -327,6 +327,30 @@ def report(samples: int, source_name: str | None, output_path: str | None) -> No
 
 
 @main.command()
+@click.option("--refresh", default=1.0, type=float, help="Refresh rate in seconds.")
+@click.option("--sources", "source_filter", default=None, help="Comma-separated source name filter.")
+def monitor(refresh: float, source_filter: str | None) -> None:
+    """Live interactive entropy dashboard.
+
+    Shows real-time source health, pool throughput, entropy visualization,
+    and rolling quality scores. Press Ctrl+C to stop.
+
+    Examples:
+
+        esoteric-entropy monitor
+
+        esoteric-entropy monitor --refresh 0.5
+
+        esoteric-entropy monitor --sources timing,silicon
+    """
+    from esoteric_entropy.monitor import EntropyMonitor
+
+    sources = source_filter.split(",") if source_filter else None
+    mon = EntropyMonitor(refresh_rate=refresh, sources_filter=sources)
+    mon.run()
+
+
+@main.command()
 def pool() -> None:
     """Run the entropy pool and output quality metrics."""
     from esoteric_entropy.pool import EntropyPool
