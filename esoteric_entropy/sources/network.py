@@ -22,6 +22,10 @@ class DNSTimingSource(EntropySource):
 
     name = "dns_timing"
     description = "DNS query round-trip timing jitter"
+    category = "network"
+    physics = (
+        "Measures round-trip time of DNS queries to public resolvers. Jitter comes from: network switch queuing, router buffer state, ISP congestion, DNS server load, TCP/IP stack scheduling, NIC interrupt coalescing, and electromagnetic propagation variations. Each query traverses dozens of independent physical systems."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 100.0
 
@@ -83,6 +87,13 @@ class TCPConnectSource(EntropySource):
 
     name = "tcp_connect"
     description = "TCP handshake timing jitter"
+    category = "network"
+    physics = (
+        "Times the TCP three-way handshake (SYN → SYN-ACK → ACK). The timing captures: "
+        "NIC DMA transfer jitter, kernel socket buffer allocation, remote server load, "
+        "network path congestion, and router queuing delays. The handshake crosses multiple "
+        "autonomous systems, each adding independent timing noise."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 50.0
 

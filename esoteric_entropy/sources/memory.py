@@ -21,6 +21,10 @@ class MemoryTimingSource(EntropySource):
 
     name = "memory_timing"
     description = "DRAM allocation and access timing jitter"
+    category = "hardware"
+    physics = (
+        "Times memory allocation (malloc/mmap) and access patterns. Allocation jitter comes from heap fragmentation, page fault handling, and kernel memory pressure. Access timing varies with: DRAM refresh interference (~64ms cycle), cache hierarchy state (L1/L2/L3 hits vs misses), and memory controller scheduling."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 1500.0
 

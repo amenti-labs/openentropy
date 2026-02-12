@@ -130,6 +130,10 @@ class BluetoothNoiseSource(EntropySource):
 
     name = "bluetooth_ble"
     description = "BLE advertisement RSSI noise (RF field measurement)"
+    category = "hardware"
+    physics = (
+        "Scans BLE advertisements via CoreBluetooth and collects RSSI values from nearby devices. Each RSSI reading reflects: 2.4 GHz multipath propagation, frequency hopping across 40 channels, advertising interval jitter (±10ms), transmit power variation, and receiver thermal noise. Multiple independent transmitters provide uncorrelated entropy streams."
+    )
     platform_requirements = ["darwin", "bluetooth"]
     entropy_rate_estimate = 50.0
 

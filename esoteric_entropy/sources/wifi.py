@@ -183,6 +183,10 @@ class WiFiRSSISource(EntropySource):
 
     name = "wifi_rssi"
     description = "WiFi RSSI fluctuations (RF field measurement at 2.4/5/6 GHz)"
+    category = "hardware"
+    physics = (
+        "Reads WiFi signal strength (RSSI) and noise floor via CoreWLAN framework. RSSI fluctuates due to: multipath fading (reflections off walls/objects), constructive/destructive interference at 2.4/5/6 GHz, Rayleigh fading from moving objects, atmospheric absorption, and thermal noise in the radio receiver's LNA (Low Noise Amplifier)."
+    )
     platform_requirements = ["darwin", "wifi"]
     entropy_rate_estimate = 30.0
 

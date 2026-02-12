@@ -29,6 +29,10 @@ class DRAMRowBufferSource(EntropySource):
 
     name = "dram_row_buffer"
     description = "DRAM row buffer hit/miss timing jitter"
+    category = "silicon"
+    physics = (
+        "Measures DRAM row buffer hit/miss timing by accessing different memory rows. DRAM is organized into rows of capacitor cells. Accessing an open row (hit) is fast; accessing a different row requires precharge + activate (miss), which is slower. The exact timing depends on: physical address mapping, row buffer state from ALL system activity, memory controller scheduling, and DRAM refresh interference."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 3000.0
 
@@ -72,6 +76,10 @@ class CacheContentionSource(EntropySource):
 
     name = "cache_contention"
     description = "L1/L2 cache miss pattern timing"
+    category = "silicon"
+    physics = (
+        "Measures L1/L2 cache miss patterns by alternating access patterns. Cache timing depends on what every other process and hardware unit is doing — the cache is a shared resource whose state is fundamentally unpredictable. A cache miss requires main memory access (100+ ns vs 1 ns for L1 hit), and which lines are evicted depends on the entire system's memory access history."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 2500.0
 
@@ -118,6 +126,10 @@ class PageFaultTimingSource(EntropySource):
 
     name = "page_fault_timing"
     description = "TLB miss and page fault timing jitter"
+    category = "silicon"
+    physics = (
+        "Triggers and times minor page faults via mmap/munmap. Page fault resolution requires: TLB lookup, hardware page table walk (up to 4 levels on ARM64), physical page allocation from the kernel free list, and zero-fill for security. The timing depends on physical memory fragmentation — a reflection of every allocation/deallocation since boot."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 1500.0
 
@@ -153,6 +165,10 @@ class SpeculativeExecutionSource(EntropySource):
 
     name = "speculative_execution"
     description = "Branch predictor and speculative execution timing"
+    category = "silicon"
+    physics = (
+        "Measures timing variations from the CPU's speculative execution engine. The branch predictor maintains per-address history that depends on ALL previously executed code. Mispredictions cause pipeline flushes (~15 cycle penalty on M4). By running data-dependent branches and measuring timing, we capture the predictor's internal state — which is shaped by every process on the system."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 2000.0
 

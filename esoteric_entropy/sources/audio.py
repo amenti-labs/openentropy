@@ -17,6 +17,10 @@ class AudioNoiseSource(EntropySource):
 
     name = "audio_thermal"
     description = "Microphone ADC thermal noise (Johnson-Nyquist)"
+    category = "hardware"
+    physics = (
+        "Records from the microphone ADC with no signal present. The LSBs capture Johnson-Nyquist noise — thermal agitation of electrons in the input impedance. This is genuine quantum-origin entropy: random electron motion in a resistor at temperature T produces voltage noise proportional to √(4kTRΔf). No two samples can ever be predicted."
+    )
     platform_requirements = ["sounddevice", "microphone"]
     entropy_rate_estimate = 10000.0
 

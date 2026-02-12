@@ -19,6 +19,10 @@ class CameraNoiseSource(EntropySource):
 
     name = "camera_shot_noise"
     description = "Camera sensor photon shot noise / dark current"
+    category = "hardware"
+    physics = (
+        "Captures frames from the camera sensor in darkness. The sensor's photodiodes generate dark current from thermal electron-hole pair generation in silicon — a quantum process. Read noise from the amplifier adds further randomness. The LSBs of pixel values in dark frames are dominated by shot noise (Poisson-distributed photon counting)."
+    )
     platform_requirements = ["opencv-python", "camera"]
     entropy_rate_estimate = 50000.0
 

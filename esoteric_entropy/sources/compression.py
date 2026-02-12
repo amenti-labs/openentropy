@@ -31,6 +31,10 @@ class CompressionTimingSource(EntropySource):
 
     name = "compression_timing"
     description = "Compression timing oracle (zlib pipeline/branch predictor)"
+    category = "novel"
+    physics = (
+        "Compresses varying data with zlib and measures per-operation timing. Compression algorithms have heavily data-dependent branches (Huffman tree traversal, LZ77 match finding). The CPU's branch predictor state from ALL running code affects prediction accuracy for these branches. Pipeline stalls from mispredictions create timing variation that reflects the predictor's unpredictable internal state."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 1800.0
 
@@ -65,6 +69,10 @@ class HashTimingSource(EntropySource):
 
     name = "hash_timing"
     description = "SHA-256 timing oracle on varying data"
+    category = "novel"
+    physics = (
+        "SHA-256 hashes data of varying sizes and measures timing. While SHA-256 is algorithmically constant-time, the actual execution time varies due to: memory access patterns for the message schedule, cache line alignment, TLB state, and CPU frequency scaling. The timing also captures micro-architectural side effects from other processes sharing the execution units."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 2000.0
 

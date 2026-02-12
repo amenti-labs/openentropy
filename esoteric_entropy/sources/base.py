@@ -14,6 +14,8 @@ class EntropySource(ABC):
 
     name: str = "unnamed"
     description: str = ""
+    physics: str = ""  # How this source derives entropy (shown in TUI info panel)
+    category: str = "other"  # timing, system, network, hardware, silicon, cross_domain, novel
     platform_requirements: list[str] = []
     entropy_rate_estimate: float = 0.0  # bits per second
 

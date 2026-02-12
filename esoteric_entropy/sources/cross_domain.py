@@ -35,6 +35,10 @@ class CPUIOBeatSource(EntropySource):
 
     name = "cpu_io_beat"
     description = "CPU↔IO clock domain beat frequency"
+    category = "cross_domain"
+    physics = (
+        "Alternates CPU-bound computation with disk I/O operations and measures the transition timing. The CPU and I/O subsystem run on independent clock domains with separate PLLs. When operations cross domains, the beat frequency of their PLLs creates timing jitter. This is analogous to the acoustic beat frequency between two tuning forks — physically random phase noise."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 1500.0
 
@@ -84,6 +88,10 @@ class CPUMemoryBeatSource(EntropySource):
 
     name = "cpu_memory_beat"
     description = "CPU↔Memory controller beat frequency"
+    category = "cross_domain"
+    physics = (
+        "Interleaves CPU computation with random memory accesses to large arrays (>L2 cache). The memory controller runs on its own clock domain. Cache misses force the CPU to wait for the memory controller's arbitration, whose timing depends on: DRAM refresh state, competing DMA from GPU/ANE, and row buffer conflicts. The cross-domain latency jitter is non-deterministic."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 2500.0
 
@@ -125,6 +133,10 @@ class MultiDomainBeatSource(EntropySource):
 
     name = "multi_domain_beat"
     description = "Multi-domain (CPU/memory/IO/kernel) interleaved beat"
+    category = "cross_domain"
+    physics = (
+        "Rapidly interleaves operations across 4 clock domains: CPU computation, memory access, disk I/O, and kernel syscalls. Each domain has its own PLL and arbitration logic. The composite timing captures interference patterns between all domains simultaneously — like listening to 4 independent oscillators and recording the emergent beat pattern."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 3000.0
 

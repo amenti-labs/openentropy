@@ -21,6 +21,10 @@ class ProcessSource(EntropySource):
 
     name = "process_table"
     description = "Process table churn, PID allocation, CPU fluctuation"
+    category = "system"
+    physics = (
+        "Snapshots the process table (PIDs, CPU usage, memory) and extracts entropy from the constantly-changing state. New PIDs are allocated semi-randomly, CPU percentages fluctuate with scheduling decisions, and resident memory sizes shift with page reclamation. Each value reflects thousands of independent kernel decisions."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 400.0
 

@@ -20,6 +20,10 @@ class ClockJitterSource(EntropySource):
 
     name = "clock_jitter"
     description = "Phase noise between perf_counter and monotonic clocks"
+    category = "timing"
+    physics = (
+        "Measures phase noise between two independent clock oscillators (perf_counter vs monotonic). Each clock is driven by a separate PLL (Phase-Locked Loop) on the SoC. Thermal noise in the PLL's voltage-controlled oscillator causes random frequency drift — the LSBs of their difference are genuine analog entropy from crystal oscillator physics."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 500.0  # bits/s (conservative)
 
@@ -49,6 +53,10 @@ class MachTimingSource(EntropySource):
 
     name = "mach_timing"
     description = "Mach kernel absolute-time LSB jitter"
+    category = "timing"
+    physics = (
+        "Reads the ARM system counter (mach_absolute_time) at sub-nanosecond resolution with variable micro-workloads between samples. The timing jitter comes from CPU pipeline state: instruction reordering, branch prediction, cache state, interrupt coalescing, and power-state transitions. SHA-256 conditioning extracts the entropy spread across all bits."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 2000.0
 
@@ -109,6 +117,10 @@ class SleepJitterSource(EntropySource):
 
     name = "sleep_jitter"
     description = "OS scheduling jitter from short sleeps"
+    category = "timing"
+    physics = (
+        "Requests zero-duration sleeps and measures actual wake time. The jitter captures OS scheduler non-determinism: timer interrupt granularity (1-4ms), thread priority decisions, runqueue length, and thermal-dependent clock frequency scaling (DVFS). Each measurement reflects the entire system's instantaneous scheduling state."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 200.0
 

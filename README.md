@@ -9,7 +9,9 @@
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 [![NIST Tests](https://img.shields.io/badge/NIST-28%2F31%20Pass-brightgreen.svg)]()
 
-*Harvests entropy from 30 unconventional hardware sources — clock jitter, kernel counters, memory timing, GPU scheduling, silicon microarchitecture, and more.*
+*Harvests entropy from 30 unconventional hardware sources hiding inside your Mac — clock jitter, kernel counters, DRAM row buffers, GPU scheduling, cache contention, and more.*
+
+**Built for Apple Silicon MacBooks and Mac desktops. No special hardware. No API keys. Just physics.**
 
 **By [Amenti Labs](https://github.com/amenti-labs)**
 
@@ -57,6 +59,21 @@ rng.random(10)            # 10 floats from hardware entropy
 rng.integers(0, 256, 100) # 100 random ints
 rng.standard_normal(1000) # Gaussian samples
 ```
+
+---
+
+## Platform Support
+
+**Primary: macOS on Apple Silicon** (M1/M2/M3/M4 MacBooks, Mac Mini, Mac Studio, Mac Pro)
+
+| Platform | Sources | Notes |
+|----------|:-------:|-------|
+| **MacBook (M-series)** | **30/30** | Full suite — WiFi, BLE, camera, mic, sensors, all silicon sources |
+| **Mac Mini/Studio/Pro** | 27-28/30 | Most sources — no built-in camera, mic, or motion sensors |
+| **Intel Mac** | ~20/30 | Timing, system, network sources work; some silicon sources are ARM-specific |
+| **Linux** | 10-15/30 | Timing, network, disk, process sources; system sources use `/proc` (coming soon) |
+
+The package gracefully detects available hardware and only activates sources that work on your machine. MacBooks get the richest entropy because they pack the most sensors into one device — WiFi, Bluetooth, camera, microphone, accelerometer, gyroscope, magnetometer, ambient light sensor, and the full Apple Silicon SoC.
 
 ---
 
@@ -248,6 +265,40 @@ curl "http://localhost:8042/sources"
 ```
 
 Options: `--port N`, `--host addr`, `--sources filter`
+
+### `esoteric-entropy monitor`
+**Interactive live dashboard** — the showpiece of the package.
+
+```bash
+# Launch the full dashboard
+esoteric-entropy monitor
+
+# Fast refresh (0.25s)
+esoteric-entropy monitor --refresh 0.25
+
+# Filter to specific sources
+esoteric-entropy monitor --sources silicon,compression,timing
+```
+
+**Keyboard controls:**
+
+| Key | Action |
+|-----|--------|
+| **Space** | Toggle selected source on/off |
+| **i** | Show/hide physics info for selected source |
+| **a** | Enable all sources |
+| **n** | Disable all sources |
+| **f** | Cycle refresh speed (2s → 1s → 0.5s → 0.25s) |
+| **r** | Force immediate refresh |
+| **↑↓** | Navigate source list |
+| **q** | Quit |
+
+The dashboard shows:
+- **Source table** — all sources with live Shannon entropy, sparklines, and hash-to-float values
+- **Line chart** — historical entropy per source (hashed to 0–1) using plotext
+- **RNG output** — live integer, float, and hex from the conditioned pool
+- **Pool status** — grade, score, throughput
+- **Info panel** — press `i` to see the physics behind how each source derives its entropy
 
 ### `esoteric-entropy report`
 Run the full NIST-inspired test battery and generate a Markdown report.

@@ -86,6 +86,10 @@ class SysctlSource(EntropySource):
 
     name = "sysctl_counters"
     description = "Kernel counter deltas from 50+ fluctuating sysctl keys"
+    category = "system"
+    physics = (
+        "Batch-reads ~1600 kernel counters via sysctl and extracts deltas from the ~40-60 that change within 200ms. These counters track page faults, context switches, TCP segments, interrupts — each driven by independent processes. The LSBs of their deltas reflect the unpredictable micro-timing of the entire operating system's activity."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 5000.0  # very high — many independent counters
 

@@ -46,6 +46,10 @@ class IORegistryEntropySource(EntropySource):
 
     name = "ioregistry_deep"
     description = "IORegistry hardware counter fluctuations (GPU/NVMe/thermal/power)"
+    category = "system"
+    physics = (
+        "Mines the macOS IORegistry for all fluctuating hardware counters — GPU utilization, NVMe SMART counters, memory controller stats, Neural Engine buffer allocations, DART IOMMU activity, Mach port counts, and display vsync counters. Each counter is driven by independent hardware subsystems. The LSBs of their deltas across snapshots capture silicon-level activity across the entire SoC."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 1000.0
 

@@ -22,6 +22,10 @@ class GPUTimingSource(EntropySource):
 
     name = "gpu_timing"
     description = "GPU dispatch completion timing jitter"
+    category = "hardware"
+    physics = (
+        "Dispatches Metal compute shaders and measures completion time. GPU timing jitter comes from: shader core occupancy, register file allocation, shared memory bank conflicts, warp/wavefront scheduling, power throttling, and memory controller arbitration between GPU cores, CPU, and Neural Engine on Apple Silicon's unified memory."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 300.0
 

@@ -41,6 +41,10 @@ class DispatchQueueSource(EntropySource):
 
     name = "dispatch_queue"
     description = "GCD dispatch queue scheduling jitter (P/E core migration)"
+    category = "novel"
+    physics = (
+        "Submits blocks to GCD (Grand Central Dispatch) queues and measures scheduling latency. macOS dynamically migrates work between P-cores (performance) and E-cores (efficiency) based on thermal state and load. The migration decisions, queue priority inversions, and QoS tier scheduling create non-deterministic dispatch timing that reflects the kernel's real-time resource allocation state."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 1500.0
 
@@ -88,6 +92,10 @@ class DyldTimingSource(EntropySource):
 
     name = "dyld_timing"
     description = "Dynamic linker (dyld) shared library resolution timing"
+    category = "novel"
+    physics = (
+        "Times dynamic library loading (dlopen/dlsym) which requires: searching the dyld shared cache, resolving symbol tables, rebasing pointers, and running initializers. The timing varies with: shared cache page residency (depends on what other apps have loaded), ASLR randomization, and filesystem metadata cache state. Each measurement reflects the dynamic linker's complex resolution path."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 1200.0
 
@@ -126,6 +134,10 @@ class VMPageTimingSource(EntropySource):
 
     name = "vm_page_timing"
     description = "Mach VM subsystem mmap/munmap timing jitter"
+    category = "novel"
+    physics = (
+        "Times Mach VM operations (mmap/munmap cycles). Each operation requires: VM map entry allocation, page table updates, TLB shootdown across cores (IPI interrupt), and physical page management. The timing depends on: VM map fragmentation, physical memory pressure, and cross-core synchronization latency — all of which are shaped by the entire system's memory usage pattern."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 1300.0
 
@@ -158,6 +170,10 @@ class SpotlightTimingSource(EntropySource):
 
     name = "spotlight_timing"
     description = "Spotlight metadata query timing jitter"
+    category = "novel"
+    physics = (
+        "Queries Spotlight's metadata index (mdls) and measures response time. The index is a complex B-tree/inverted index structure. Query timing depends on: index size, disk cache residency, concurrent indexing activity, and filesystem metadata state. When Spotlight is actively indexing new files, query latency becomes highly variable — capturing the unpredictable state of the entire filesystem index."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 800.0  # slow — subprocess per sample
 

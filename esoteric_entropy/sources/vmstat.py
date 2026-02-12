@@ -41,6 +41,10 @@ class VmstatSource(EntropySource):
 
     name = "vmstat"
     description = "VM statistics counter deltas (page faults, swaps, etc.)"
+    category = "system"
+    physics = (
+        "Samples macOS vm_stat counters (page faults, pageins, pageouts, compressions, decompressions, swap activity). These track physical memory management — each counter changes when hardware page table walks, TLB misses, or memory pressure triggers compressor/swap. The exact timing of memory pressure events is driven by all running processes."
+    )
     platform_requirements = ["darwin"]
     entropy_rate_estimate = 1000.0
 

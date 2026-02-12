@@ -124,6 +124,11 @@ class PoolStatus(Static):
     pass
 
 
+class InfoPanel(Static):
+    """Source info panel — shows physics explanation."""
+    pass
+
+
 class EntropyMonitorApp(App):
     """Interactive entropy monitor TUI."""
 
@@ -131,9 +136,9 @@ class EntropyMonitorApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 3;
+        grid-size: 2 4;
         grid-columns: 1fr 1fr;
-        grid-rows: auto 1fr auto;
+        grid-rows: auto 1fr auto auto;
     }
     #source-table {
         column-span: 1;
@@ -157,6 +162,17 @@ class EntropyMonitorApp(App):
         min-height: 5;
         border: solid $success;
     }
+    #info-panel {
+        column-span: 2;
+        height: auto;
+        min-height: 3;
+        max-height: 8;
+        border: solid $warning;
+        display: none;
+    }
+    #info-panel.visible {
+        display: block;
+    }
     DataTable {
         height: 100%;
     }
@@ -164,11 +180,12 @@ class EntropyMonitorApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("space", "toggle_source", "Toggle Source"),
-        Binding("a", "enable_all", "Enable All"),
-        Binding("n", "disable_all", "Disable All"),
+        Binding("space", "toggle_source", "Toggle"),
+        Binding("i", "show_info", "Info"),
+        Binding("a", "enable_all", "All On"),
+        Binding("n", "disable_all", "All Off"),
         Binding("f", "cycle_speed", "Speed"),
-        Binding("r", "force_refresh", "Refresh Now"),
+        Binding("r", "force_refresh", "Refresh"),
     ]
 
     refresh_rate = reactive(1.0)
@@ -184,6 +201,7 @@ class EntropyMonitorApp(App):
         self._pool = None
         self._enabled: set[str] = set()
         self._source_names: list[str] = []
+        self._source_objects: dict[str, object] = {}  # name -> EntropySource instance
         self._source_history: dict[str, deque] = {}  # name -> deque of 0-1 values
         self._source_shannon: dict[str, deque] = {}  # name -> deque of shannon values
         self._source_states: dict[str, dict] = {}
@@ -205,6 +223,7 @@ class EntropyMonitorApp(App):
         yield ChartWidget(id="chart")
         yield RNGDisplay(id="rng-display")
         yield PoolStatus(id="pool-status")
+        yield InfoPanel(id="info-panel")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -219,6 +238,7 @@ class EntropyMonitorApp(App):
             ]
 
         self._source_names = [s.source.name for s in self._pool.sources]
+        self._source_objects = {s.source.name: s.source for s in self._pool.sources}
         self._enabled = set(self._source_names)
 
         for name in self._source_names:
@@ -453,6 +473,38 @@ class EntropyMonitorApp(App):
         else:
             self._enabled.add(name)
             self.notify(f"Enabled: {name}", severity="information")
+
+    def action_show_info(self) -> None:
+        """Show/hide physics info for selected source."""
+        info_panel = self.query_one("#info-panel", InfoPanel)
+        table = self.query_one("#source-table", DataTable)
+
+        if info_panel.has_class("visible"):
+            info_panel.remove_class("visible")
+            return
+
+        if table.cursor_row is None or table.cursor_row >= len(self._source_names):
+            return
+
+        name = self._source_names[table.cursor_row]
+        src = self._source_objects.get(name)
+        if not src:
+            return
+
+        text = Text()
+        text.append(f"  📖 {name}", style="bold magenta")
+        cat = getattr(src, "category", "other")
+        text.append(f"  [{cat}]\n", style="dim")
+        text.append(f"  {src.description}\n\n", style="italic")
+        physics = getattr(src, "physics", "")
+        if physics:
+            text.append(f"  ⚛️  ", style="bold cyan")
+            text.append(physics, style="")
+        else:
+            text.append("  (no physics description available)", style="dim")
+
+        info_panel.update(text)
+        info_panel.add_class("visible")
 
     def action_enable_all(self) -> None:
         self._enabled = set(self._source_names)

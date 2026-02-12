@@ -21,6 +21,10 @@ class DiskIOSource(EntropySource):
 
     name = "disk_io"
     description = "NVMe/SSD read latency jitter"
+    category = "hardware"
+    physics = (
+        "Measures NVMe/SSD read latency for small random reads. Jitter sources: flash translation layer (FTL) remapping, wear leveling, garbage collection, read disturb mitigation, NAND page read latency variation (depends on charge level in floating-gate transistors), and NVMe controller queue arbitration."
+    )
     platform_requirements: list[str] = []
     entropy_rate_estimate = 800.0
 

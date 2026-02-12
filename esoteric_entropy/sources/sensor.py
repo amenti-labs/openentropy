@@ -20,6 +20,10 @@ class SensorNoiseSource(EntropySource):
 
     name = "sensor_noise"
     description = "MEMS accelerometer/magnetometer noise"
+    category = "hardware"
+    physics = (
+        "Reads accelerometer, gyroscope, and magnetometer via CoreMotion. Even at rest, MEMS sensors exhibit: Brownian motion of the proof mass, thermo-mechanical noise, electronic 1/f noise, and quantization noise. The MacBook's accelerometer detects micro-vibrations from fans, disk, and building structure that are physically unpredictable."
+    )
     platform_requirements = ["darwin", "motion_sensors"]
     entropy_rate_estimate = 100.0
 
