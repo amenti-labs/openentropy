@@ -26,7 +26,11 @@ enum Commands {
     },
 
     /// Benchmark all available sources with a ranked report
-    Bench,
+    Bench {
+        /// Comma-separated source name filter, or "all" for every source
+        #[arg(long)]
+        sources: Option<String>,
+    },
 
     /// Stream entropy to stdout
     Stream {
@@ -116,7 +120,11 @@ enum Commands {
     },
 
     /// Run the entropy pool and output quality metrics
-    Pool,
+    Pool {
+        /// Comma-separated source name filter, or "all"
+        #[arg(long)]
+        sources: Option<String>,
+    },
 }
 
 fn main() {
@@ -125,7 +133,7 @@ fn main() {
     match cli.command {
         Commands::Scan => commands::scan::run(),
         Commands::Probe { source_name } => commands::probe::run(&source_name),
-        Commands::Bench => commands::bench::run(),
+        Commands::Bench { sources } => commands::bench::run(sources.as_deref()),
         Commands::Stream {
             format,
             rate,
@@ -153,6 +161,6 @@ fn main() {
             source,
             output,
         } => commands::report::run(samples, source.as_deref(), output.as_deref()),
-        Commands::Pool => commands::pool::run(),
+        Commands::Pool { sources } => commands::pool::run(sources.as_deref()),
     }
 }

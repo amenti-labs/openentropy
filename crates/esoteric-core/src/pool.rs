@@ -73,15 +73,10 @@ impl EntropyPool {
     }
 
     /// Collect entropy from every registered source (serial).
+    /// Collect entropy from every registered source in parallel with per-source
+    /// timeout (10s default). Sources that exceed the timeout are skipped.
     pub fn collect_all(&self) -> usize {
-        let mut raw = Vec::new();
-        for ss_mutex in &self.sources {
-            let data = Self::collect_one(ss_mutex);
-            raw.extend_from_slice(&data);
-        }
-        let n = raw.len();
-        self.buffer.lock().unwrap().extend_from_slice(&raw);
-        n
+        self.collect_all_parallel(10.0)
     }
 
     /// Collect entropy from all sources in parallel using threads.
