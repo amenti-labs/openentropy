@@ -29,6 +29,31 @@ CATEGORIES = {
 }
 
 
+def _sysctl_snapshot() -> dict[str, int]:
+    """Batch read ALL sysctl keys as integers using a single `sysctl -a` call."""
+    try:
+        r = subprocess.run(
+            ["/usr/sbin/sysctl", "-a"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {}
+
+    result: dict[str, int] = {}
+    for line in r.stdout.splitlines():
+        if ":" not in line:
+            continue
+        key = line.split(":")[0].strip()
+        val = line.split(":", 1)[1].strip()
+        try:
+            result[key] = int(val)
+        except ValueError:
+            continue
+    return result
+
+
 def _sysctl_value(key: str) -> int | None:
     """Read a single sysctl key as an integer."""
     try:
@@ -41,42 +66,14 @@ def _sysctl_value(key: str) -> int | None:
         if r.returncode != 0:
             return None
         val = r.stdout.strip()
-        # Handle multi-value lines by summing (e.g. "{ 1 2 3 }")
         if val.startswith("{"):
             nums = [int(x) for x in val.strip("{}").split() if x.lstrip("-").isdigit()]
             return sum(nums) if nums else None
-        # Handle colon-separated struct output
         if ":" in val and not val.replace(":", "").replace(" ", "").replace("-", "").isdigit():
             return None
         return int(val)
     except (ValueError, subprocess.TimeoutExpired, OSError):
         return None
-
-
-def _all_numeric_keys() -> list[str]:
-    """List all sysctl keys that return integer values."""
-    try:
-        r = subprocess.run(
-            ["/usr/sbin/sysctl", "-a"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return []
-
-    keys: list[str] = []
-    for line in r.stdout.splitlines():
-        if ":" not in line:
-            continue
-        key = line.split(":")[0].strip()
-        val = line.split(":", 1)[1].strip()
-        try:
-            int(val)
-            keys.append(key)
-        except ValueError:
-            continue
-    return keys
 
 
 class SysctlSource(EntropySource):
@@ -102,25 +99,18 @@ class SysctlSource(EntropySource):
         return _sysctl_value("kern.osrelease") is not None or _sysctl_value("hw.ncpu") is not None
 
     def discover_fluctuating_keys(self, probe_delay: float = 0.2) -> list[str]:
-        """Probe all numeric sysctl keys; return those that change."""
-        all_keys = _all_numeric_keys()
-        if not all_keys:
-            return []
+        """Probe all numeric sysctl keys; return those that change.
 
-        # Take two snapshots separated by probe_delay
-        snap1: dict[str, int] = {}
-        for k in all_keys:
-            v = _sysctl_value(k)
-            if v is not None:
-                snap1[k] = v
+        Uses batch ``sysctl -a`` (2 calls total) instead of per-key probing.
+        """
+        snap1 = _sysctl_snapshot()
+        if not snap1:
+            return []
 
         time.sleep(probe_delay)
 
-        changing: list[str] = []
-        for k, v1 in snap1.items():
-            v2 = _sysctl_value(k)
-            if v2 is not None and v2 != v1:
-                changing.append(k)
+        snap2 = _sysctl_snapshot()
+        changing = [k for k in snap1 if k in snap2 and snap2[k] != snap1[k]]
 
         self._fluctuating_keys = sorted(changing)
         return self._fluctuating_keys
@@ -140,28 +130,36 @@ class SysctlSource(EntropySource):
         return cats
 
     def collect(self, n_samples: int = 1000) -> np.ndarray:
-        """Sample fluctuating sysctl keys and extract delta LSBs."""
+        """Sample fluctuating sysctl keys and extract delta LSBs.
+
+        Uses batch ``sysctl -a`` snapshots for speed (~0.1s each vs minutes
+        when reading keys individually).
+        """
         keys = self.fluctuating_keys
         if not keys:
             return np.array([], dtype=np.uint8)
 
-        # Rapid sampling rounds
-        rounds = max(1, n_samples // max(len(keys), 1))
-        prev: dict[str, int] = {}
+        key_set = set(keys)
+        rounds = max(2, n_samples // max(len(keys), 1) + 1)
+        prev: dict[str, int] | None = None
         deltas: list[int] = []
 
         for _ in range(rounds):
-            for k in keys:
-                v = _sysctl_value(k)
-                if v is not None:
-                    if k in prev:
-                        deltas.append(v - prev[k])
-                    prev[k] = v
+            snap = _sysctl_snapshot()
+            if prev is not None:
+                for k in keys:
+                    if k in snap and k in prev:
+                        d = snap[k] - prev[k]
+                        if d != 0:
+                            deltas.append(d)
+            prev = {k: v for k, v in snap.items() if k in key_set}
+            if len(deltas) >= n_samples:
+                break
 
         if not deltas:
             return np.array([], dtype=np.uint8)
 
-        arr = np.array(deltas, dtype=np.int64)
+        arr = np.array(deltas[:n_samples], dtype=np.int64)
         return (arr & 0xFF).astype(np.uint8)
 
     def entropy_quality(self) -> dict:

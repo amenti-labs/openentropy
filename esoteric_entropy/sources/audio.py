@@ -25,7 +25,26 @@ class AudioNoiseSource(EntropySource):
             import sounddevice as sd  # noqa: F401
 
             devs = sd.query_devices()
-            return any(d.get("max_input_channels", 0) > 0 for d in devs)  # type: ignore[union-attr]
+            # Check for actual input devices (not just virtual/aggregate)
+            has_input = any(d.get("max_input_channels", 0) > 0 for d in devs)  # type: ignore[union-attr]
+            if not has_input:
+                return False
+            # Quick probe with timeout — catches devices that list but hang on record
+            import threading
+
+            result = [False]
+
+            def _probe():
+                try:
+                    sd.rec(int(44100 * 0.01), samplerate=44100, channels=1, dtype="int16", blocking=True)
+                    result[0] = True
+                except Exception:
+                    pass
+
+            t = threading.Thread(target=_probe, daemon=True)
+            t.start()
+            t.join(timeout=3.0)
+            return result[0]
         except Exception:
             return False
 
