@@ -471,15 +471,24 @@ def anderson_darling_test(data: np.ndarray) -> TestResult:
     normalized = data.astype(float) / 255.0
     # Add tiny noise to avoid ties
     normalized = normalized + np.random.default_rng(42).normal(0, 1e-10, n)
-    result = sp_stats.anderson(normalized, dist='norm', method='interpolate')
+    result = sp_stats.anderson(normalized, dist='norm')
     stat = float(result.statistic)
-    # Use 5% significance level
-    crit_5 = result.critical_values[2]  # 5% level
-    passed = stat < crit_5
-    grade = "A" if stat < result.critical_values[0] else "B" if stat < result.critical_values[1] else "C" if stat < crit_5 else "D" if stat < result.critical_values[3] else "F"
+    if hasattr(result, 'critical_values') and result.critical_values is not None:
+        crit_5 = result.critical_values[2]  # 5% level
+        passed = stat < crit_5
+        grade = "A" if stat < result.critical_values[0] else "B" if stat < result.critical_values[1] else "C" if stat < crit_5 else "D" if stat < result.critical_values[3] else "F"
+        details = f"A²={stat:.4f}, 5% critical={crit_5:.4f}"
+    elif hasattr(result, 'pvalue'):
+        p = float(result.pvalue)
+        passed = p > 0.05
+        grade = "A" if p > 0.5 else "B" if p > 0.1 else "C" if p > 0.05 else "D" if p > 0.01 else "F"
+        details = f"A²={stat:.4f}, p={p:.6f}"
+    else:
+        passed = False
+        grade = "F"
+        details = f"A²={stat:.4f}"
     return TestResult(name=name, passed=passed, p_value=None,
-                      statistic=stat, details=f"A²={stat:.4f}, 5% critical={crit_5:.4f}",
-                      grade=grade)
+                      statistic=stat, details=details, grade=grade)
 
 
 # ═══════════════════════ PATTERN TESTS ═══════════════════════

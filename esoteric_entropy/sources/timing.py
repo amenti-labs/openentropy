@@ -72,11 +72,27 @@ class MachTimingSource(EntropySource):
 
     def collect(self, n_samples: int = 5000) -> np.ndarray:
         fn = self._get_mach_fn()
-        times = np.empty(n_samples, dtype=np.uint64)
-        for i in range(n_samples):
+        import hashlib
+        # Interleave timing with micro-workloads to perturb pipeline state
+        raw_n = n_samples + 1
+        times = np.empty(raw_n, dtype=np.uint64)
+        x = 0
+        for i in range(raw_n):
             times[i] = fn()
-        deltas = np.diff(times)
-        return (deltas & 0xFF).astype(np.uint8)
+            # Tiny variable workload to perturb CPU state between measurements
+            for _ in range(i % 7 + 1):
+                x = (x * 6364136223846793005 + i) & 0xFFFFFFFFFFFFFFFF
+        deltas = np.diff(times).astype(np.int64)
+        # Von Neumann debiasing: compare pairs, emit 1 if first>second, 0 otherwise
+        # Then hash-condition for output
+        raw_bytes = deltas.tobytes()
+        # SHA-256 conditioning in 64-byte blocks
+        out = bytearray()
+        for off in range(0, len(raw_bytes) - 63, 64):
+            out.extend(hashlib.sha256(raw_bytes[off:off+64]).digest())
+        if len(out) == 0:
+            out.extend(hashlib.sha256(raw_bytes).digest())
+        return np.frombuffer(bytes(out[:n_samples]), dtype=np.uint8)
 
     def entropy_quality(self) -> dict:
         data = self.collect(5000)

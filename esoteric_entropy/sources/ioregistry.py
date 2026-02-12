@@ -21,11 +21,11 @@ _NUM_RE = re.compile(r'"([^"]{1,80})"\s*=\s*(\d{1,15})(?:\s|,|}|$)')
 
 
 def _parse_ioreg() -> dict[str, int]:
-    """Parse all numeric values from ioreg."""
+    """Parse all numeric values from ioreg using grep pre-filtering for speed."""
     try:
         result = subprocess.run(
-            ["/usr/sbin/ioreg", "-l", "-w0"],
-            capture_output=True, text=True, timeout=30,
+            r'/usr/sbin/ioreg -l -w0 | grep -E "\"[^\"]+\"\s*=\s*[0-9]"',
+            shell=True, capture_output=True, text=True, timeout=15,
         )
     except Exception:
         return {}
@@ -59,9 +59,9 @@ class IORegistryEntropySource(EntropySource):
             return False
 
     def collect(self, n_samples: int = 2000) -> np.ndarray:
-        # Take multiple snapshots
-        n_snapshots = max(10, min(n_samples // 50, 25))
-        interval = 0.3
+        # Take multiple snapshots (grep-filtered ioreg is ~1s each)
+        n_snapshots = max(3, min(n_samples // 100, 8))
+        interval = 0.2
         snapshots: list[dict[str, int]] = []
         for _ in range(n_snapshots):
             snapshots.append(_parse_ioreg())
