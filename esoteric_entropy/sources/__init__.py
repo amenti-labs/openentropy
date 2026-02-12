@@ -17,6 +17,7 @@ from esoteric_entropy.sources.timing import (
     SleepJitterSource,
 )
 from esoteric_entropy.sources.vmstat import VmstatSource
+from esoteric_entropy.sources.wifi import WiFiRSSISource
 
 ALL_SOURCES: list[type[EntropySource]] = [
     ClockJitterSource,
@@ -26,6 +27,7 @@ ALL_SOURCES: list[type[EntropySource]] = [
     VmstatSource,
     DNSTimingSource,
     TCPConnectSource,
+    WiFiRSSISource,
     DiskIOSource,
     MemoryTimingSource,
     GPUTimingSource,
