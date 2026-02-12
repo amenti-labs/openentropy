@@ -1,0 +1,129 @@
+//! DiskIOSource — NVMe/SSD read latency jitter.
+//!
+//! Creates a temporary 64KB file, performs random seeks and 4KB reads,
+//! and extracts LSBs of nanosecond timing deltas as entropy.
+
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::time::Instant;
+
+use tempfile::NamedTempFile;
+
+use crate::source::{EntropySource, SourceCategory, SourceInfo};
+
+/// Size of the temporary file used for random reads.
+const TEMP_FILE_SIZE: usize = 64 * 1024; // 64 KB
+
+/// Size of each random read operation.
+const READ_BLOCK_SIZE: usize = 4 * 1024; // 4 KB
+
+static DISK_IO_INFO: SourceInfo = SourceInfo {
+    name: "disk_io",
+    description: "NVMe/SSD read latency jitter from random 4KB reads",
+    physics: "Measures NVMe/SSD read latency for small random reads. Jitter sources: \
+              flash translation layer (FTL) remapping, wear leveling, garbage collection, \
+              read disturb mitigation, NAND page read latency variation (depends on charge \
+              level in floating-gate transistors), and NVMe controller queue arbitration.",
+    category: SourceCategory::Hardware,
+    platform_requirements: &[],
+    entropy_rate_estimate: 800.0,
+};
+
+/// Entropy source that harvests timing jitter from NVMe/SSD random reads.
+pub struct DiskIOSource;
+
+impl EntropySource for DiskIOSource {
+    fn info(&self) -> &SourceInfo {
+        &DISK_IO_INFO
+    }
+
+    fn is_available(&self) -> bool {
+        // Available on any platform with a filesystem and tempfile support.
+        true
+    }
+
+    fn collect(&self, n_samples: usize) -> Vec<u8> {
+        // Create a temporary 64KB file filled with pseudo-random data.
+        let mut tmpfile = match NamedTempFile::new() {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
+
+        // Fill with data so the file actually occupies disk blocks.
+        let fill_data = vec![0xA5u8; TEMP_FILE_SIZE];
+        if tmpfile.write_all(&fill_data).is_err() {
+            return Vec::new();
+        }
+        if tmpfile.flush().is_err() {
+            return Vec::new();
+        }
+
+        let mut output = Vec::with_capacity(n_samples);
+        let mut read_buf = vec![0u8; READ_BLOCK_SIZE];
+        let max_offset = TEMP_FILE_SIZE.saturating_sub(READ_BLOCK_SIZE);
+
+        // Use a simple LCG to generate pseudo-random seek offsets.
+        // The randomness here doesn't need to be cryptographic — we just want
+        // varied seek positions to exercise different FTL mappings.
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        let mut lcg_state = seed | 1; // ensure odd
+
+        let mut prev_ns: u64 = 0;
+
+        // We collect pairs of timings and XOR their deltas, so we need
+        // roughly 2 * n_samples * 8 reads (8 bits per byte from LSBs).
+        // Over-collect to ensure we have enough after LSB extraction.
+        let num_reads = n_samples * 8 + 64;
+
+        for i in 0..num_reads {
+            // LCG step
+            lcg_state = lcg_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let offset = (lcg_state as usize) % (max_offset + 1);
+
+            // Seek and read, measuring latency.
+            let t0 = Instant::now();
+            let _ = tmpfile.seek(SeekFrom::Start(offset as u64));
+            let _ = tmpfile.read(&mut read_buf);
+            let elapsed_ns = t0.elapsed().as_nanos() as u64;
+
+            if i > 0 {
+                // Compute delta between consecutive read latencies.
+                let delta = elapsed_ns.wrapping_sub(prev_ns);
+
+                // Extract the lowest byte (LSBs carry the jitter).
+                output.push(delta as u8);
+
+                if output.len() >= n_samples {
+                    break;
+                }
+            }
+
+            prev_ns = elapsed_ns;
+        }
+
+        output.truncate(n_samples);
+        output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disk_io_collects_bytes() {
+        let src = DiskIOSource;
+        assert!(src.is_available());
+        let data = src.collect(128);
+        assert_eq!(data.len(), 128);
+    }
+
+    #[test]
+    fn disk_io_info() {
+        let src = DiskIOSource;
+        assert_eq!(src.name(), "disk_io");
+        assert_eq!(src.info().category, SourceCategory::Hardware);
+    }
+}

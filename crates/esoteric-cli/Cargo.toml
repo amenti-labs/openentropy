@@ -1,0 +1,22 @@
+[package]
+name = "esoteric-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CLI for esoteric-entropy — your computer is a quantum noise observatory"
+
+[[bin]]
+name = "esoteric-entropy"
+path = "src/main.rs"
+
+[dependencies]
+esoteric-core = { workspace = true }
+esoteric-server = { workspace = true }
+esoteric-tests = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+libc = { workspace = true }

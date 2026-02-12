@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "crates/esoteric-core",
+    "crates/esoteric-cli",
+    "crates/esoteric-server",
+    "crates/esoteric-tests",
+    "crates/esoteric-python",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.3.0"
+edition = "2024"
+license = "MIT"
+authors = ["Amenti Labs"]
+repository = "https://github.com/amenti-labs/esoteric-entropy"
+
+[workspace.dependencies]
+# Core
+sha2 = "0.10"
+flate2 = "1"
+libc = "0.2"
+rand = "0.9"
+tempfile = "3"
+libloading = "0.8"
+log = "0.4"
+env_logger = "0.11"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# HTTP Server
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Python
+pyo3 = { version = "0.23", features = ["extension-module"] }
+
+# Testing
+statrs = "0.18"
+rustfft = "6"
+
+# Internal
+esoteric-core = { path = "crates/esoteric-core" }
+esoteric-server = { path = "crates/esoteric-server" }
+esoteric-tests = { path = "crates/esoteric-tests" }

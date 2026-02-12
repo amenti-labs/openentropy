@@ -1,0 +1,12 @@
+[package]
+name = "esoteric-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "NIST SP 800-22 inspired randomness test battery"
+
+[dependencies]
+statrs = { workspace = true }
+rustfft = { workspace = true }
+flate2 = { workspace = true }
