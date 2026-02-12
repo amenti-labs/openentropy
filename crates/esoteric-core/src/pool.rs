@@ -146,6 +146,34 @@ impl EntropyPool {
         }
     }
 
+    /// Return `n_bytes` of raw, unconditioned entropy (XOR-combined only).
+    ///
+    /// No SHA-256, no DRBG, no whitening. Preserves the raw hardware noise
+    /// signal for researchers studying actual device entropy characteristics.
+    pub fn get_raw_bytes(&self, n_bytes: usize) -> Vec<u8> {
+        // Auto-collect if buffer is low
+        {
+            let buf = self.buffer.lock().unwrap();
+            if buf.len() < n_bytes {
+                drop(buf);
+                self.collect_all();
+            }
+        }
+
+        let mut buf = self.buffer.lock().unwrap();
+        // If we still don't have enough, collect more rounds
+        while buf.len() < n_bytes {
+            drop(buf);
+            self.collect_all();
+            buf = self.buffer.lock().unwrap();
+        }
+
+        let output: Vec<u8> = buf.drain(..n_bytes).collect();
+        drop(buf);
+        *self.total_output.lock().unwrap() += n_bytes as u64;
+        output
+    }
+
     /// Return `n_bytes` of conditioned random output.
     pub fn get_random_bytes(&self, n_bytes: usize) -> Vec<u8> {
         // Auto-collect if buffer is low

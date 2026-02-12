@@ -8,8 +8,6 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-use sha2::{Digest, Sha256};
-
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 /// Path to the ioreg binary on macOS.
@@ -50,42 +48,82 @@ fn snapshot_ioreg() -> Option<HashMap<String, i64>> {
     let mut map = HashMap::new();
 
     for line in stdout.lines() {
-        // Look for patterns like:  "SomeKey" = 12345
-        // Trim leading whitespace, then parse the key/value.
         let trimmed = line.trim();
+        let trimmed = trimmed.trim_start_matches('|').trim_start_matches('+').trim();
 
-        // Must start with a quoted key name
-        if !trimmed.starts_with('"') {
-            continue;
-        }
-
-        // Find the closing quote for the key
-        let rest = &trimmed[1..];
-        let close_quote = match rest.find('"') {
-            Some(idx) => idx,
-            None => continue,
-        };
-
-        let key = &rest[..close_quote];
-        let after_key = rest[close_quote + 1..].trim();
-
-        // Must be followed by " = "
-        if !after_key.starts_with('=') {
-            continue;
-        }
-
-        let val_str = after_key[1..].trim();
-
-        // Try to parse as an integer (decimal)
-        if let Ok(v) = val_str.parse::<i64>() {
-            map.insert(key.to_string(), v);
-        }
+        // Extract all "key"=number patterns from the line (covers both
+        // top-level `"key" = 123` and nested dict `"key"=123` formats).
+        extract_quoted_key_numbers(trimmed, &mut map);
     }
 
     Some(map)
 }
 
+/// Scan a string for all `"key"=number` or `"key" = number` patterns and
+/// insert them into the map. This handles both top-level ioreg properties
+/// and values nested inside `{...}` dictionaries on the same line.
+fn extract_quoted_key_numbers(s: &str, map: &mut HashMap<String, i64>) {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Find next opening quote
+        if bytes[i] != b'"' {
+            i += 1;
+            continue;
+        }
+
+        // Extract key between quotes
+        let key_start = i + 1;
+        let mut key_end = key_start;
+        while key_end < len && bytes[key_end] != b'"' {
+            key_end += 1;
+        }
+        if key_end >= len {
+            break;
+        }
+
+        let key = &s[key_start..key_end];
+        let mut j = key_end + 1;
+
+        // Skip optional whitespace then expect '='
+        while j < len && bytes[j] == b' ' {
+            j += 1;
+        }
+        if j >= len || bytes[j] != b'=' {
+            i = key_end + 1;
+            continue;
+        }
+        j += 1; // skip '='
+
+        // Skip optional whitespace after '='
+        while j < len && bytes[j] == b' ' {
+            j += 1;
+        }
+
+        // Try to parse a decimal integer (possibly negative)
+        let num_start = j;
+        if j < len && bytes[j] == b'-' {
+            j += 1;
+        }
+        while j < len && bytes[j].is_ascii_digit() {
+            j += 1;
+        }
+
+        if j > num_start
+            && (j >= len || !bytes[j].is_ascii_alphanumeric())
+            && let Ok(v) = s[num_start..j].parse::<i64>()
+        {
+            map.insert(key.to_string(), v);
+        }
+
+        i = j.max(key_end + 1);
+    }
+}
+
 /// Extract LSBs from a slice of i64 deltas, packing 8 bits per byte.
+#[allow(dead_code)]
 fn extract_lsbs(deltas: &[i64]) -> Vec<u8> {
     let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
     for d in deltas {
@@ -161,35 +199,30 @@ impl EntropySource for IORegistryEntropySource {
             all_deltas.clone()
         };
 
-        // Extract LSBs.
-        let mut entropy = extract_lsbs(&xor_deltas);
+        // Extract raw bytes from all deltas (not just XOR'd)
+        let mut entropy = Vec::with_capacity(n_samples);
 
-        // If insufficient entropy, hash-extend with SHA-256.
-        if entropy.len() < n_samples {
-            let mut hasher = Sha256::new();
-            hasher.update(&entropy);
-
-            // Mix in the raw deltas as additional material.
-            for d in &all_deltas {
-                hasher.update(d.to_le_bytes());
+        // First: raw bytes from all non-zero deltas
+        for d in &all_deltas {
+            let bytes = d.to_le_bytes();
+            for &b in &bytes {
+                entropy.push(b);
             }
+            if entropy.len() >= n_samples {
+                break;
+            }
+        }
 
-            // Add a timestamp for extra uniqueness.
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default();
-            hasher.update(ts.as_nanos().to_le_bytes());
-
-            let seed: [u8; 32] = hasher.finalize().into();
-
-            // Repeatedly hash to extend the output.
-            let mut state = seed;
-            while entropy.len() < n_samples {
-                let mut h = Sha256::new();
-                h.update(state);
-                h.update((entropy.len() as u64).to_le_bytes());
-                state = h.finalize().into();
-                entropy.extend_from_slice(&state);
+        // Then: XOR'd delta bytes for more mixing
+        if entropy.len() < n_samples {
+            for d in &xor_deltas {
+                let bytes = d.to_le_bytes();
+                for &b in &bytes {
+                    entropy.push(b);
+                }
+                if entropy.len() >= n_samples {
+                    break;
+                }
             }
         }
 

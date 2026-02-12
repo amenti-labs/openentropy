@@ -19,6 +19,7 @@ use esoteric_core::pool::EntropyPool;
 /// Shared server state.
 struct AppState {
     pool: Mutex<EntropyPool>,
+    allow_raw: bool,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +27,8 @@ struct RandomParams {
     length: Option<usize>,
     #[serde(rename = "type")]
     data_type: Option<String>,
+    /// If true, return raw unconditioned entropy (no SHA-256/DRBG).
+    raw: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -35,6 +38,8 @@ struct RandomResponse {
     length: usize,
     data: serde_json::Value,
     success: bool,
+    /// Whether this output was conditioned (SHA-256) or raw.
+    conditioned: bool,
 }
 
 #[derive(Serialize)]
@@ -68,9 +73,14 @@ async fn handle_random(
 ) -> Json<RandomResponse> {
     let length = params.length.unwrap_or(1024).clamp(1, 65536);
     let data_type = params.data_type.unwrap_or_else(|| "hex16".to_string());
+    let use_raw = params.raw.unwrap_or(false) && state.allow_raw;
 
     let pool = state.pool.lock().await;
-    let raw = pool.get_random_bytes(length);
+    let raw = if use_raw {
+        pool.get_raw_bytes(length)
+    } else {
+        pool.get_random_bytes(length)
+    };
 
     let data = match data_type.as_str() {
         "hex16" => {
@@ -110,6 +120,7 @@ async fn handle_random(
         length: len,
         data,
         success: true,
+        conditioned: !use_raw,
     })
 }
 
@@ -169,9 +180,10 @@ async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_js
 }
 
 /// Build the axum router.
-fn build_router(pool: EntropyPool) -> Router {
+fn build_router(pool: EntropyPool, allow_raw: bool) -> Router {
     let state = Arc::new(AppState {
         pool: Mutex::new(pool),
+        allow_raw,
     });
 
     Router::new()
@@ -183,8 +195,8 @@ fn build_router(pool: EntropyPool) -> Router {
 }
 
 /// Run the HTTP entropy server.
-pub async fn run_server(pool: EntropyPool, host: &str, port: u16) {
-    let app = build_router(pool);
+pub async fn run_server(pool: EntropyPool, host: &str, port: u16, allow_raw: bool) {
+    let app = build_router(pool, allow_raw);
     let addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

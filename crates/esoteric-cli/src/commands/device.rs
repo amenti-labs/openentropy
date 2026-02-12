@@ -1,6 +1,6 @@
 use std::io::Write;
 
-pub fn run(path: &str, buffer_size: usize, source_filter: Option<&str>) {
+pub fn run(path: &str, buffer_size: usize, source_filter: Option<&str>, raw: bool) {
     let pool = super::make_pool(source_filter);
 
     // Create FIFO
@@ -34,7 +34,8 @@ pub fn run(path: &str, buffer_size: usize, source_filter: Option<&str>) {
         }
     }
 
-    println!("Feeding entropy to {path} (buffer={buffer_size}B)");
+    let mode = if raw { "RAW (unconditioned)" } else { "conditioned (SHA-256)" };
+    println!("Feeding {mode} entropy to {path} (buffer={buffer_size}B)");
     println!("Press Ctrl+C to stop.");
 
     // Cleanup on exit
@@ -45,7 +46,11 @@ pub fn run(path: &str, buffer_size: usize, source_filter: Option<&str>) {
         // open() blocks until a reader connects
         match std::fs::OpenOptions::new().write(true).open(path) {
             Ok(mut fifo) => loop {
-                let data = pool.get_random_bytes(buffer_size);
+                let data = if raw {
+                    pool.get_raw_bytes(buffer_size)
+                } else {
+                    pool.get_random_bytes(buffer_size)
+                };
                 if fifo.write_all(&data).is_err() {
                     break; // Reader disconnected
                 }

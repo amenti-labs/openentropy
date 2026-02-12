@@ -5,7 +5,6 @@
 use std::time::Instant;
 
 use rand::Rng;
-use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
@@ -44,35 +43,11 @@ fn mach_time() -> u64 {
 // Shared helper: extract entropy from timing deltas
 // ---------------------------------------------------------------------------
 
-/// SHA-256 condition raw bytes to improve entropy density.
-/// Uses chained hashing so cycling through raw data produces unique output.
-fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
-    let mut output = Vec::with_capacity(n_output);
-    let mut state = [0u8; 32];
-    let mut offset = 0;
-    let mut counter: u64 = 0;
-    while output.len() < n_output {
-        let end = (offset + 64).min(raw.len());
-        let chunk = &raw[offset..end];
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update(chunk);
-        h.update(counter.to_le_bytes());
-        state = h.finalize().into();
-        output.extend_from_slice(&state);
-        offset += 64;
-        counter += 1;
-        if offset >= raw.len() {
-            offset = 0;
-        }
-    }
-    output.truncate(n_output);
-    output
-}
-
 /// Takes a slice of raw timestamps, computes consecutive deltas, XORs
-/// adjacent deltas for whitening, extracts the lowest byte of each
-/// XOR'd value, then SHA-256 conditions the result.
+/// adjacent deltas, and extracts the lowest byte of each XOR'd value.
+///
+/// **Raw output characteristics:** LSBs of XOR'd timing deltas.
+/// Shannon entropy ~4-6 bits/byte depending on source. No conditioning applied.
 fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
     if timings.len() < 2 {
         return Vec::new();
@@ -83,17 +58,13 @@ fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
         .map(|w| w[1].wrapping_sub(w[0]))
         .collect();
 
-    // XOR consecutive deltas for whitening
+    // XOR consecutive deltas for mixing (not conditioning — just combines adjacent values)
     let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
 
-    // Extract LSBs (lowest byte) into raw buffer
-    let mut raw = Vec::with_capacity(xored.len());
-    for &x in &xored {
-        raw.push((x & 0xFF) as u8);
-    }
-
-    // SHA-256 condition for better entropy density
-    condition_bytes(&raw, n_samples)
+    // Extract LSBs (lowest byte) — raw, unconditioned
+    let mut raw: Vec<u8> = xored.iter().map(|&x| (x & 0xFF) as u8).collect();
+    raw.truncate(n_samples);
+    raw
 }
 
 // ---------------------------------------------------------------------------

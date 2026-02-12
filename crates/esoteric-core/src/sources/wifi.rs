@@ -9,8 +9,6 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sha2::{Digest, Sha256};
-
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 const MEASUREMENT_DELAY: Duration = Duration::from_millis(10);
@@ -108,32 +106,6 @@ fn run_command_timed(cmd: &str, args: &[&str], timeout: Duration) -> (Option<Str
             Err(_) => return (None, t0.elapsed().as_nanos() as u64),
         }
     }
-}
-
-/// SHA-256 condition raw bytes to improve entropy density.
-/// Uses chained hashing so cycling through raw data produces unique output.
-fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
-    let mut output = Vec::with_capacity(n_output);
-    let mut state = [0u8; 32];
-    let mut offset = 0;
-    let mut counter: u64 = 0;
-    while output.len() < n_output {
-        let end = (offset + 64).min(raw.len());
-        let chunk = &raw[offset..end];
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update(chunk);
-        h.update(counter.to_le_bytes());
-        state = h.finalize().into();
-        output.extend_from_slice(&state);
-        offset += 64;
-        counter += 1;
-        if offset >= raw.len() {
-            offset = 0;
-        }
-    }
-    output.truncate(n_output);
-    output
 }
 
 /// Discover the Wi-Fi hardware device name (e.g. "en0") by parsing
@@ -284,7 +256,6 @@ impl EntropySource for WiFiRSSISource {
         // Collect bursts of measurements. Always extract timing entropy
         // even if RSSI reading fails (timeout timing is still entropic).
         // Cap at 4 bursts since each measurement uses commands with timeouts.
-        // SHA-256 conditioning stretches the collected entropy.
         let max_bursts = 4;
         for _ in 0..max_bursts {
             measurements.clear();
@@ -326,8 +297,8 @@ impl EntropySource for WiFiRSSISource {
             }
         }
 
-        // SHA-256 condition the raw bytes for better entropy density.
-        condition_bytes(&raw, n_samples)
+        raw.truncate(n_samples);
+        raw
     }
 }
 

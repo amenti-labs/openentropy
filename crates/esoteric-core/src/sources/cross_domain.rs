@@ -6,7 +6,7 @@
 
 use std::io::Write;
 
-use sha2::{Digest, Sha256};
+
 use tempfile::NamedTempFile;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
@@ -38,6 +38,7 @@ fn mach_time() -> u64 {
 }
 
 /// Extract LSBs from u64 deltas, packing 8 bits per byte.
+#[allow(dead_code)]
 fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
     let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
     for d in deltas {
@@ -53,32 +54,6 @@ fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
         bytes.push(byte);
     }
     bytes
-}
-
-/// SHA-256 hash-extend: stretch a short entropy seed to `needed` bytes.
-fn hash_extend(seed_entropy: &[u8], raw_timings: &[u64], needed: usize) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(seed_entropy);
-    for t in raw_timings {
-        hasher.update(t.to_le_bytes());
-    }
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    hasher.update(ts.as_nanos().to_le_bytes());
-
-    let seed: [u8; 32] = hasher.finalize().into();
-    let mut entropy = seed_entropy.to_vec();
-    let mut state = seed;
-    while entropy.len() < needed {
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update((entropy.len() as u64).to_le_bytes());
-        state = h.finalize().into();
-        entropy.extend_from_slice(&state);
-    }
-    entropy.truncate(needed);
-    entropy
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +136,8 @@ impl EntropySource for CPUIOBeatSource {
         };
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&xor_deltas);
+        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
 
         entropy.truncate(n_samples);
         entropy
@@ -260,11 +232,8 @@ impl EntropySource for CPUMemoryBeatSource {
         };
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&xor_deltas);
+        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
 
         entropy.truncate(n_samples);
         entropy
@@ -358,11 +327,8 @@ impl EntropySource for MultiDomainBeatSource {
         };
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&xor_deltas);
+        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
 
         entropy.truncate(n_samples);
         entropy
@@ -386,7 +352,7 @@ mod tests {
         let src = CPUIOBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
+        assert!(!data.is_empty()); assert!(data.len() <= 64);
     }
 
     #[test]
@@ -402,7 +368,7 @@ mod tests {
         let src = CPUMemoryBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
+        assert!(!data.is_empty()); assert!(data.len() <= 64);
     }
 
     #[test]
@@ -418,7 +384,7 @@ mod tests {
         let src = MultiDomainBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
+        assert!(!data.is_empty()); assert!(data.len() <= 64);
     }
 
     #[test]

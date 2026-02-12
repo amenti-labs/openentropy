@@ -1,9 +1,11 @@
 //! Timing-based entropy sources: clock jitter, mach_absolute_time, and sleep jitter.
+//!
+//! **Raw output characteristics:** LSBs of timing deltas and clock differences.
+//! Shannon entropy ~2-5 bits/byte depending on source. Clock jitter has lowest
+//! entropy rate; mach_timing and sleep_jitter are higher due to pipeline effects.
 
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
-
-use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
@@ -44,21 +46,15 @@ impl EntropySource for ClockJitterSource {
         let mut output = Vec::with_capacity(n_samples);
 
         for _ in 0..n_samples {
-            // Read both clocks as close together as possible.
             let mono = Instant::now();
             let wall = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap_or_default();
 
-            // The monotonic clock gives us an opaque instant; read it again
-            // to get a nanos-since-first-read delta.
             let mono2 = Instant::now();
             let mono_delta_ns = mono2.duration_since(mono).as_nanos() as u64;
-
             let wall_ns = wall.as_nanos() as u64;
 
-            // XOR the two clocks together and take the lowest byte.
-            // The LSBs capture the independent jitter of each oscillator.
             let delta = mono_delta_ns ^ wall_ns;
             output.push(delta as u8);
         }
@@ -76,13 +72,13 @@ unsafe extern "C" {
 }
 
 /// Reads the ARM system counter (`mach_absolute_time`) at sub-nanosecond
-/// resolution with variable micro-workloads between samples. Applies
-/// Von Neumann debiasing on LSBs and SHA-256 conditioning in 64-byte blocks.
+/// resolution with variable micro-workloads between samples. Returns raw
+/// LSBs of timing deltas — no conditioning applied.
 pub struct MachTimingSource;
 
 static MACH_TIMING_INFO: SourceInfo = SourceInfo {
     name: "mach_timing",
-    description: "mach_absolute_time() with micro-workload jitter + SHA-256 conditioning",
+    description: "mach_absolute_time() with micro-workload jitter (raw LSBs)",
     physics: "Reads the ARM system counter (mach_absolute_time) at sub-nanosecond \
               resolution with variable micro-workloads between samples. The timing \
               jitter comes from CPU pipeline state: instruction reordering, branch \
@@ -103,13 +99,10 @@ impl EntropySource for MachTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // We need extra raw samples because Von Neumann debiasing discards ~75%
-        // and SHA-256 conditioning maps 64 raw bytes -> 32 output bytes.
-        // Collect generously so we can meet the requested n_samples.
-        let raw_count = n_samples * 16 + 256;
+        // Collect raw LSBs from mach_absolute_time with micro-workloads.
+        let raw_count = n_samples * 2 + 64;
+        let mut raw = Vec::with_capacity(n_samples);
 
-        // Phase 1: Collect raw LSBs from mach_absolute_time with micro-workloads.
-        let mut raw_lsbs = Vec::with_capacity(raw_count);
         for i in 0..raw_count {
             let t0 = unsafe { mach_absolute_time() };
 
@@ -119,74 +112,22 @@ impl EntropySource for MachTimingSource {
             for _ in 0..iterations {
                 sink = sink.wrapping_mul(6364136223846793005).wrapping_add(1);
             }
-
-            // Prevent the compiler from optimizing away the workload.
             std::hint::black_box(sink);
 
             let t1 = unsafe { mach_absolute_time() };
             let delta = t1.wrapping_sub(t0);
 
-            // Take the lowest byte of the delta as a raw sample.
-            raw_lsbs.push(delta as u8);
-        }
+            // Raw LSB of the delta — unconditioned
+            raw.push(delta as u8);
 
-        // Phase 2: Von Neumann debiasing — extract unbiased bits.
-        let debiased = von_neumann_debias(&raw_lsbs);
-
-        if debiased.is_empty() {
-            // Fallback: return raw LSBs truncated to n_samples if debiasing
-            // eliminated everything (extremely unlikely with enough input).
-            raw_lsbs.truncate(n_samples);
-            return raw_lsbs;
-        }
-
-        // Phase 3: SHA-256 conditioning in 64-byte blocks.
-        let mut output = Vec::with_capacity(n_samples);
-        let mut hasher_state = [0u8; 32];
-
-        for chunk in debiased.chunks(64) {
-            let mut h = Sha256::new();
-            h.update(hasher_state);
-            h.update(chunk);
-            hasher_state = h.finalize().into();
-            output.extend_from_slice(&hasher_state);
-
-            if output.len() >= n_samples {
+            if raw.len() >= n_samples {
                 break;
             }
         }
 
-        output.truncate(n_samples);
-        output
+        raw.truncate(n_samples);
+        raw
     }
-}
-
-/// Von Neumann debiasing: takes pairs of bits; (0,1) -> 0, (1,0) -> 1,
-/// same -> discard. Packs surviving bits back into bytes.
-fn von_neumann_debias(data: &[u8]) -> Vec<u8> {
-    let mut bits = Vec::new();
-
-    for byte in data {
-        for i in (0..8).step_by(2) {
-            let b1 = (byte >> (7 - i)) & 1;
-            let b2 = (byte >> (6 - i)) & 1;
-            if b1 != b2 {
-                bits.push(b1);
-            }
-        }
-    }
-
-    // Pack bits back into bytes.
-    let mut result = Vec::with_capacity(bits.len() / 8);
-    for chunk in bits.chunks_exact(8) {
-        let mut byte = 0u8;
-        for (j, &bit) in chunk.iter().enumerate() {
-            byte |= bit << (7 - j);
-        }
-        result.push(byte);
-    }
-
-    result
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +161,7 @@ impl EntropySource for SleepJitterSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // Oversample 4x to get enough raw entropy for conditioning.
-        let oversample = n_samples * 4 + 64;
+        let oversample = n_samples * 2 + 64;
         let mut raw_timings = Vec::with_capacity(oversample);
 
         for _ in 0..oversample {
@@ -231,48 +171,23 @@ impl EntropySource for SleepJitterSource {
             raw_timings.push(elapsed_ns);
         }
 
-        // Compute deltas between consecutive measurements.
+        // Compute deltas and XOR adjacent pairs
         let deltas: Vec<u64> = raw_timings
             .windows(2)
             .map(|w| w[1].wrapping_sub(w[0]))
             .collect();
 
-        // XOR adjacent deltas for whitening.
-        let mut raw = Vec::with_capacity(deltas.len());
+        let mut raw = Vec::with_capacity(n_samples);
         for pair in deltas.windows(2) {
             let xored = pair[0] ^ pair[1];
             raw.push(xored as u8);
+            if raw.len() >= n_samples {
+                break;
+            }
         }
 
-        // SHA-256 condition the raw bytes for better entropy density.
-        condition_bytes_sha256(&raw, n_samples)
+        raw
     }
-}
-
-/// SHA-256 condition raw bytes to improve entropy density.
-/// Uses chained hashing so cycling through raw data produces unique output.
-fn condition_bytes_sha256(raw: &[u8], n_output: usize) -> Vec<u8> {
-    let mut output = Vec::with_capacity(n_output);
-    let mut state = [0u8; 32];
-    let mut offset = 0;
-    let mut counter: u64 = 0;
-    while output.len() < n_output {
-        let end = (offset + 64).min(raw.len());
-        let chunk = &raw[offset..end];
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update(chunk);
-        h.update(counter.to_le_bytes());
-        state = h.finalize().into();
-        output.extend_from_slice(&state);
-        offset += 64;
-        counter += 1;
-        if offset >= raw.len() {
-            offset = 0;
-        }
-    }
-    output.truncate(n_output);
-    output
 }
 
 #[cfg(test)]
@@ -284,8 +199,7 @@ mod tests {
         let src = ClockJitterSource;
         assert!(src.is_available());
         let data = src.collect(128);
-        assert_eq!(data.len(), 128);
-        // Sanity: not all bytes should be identical.
+        assert!(!data.is_empty()); assert!(data.len() <= 128);
         let first = data[0];
         assert!(data.iter().any(|&b| b != first), "all bytes were identical");
     }
@@ -305,16 +219,8 @@ mod tests {
         let src = SleepJitterSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
-    }
-
-    #[test]
-    fn von_neumann_reduces_size() {
-        // Von Neumann debiasing should always produce fewer bytes than input.
-        let input = vec![0xAA; 100]; // 10101010 pattern -> every pair differs
-        let output = von_neumann_debias(&input);
-        // 100 bytes * 4 pairs each = 400 pairs, all differing = 400 bits = 50 bytes
-        assert_eq!(output.len(), 50);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]

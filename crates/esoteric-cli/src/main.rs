@@ -45,6 +45,10 @@ enum Commands {
         /// Total bytes (0 = infinite)
         #[arg(long, default_value = "0")]
         bytes: usize,
+
+        /// Output raw unconditioned entropy (no SHA-256, no whitening)
+        #[arg(long)]
+        unconditioned: bool,
     },
 
     /// Create a named pipe (FIFO) that continuously provides entropy
@@ -60,6 +64,10 @@ enum Commands {
         /// Comma-separated source name filter
         #[arg(long)]
         sources: Option<String>,
+
+        /// Output raw unconditioned entropy (no SHA-256, no whitening)
+        #[arg(long)]
+        unconditioned: bool,
     },
 
     /// Start an HTTP entropy server (ANU QRNG API compatible)
@@ -75,6 +83,10 @@ enum Commands {
         /// Comma-separated source name filter
         #[arg(long)]
         sources: Option<String>,
+
+        /// Allow raw=true parameter for unconditioned entropy
+        #[arg(long)]
+        allow_raw: bool,
     },
 
     /// Live interactive entropy dashboard
@@ -119,17 +131,20 @@ fn main() {
             rate,
             sources,
             bytes,
-        } => commands::stream::run(&format, rate, sources.as_deref(), bytes),
+            unconditioned,
+        } => commands::stream::run(&format, rate, sources.as_deref(), bytes, unconditioned),
         Commands::Device {
             path,
             buffer_size,
             sources,
-        } => commands::device::run(&path, buffer_size, sources.as_deref()),
+            unconditioned,
+        } => commands::device::run(&path, buffer_size, sources.as_deref(), unconditioned),
         Commands::Server {
             port,
             host,
             sources,
-        } => commands::server::run(&host, port, sources.as_deref()),
+            allow_raw,
+        } => commands::server::run(&host, port, sources.as_deref(), allow_raw),
         Commands::Monitor { refresh, sources } => {
             commands::monitor::run(refresh, sources.as_deref())
         }

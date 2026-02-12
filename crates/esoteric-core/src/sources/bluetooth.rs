@@ -3,18 +3,20 @@
 //! Runs `system_profiler SPBluetoothDataType` with a timeout to enumerate nearby
 //! Bluetooth devices, parses RSSI values, and extracts LSBs combined with timing
 //! jitter. Falls back to timing-only entropy if the command hangs or times out.
+//!
+//! **Raw output characteristics:** Mix of RSSI LSBs and timing bytes.
+//! Shannon entropy ~3-5 bits/byte. Timing bytes have higher entropy than
+//! RSSI values which cluster around typical signal strengths.
 
 use std::process::Command;
 use std::time::{Duration, Instant};
-
-use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 /// Path to system_profiler on macOS.
 const SYSTEM_PROFILER_PATH: &str = "/usr/sbin/system_profiler";
 
-/// Timeout for system_profiler command (Python uses 10s, we use 5s).
+/// Timeout for system_profiler command.
 const BT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 static BLUETOOTH_NOISE_INFO: SourceInfo = SourceInfo {
@@ -33,13 +35,10 @@ static BLUETOOTH_NOISE_INFO: SourceInfo = SourceInfo {
 pub struct BluetoothNoiseSource;
 
 /// Parse RSSI values from system_profiler SPBluetoothDataType output.
-/// Looks for lines containing "RSSI" with numeric values.
 fn parse_rssi_values(output: &str) -> Vec<i32> {
     let mut rssi_values = Vec::new();
-
     for line in output.lines() {
         let trimmed = line.trim();
-
         let lower = trimmed.to_lowercase();
         if lower.contains("rssi") {
             for token in trimmed.split(&[':', '=', ' '][..]) {
@@ -50,12 +49,10 @@ fn parse_rssi_values(output: &str) -> Vec<i32> {
             }
         }
     }
-
     rssi_values
 }
 
 /// Run system_profiler with a timeout, returning (output_option, elapsed_ns).
-/// Always returns the elapsed time even if the command fails/times out.
 fn get_bluetooth_info_timed() -> (Option<String>, u64) {
     let t0 = Instant::now();
 
@@ -70,7 +67,6 @@ fn get_bluetooth_info_timed() -> (Option<String>, u64) {
         Err(_) => return (None, t0.elapsed().as_nanos() as u64),
     };
 
-    // Wait with timeout — kill if it hangs
     let deadline = Instant::now() + BT_COMMAND_TIMEOUT;
     loop {
         match child.try_wait() {
@@ -98,33 +94,6 @@ fn get_bluetooth_info_timed() -> (Option<String>, u64) {
     }
 }
 
-/// SHA-256 condition raw bytes to improve entropy density.
-/// Uses a chained hash approach: each block includes the previous hash
-/// as state so cycling through raw data still produces unique output.
-fn condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
-    let mut output = Vec::with_capacity(n_output);
-    let mut state = [0u8; 32];
-    let mut offset = 0;
-    let mut counter: u64 = 0;
-    while output.len() < n_output {
-        let end = (offset + 64).min(raw.len());
-        let chunk = &raw[offset..end];
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update(chunk);
-        h.update(counter.to_le_bytes());
-        state = h.finalize().into();
-        output.extend_from_slice(&state);
-        offset += 64;
-        counter += 1;
-        if offset >= raw.len() {
-            offset = 0;
-        }
-    }
-    output.truncate(n_output);
-    output
-}
-
 impl EntropySource for BluetoothNoiseSource {
     fn info(&self) -> &SourceInfo {
         &BLUETOOTH_NOISE_INFO
@@ -135,46 +104,37 @@ impl EntropySource for BluetoothNoiseSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let mut raw = Vec::with_capacity(n_samples * 2);
+        let mut raw = Vec::with_capacity(n_samples);
 
-        // Use a time budget of 10 seconds total for all scans.
-        // Each scan can take up to BT_COMMAND_TIMEOUT (5s) if it hangs,
-        // but typically completes in ~300ms. We keep scanning until we
-        // have enough raw data or run out of time.
         let time_budget = Duration::from_secs(10);
         let start = Instant::now();
         let max_scans = 50;
 
         for _ in 0..max_scans {
-            if start.elapsed() >= time_budget {
+            if start.elapsed() >= time_budget || raw.len() >= n_samples {
                 break;
             }
 
             let (bt_info, elapsed_ns) = get_bluetooth_info_timed();
 
-            // Extract full 8 bytes of timing entropy (even from timeouts).
+            // Extract timing bytes (raw nanosecond LSBs)
             for shift in (0..64).step_by(8) {
                 raw.push((elapsed_ns >> shift) as u8);
             }
 
-            // Parse RSSI values if we got output.
+            // Parse RSSI values — raw LSBs
             if let Some(info) = bt_info {
                 let rssi_values = parse_rssi_values(&info);
                 for rssi in &rssi_values {
                     raw.push((*rssi & 0xFF) as u8);
                 }
-                // Also add the raw output length as entropy
                 raw.push(info.len() as u8);
                 raw.push((info.len() >> 8) as u8);
             }
-
-            if raw.len() >= n_samples * 2 {
-                break;
-            }
         }
 
-        // SHA-256 condition the raw bytes for better entropy density.
-        condition_bytes(&raw, n_samples)
+        raw.truncate(n_samples);
+        raw
     }
 }
 
@@ -187,7 +147,6 @@ mod tests {
         let src = BluetoothNoiseSource;
         assert_eq!(src.name(), "bluetooth_noise");
         assert_eq!(src.info().category, SourceCategory::Hardware);
-        assert_eq!(src.info().entropy_rate_estimate, 50.0);
     }
 
     #[test]

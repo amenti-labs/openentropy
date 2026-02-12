@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Rust 1.80+** (edition 2024)
+- **Rust 1.85+** (edition 2024)
 - **macOS** (primary platform; most entropy sources require Darwin APIs)
 - **Python 3.10+** (only needed for PyO3 bindings)
 - **maturin** (only needed for Python bindings: `pip install maturin`)

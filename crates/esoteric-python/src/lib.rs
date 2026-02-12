@@ -47,9 +47,18 @@ impl PyEntropyPool {
         }
     }
 
-    /// Return n_bytes of conditioned random output.
+    /// Return n_bytes of conditioned random output (SHA-256).
     fn get_random_bytes<'py>(&self, py: Python<'py>, n_bytes: usize) -> Bound<'py, PyBytes> {
         let data = self.inner.get_random_bytes(n_bytes);
+        PyBytes::new(py, &data)
+    }
+
+    /// Return n_bytes of raw, unconditioned entropy (XOR-combined only).
+    ///
+    /// No SHA-256, no DRBG, no whitening. Preserves the raw hardware noise
+    /// signal for researchers studying actual device entropy characteristics.
+    fn get_raw_bytes<'py>(&self, py: Python<'py>, n_bytes: usize) -> Bound<'py, PyBytes> {
+        let data = self.inner.get_raw_bytes(n_bytes);
         PyBytes::new(py, &data)
     }
 

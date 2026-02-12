@@ -7,11 +7,10 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sha2::{Digest, Sha256};
-
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 /// Extract LSBs from u64 deltas, packing 8 bits per byte.
+#[allow(dead_code)]
 fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
     let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
     for d in deltas {
@@ -27,32 +26,6 @@ fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
         bytes.push(byte);
     }
     bytes
-}
-
-/// SHA-256 hash-extend: stretch a short entropy seed to `needed` bytes.
-fn hash_extend(seed_entropy: &[u8], raw_timings: &[u64], needed: usize) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(seed_entropy);
-    for t in raw_timings {
-        hasher.update(t.to_le_bytes());
-    }
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    hasher.update(ts.as_nanos().to_le_bytes());
-
-    let seed: [u8; 32] = hasher.finalize().into();
-    let mut entropy = seed_entropy.to_vec();
-    let mut state = seed;
-    while entropy.len() < needed {
-        let mut h = Sha256::new();
-        h.update(state);
-        h.update((entropy.len() as u64).to_le_bytes());
-        state = h.finalize().into();
-        entropy.extend_from_slice(&state);
-    }
-    entropy.truncate(needed);
-    entropy
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +106,7 @@ impl EntropySource for DispatchQueueSource {
             .collect();
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&deltas);
-
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
-
+        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
         entropy.truncate(n_samples);
         entropy
     }
@@ -224,12 +192,7 @@ impl EntropySource for DyldTimingSource {
             .collect();
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&deltas);
-
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
-
+        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
         entropy.truncate(n_samples);
         entropy
     }
@@ -322,12 +285,7 @@ impl EntropySource for VMPageTimingSource {
         };
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&xor_deltas);
-
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
-
+        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
         entropy.truncate(n_samples);
         entropy
     }
@@ -428,12 +386,7 @@ impl EntropySource for SpotlightTimingSource {
             .collect();
 
         // Extract LSBs.
-        let mut entropy = extract_lsbs_u64(&deltas);
-
-        if entropy.len() < n_samples {
-            entropy = hash_extend(&entropy, &timings, n_samples);
-        }
-
+        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
         entropy.truncate(n_samples);
         entropy
     }
@@ -456,7 +409,7 @@ mod tests {
         let src = DispatchQueueSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
+        assert!(!data.is_empty()); assert!(data.len() <= 64);
     }
 
     #[test]
@@ -481,7 +434,7 @@ mod tests {
         let src = VMPageTimingSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert_eq!(data.len(), 64);
+        assert!(!data.is_empty()); assert!(data.len() <= 64);
     }
 
     #[test]
@@ -498,7 +451,8 @@ mod tests {
         let src = SpotlightTimingSource;
         if src.is_available() {
             let data = src.collect(32);
-            assert_eq!(data.len(), 32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
         }
     }
 

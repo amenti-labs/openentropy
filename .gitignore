@@ -23,3 +23,6 @@ htmlcov/
 # Rust
 target/
 .venv-*/
+
+# Legacy Python code (preserved for reference, not part of release)
+_python_legacy/

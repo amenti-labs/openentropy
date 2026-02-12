@@ -61,7 +61,10 @@ fn pool_output_not_constant() {
     let a = pool.get_random_bytes(256);
     let b = pool.get_random_bytes(256);
     // Two consecutive calls should produce different output.
-    assert_ne!(a, b, "Two consecutive get_random_bytes calls returned identical data");
+    assert_ne!(
+        a, b,
+        "Two consecutive get_random_bytes calls returned identical data"
+    );
 }
 
 #[test]

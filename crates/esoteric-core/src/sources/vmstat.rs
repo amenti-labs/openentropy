@@ -6,8 +6,6 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-use sha2::{Digest, Sha256};
-
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
 /// Delay between consecutive vm_stat snapshots.
@@ -104,24 +102,6 @@ fn snapshot_vmstat(path: &str) -> Option<HashMap<String, i64>> {
     Some(map)
 }
 
-/// Extract LSBs from deltas, packing 8 bits per byte.
-fn extract_lsbs(deltas: &[i64]) -> Vec<u8> {
-    let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
-    for d in deltas {
-        bits.push((d & 1) as u8);
-    }
-
-    let mut bytes = Vec::with_capacity(bits.len() / 8 + 1);
-    for chunk in bits.chunks(8) {
-        let mut byte = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            byte |= bit << (7 - i);
-        }
-        bytes.push(byte);
-    }
-    bytes
-}
-
 impl EntropySource for VmstatSource {
     fn info(&self) -> &SourceInfo {
         &self.info
@@ -174,35 +154,26 @@ impl EntropySource for VmstatSource {
             all_deltas.clone()
         };
 
-        // Extract LSBs
-        let mut entropy = extract_lsbs(&xor_deltas);
-
-        // Hash-extend if we don't have enough
-        if entropy.len() < n_samples {
-            let mut hasher = Sha256::new();
-            hasher.update(&entropy);
-
-            // Mix in raw deltas
-            for d in &all_deltas {
-                hasher.update(d.to_le_bytes());
+        // Extract raw bytes from all deltas
+        let mut entropy = Vec::with_capacity(n_samples);
+        for d in &all_deltas {
+            let bytes = d.to_le_bytes();
+            for &b in &bytes {
+                entropy.push(b);
             }
-
-            // Timestamp
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default();
-            hasher.update(ts.as_nanos().to_le_bytes());
-
-            let seed: [u8; 32] = hasher.finalize().into();
-
-            // Extend via repeated hashing
-            let mut state = seed;
-            while entropy.len() < n_samples {
-                let mut h = Sha256::new();
-                h.update(state);
-                h.update((entropy.len() as u64).to_le_bytes());
-                state = h.finalize().into();
-                entropy.extend_from_slice(&state);
+            if entropy.len() >= n_samples {
+                break;
+            }
+        }
+        if entropy.len() < n_samples {
+            for d in &xor_deltas {
+                let bytes = d.to_le_bytes();
+                for &b in &bytes {
+                    entropy.push(b);
+                }
+                if entropy.len() >= n_samples {
+                    break;
+                }
             }
         }
 

@@ -1,10 +1,12 @@
-//! ProcessSource — Snapshots the process table via `ps`, hashes the output
-//! with SHA-256, and combines it with getpid() timing jitter for extra entropy.
+//! ProcessSource — Snapshots the process table via `ps` and combines it with
+//! getpid() timing jitter for entropy.
+//!
+//! **Raw output characteristics:** Mix of timing LSBs and process table byte
+//! deltas. Shannon entropy ~3-5 bits/byte. The timing jitter component has
+//! higher entropy density than the process table bytes.
 
 use std::process::Command;
 use std::time::Instant;
-
-use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
@@ -20,7 +22,7 @@ impl ProcessSource {
         Self {
             info: SourceInfo {
                 name: "process_table",
-                description: "Snapshots the process table (PIDs, CPU, memory) and hashes it with SHA-256",
+                description: "Process table snapshots combined with getpid() timing jitter",
                 physics: "Snapshots the process table (PIDs, CPU usage, memory) and extracts \
                     entropy from the constantly-changing state. New PIDs are allocated \
                     semi-randomly, CPU percentages fluctuate with scheduling decisions, and \
@@ -40,17 +42,13 @@ impl Default for ProcessSource {
 }
 
 /// Collect timing jitter from repeated getpid() syscalls.
-///
-/// Measures the nanosecond-resolution duration of each getpid() call. The LSBs
-/// of these timings carry entropy from cache state, TLB pressure, interrupt
-/// timing, and scheduler preemption.
-fn collect_getpid_jitter() -> Vec<u8> {
-    let mut timings: Vec<u64> = Vec::with_capacity(JITTER_ROUNDS);
+/// Returns raw LSBs of nanosecond timing deltas.
+fn collect_getpid_jitter(n_bytes: usize) -> Vec<u8> {
+    let rounds = JITTER_ROUNDS.max(n_bytes * 2);
+    let mut timings: Vec<u64> = Vec::with_capacity(rounds);
 
-    for _ in 0..JITTER_ROUNDS {
+    for _ in 0..rounds {
         let start = Instant::now();
-        // SAFETY: getpid() is always safe to call; it has no preconditions
-        // and simply returns the process ID.
         unsafe {
             libc::getpid();
         }
@@ -58,13 +56,16 @@ fn collect_getpid_jitter() -> Vec<u8> {
         timings.push(elapsed);
     }
 
-    // Hash all the timings together
-    let mut hasher = Sha256::new();
-    for t in &timings {
-        hasher.update(t.to_le_bytes());
+    // Extract LSBs of timing deltas
+    let mut raw = Vec::with_capacity(n_bytes);
+    for pair in timings.windows(2) {
+        let delta = pair[1].wrapping_sub(pair[0]);
+        raw.push(delta as u8);
+        if raw.len() >= n_bytes {
+            break;
+        }
     }
-    let digest: [u8; 32] = hasher.finalize().into();
-    digest.to_vec()
+    raw
 }
 
 /// Run `ps -eo pid,pcpu,rss` and return its raw stdout bytes.
@@ -87,68 +88,29 @@ impl EntropySource for ProcessSource {
     }
 
     fn is_available(&self) -> bool {
-        // `ps` is available on virtually all Unix-like systems.
-        // Attempt a quick check.
         Command::new("ps").arg("--version").output().is_ok() || Command::new("ps").output().is_ok()
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // 1. Hash the process table snapshot
-        let ps_hash = match snapshot_process_table() {
-            Some(stdout) => {
-                let mut h = Sha256::new();
-                h.update(&stdout);
+        let mut entropy = Vec::with_capacity(n_samples);
 
-                // Add a timestamp so identical process tables still yield unique output
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default();
-                h.update(ts.as_nanos().to_le_bytes());
-
-                let digest: [u8; 32] = h.finalize().into();
-                digest
-            }
-            None => [0u8; 32],
-        };
-
-        // 2. Collect getpid() timing jitter
-        let jitter = collect_getpid_jitter();
-
-        // 3. Combine the two by XOR-ing and then hashing together
-        let mut combined = Sha256::new();
-        combined.update(ps_hash);
-        combined.update(&jitter);
-
-        // Add a second timestamp to capture the time delta from the collection itself
-        let ts2 = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default();
-        combined.update(ts2.as_nanos().to_le_bytes());
-
-        let seed: [u8; 32] = combined.finalize().into();
-
-        // 4. Extend output if more than 32 bytes are needed
-        let mut entropy = seed.to_vec();
-
-        if entropy.len() < n_samples {
-            let mut state = seed;
-            while entropy.len() < n_samples {
-                let mut h = Sha256::new();
-                h.update(state);
-                h.update((entropy.len() as u64).to_le_bytes());
-
-                // Take another process table snapshot for fresh material
-                if let Some(stdout) = snapshot_process_table() {
-                    h.update(&stdout);
+        // 1. Extract raw bytes from process table snapshot
+        if let Some(stdout) = snapshot_process_table() {
+            // XOR consecutive byte pairs for mixing
+            for pair in stdout.chunks(2) {
+                if pair.len() == 2 {
+                    entropy.push(pair[0] ^ pair[1]);
                 }
-
-                // And more jitter
-                let jitter = collect_getpid_jitter();
-                h.update(&jitter);
-
-                state = h.finalize().into();
-                entropy.extend_from_slice(&state);
+                if entropy.len() >= n_samples {
+                    break;
+                }
             }
+        }
+
+        // 2. Fill remaining with getpid() timing jitter
+        if entropy.len() < n_samples {
+            let jitter = collect_getpid_jitter(n_samples - entropy.len());
+            entropy.extend_from_slice(&jitter);
         }
 
         entropy.truncate(n_samples);
