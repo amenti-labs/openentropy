@@ -109,32 +109,66 @@ def stream(n_bytes: int) -> None:
 
 
 @main.command()
-def report() -> None:
-    """Full characterisation report (Markdown)."""
-    from esoteric_entropy.platform import detect_available_sources, platform_info
-    from esoteric_entropy.stats import full_report as stats_report
-
-    info = platform_info()
-    click.echo("# Esoteric Entropy Report\n")
-    click.echo(f"**Platform:** {info['system']} {info['machine']}")
-    click.echo(f"**Python:** {info['python']}\n")
+@click.option("--samples", default=10000, help="Number of bytes to collect per source.")
+@click.option("--source", "source_name", default=None, help="Test a single source.")
+@click.option("--output", "output_path", default=None, help="Output path for report.")
+def report(samples: int, source_name: str | None, output_path: str | None) -> None:
+    """Full NIST-inspired randomness test battery with Markdown report."""
+    from datetime import datetime
+    from esoteric_entropy.platform import detect_available_sources
+    from esoteric_entropy.test_suite import run_all_tests, calculate_quality_score
+    from esoteric_entropy.report import generate_full_report
 
     sources = detect_available_sources()
-    click.echo(f"## Sources ({len(sources)} available)\n")
-    click.echo("| Source | Grade | Shannon | Min-Ent | Compress | Samples |")
-    click.echo("|--------|-------|---------|---------|----------|---------|")
+    if source_name:
+        sources = [s for s in sources if source_name.lower() in s.name.lower()]
+        if not sources:
+            click.echo(f"Source '{source_name}' not found.")
+            sys.exit(1)
 
+    click.echo(f"🔬 Running full test battery on {len(sources)} source(s), {samples:,} samples each...\n")
+
+    source_results = {}
     for src in sources:
         try:
-            data = src.collect(2000)
-            r = stats_report(data, src.name)
-            click.echo(
-                f"| {src.name} | {r['grade']} | {r['shannon_entropy']:.3f} "
-                f"| {r['min_entropy']:.3f} | {r['compression_ratio']:.3f} "
-                f"| {r['samples']:,} |"
-            )
+            click.echo(f"  Collecting from {src.name}...", nl=False)
+            t0 = time.monotonic()
+            data = src.collect(samples)
+            click.echo(f" {len(data):,} bytes", nl=False)
+            results = run_all_tests(data)
+            elapsed = time.monotonic() - t0
+            score = calculate_quality_score(results)
+            passed = sum(1 for r in results if r.passed)
+            click.echo(f" → {score:.0f}/100 ({passed}/{len(results)} passed) [{elapsed:.1f}s]")
+            source_results[src.name] = (data, results)
         except Exception as e:
-            click.echo(f"| {src.name} | ERR | - | - | - | {e} |")
+            click.echo(f" ✗ error: {e}")
+
+    if not source_results:
+        click.echo("No sources produced data.")
+        sys.exit(1)
+
+    if output_path is None:
+        from pathlib import Path
+        docs = Path(__file__).parent.parent / "docs" / "findings"
+        output_path = str(docs / f"randomness_report_{datetime.now():%Y-%m-%d}.md")
+
+    report_text = generate_full_report(source_results, output_path)
+    click.echo(f"\n📄 Report saved to: {output_path}")
+
+    # Print summary
+    click.echo(f"\n{'='*60}")
+    click.echo(f"{'Source':<25} {'Score':>6} {'Grade':>6} {'Pass':>8}")
+    click.echo(f"{'-'*60}")
+    for name, (data, results) in sorted(
+        source_results.items(),
+        key=lambda x: calculate_quality_score(x[1][1]),
+        reverse=True,
+    ):
+        score = calculate_quality_score(results)
+        grade = "A" if score >= 80 else "B" if score >= 60 else "C" if score >= 40 else "D" if score >= 20 else "F"
+        passed = sum(1 for r in results if r.passed)
+        click.echo(f"  {name:<23} {score:>5.1f} {grade:>6} {passed:>4}/{len(results)}")
 
 
 @main.command()
