@@ -2,8 +2,8 @@
 //!
 //! Design: Collection runs on a background thread. The UI thread never blocks
 //! on entropy gathering — it only reads the latest snapshot from shared state.
-//! Sources start disabled; the user enables what they want to watch.
 
+use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use std::thread;
@@ -18,10 +18,28 @@ use ratatui::prelude::*;
 
 use esoteric_core::pool::{EntropyPool, HealthReport};
 
-/// Per-source enable/disable state (survives across ticks).
 pub struct SourceToggle {
     name: String,
     enabled: bool,
+    category: String,
+    speed_tier: SpeedTier,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum SpeedTier {
+    Fast,   // <500ms
+    Medium, // 500ms-5s
+    Slow,   // >5s
+}
+
+impl SpeedTier {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SpeedTier::Fast => "⚡",
+            SpeedTier::Medium => "🔶",
+            SpeedTier::Slow => "🐢",
+        }
+    }
 }
 
 /// Shared state between UI thread and background collector.
@@ -29,7 +47,8 @@ struct SharedState {
     health: Option<HealthReport>,
     rng_output: String,
     collecting: bool,
-    entropy_history: Vec<f64>,
+    /// Per-source entropy history keyed by source name.
+    source_history: HashMap<String, Vec<f64>>,
     total_bytes: u64,
     last_collection_ms: u64,
 }
@@ -38,21 +57,11 @@ pub struct App {
     pool: Arc<EntropyPool>,
     refresh_rate: Duration,
     selected: usize,
-    show_info: bool,
     running: bool,
-    toggles: Vec<SourceToggle>,
+    pub toggles: Vec<SourceToggle>,
     shared: Arc<Mutex<SharedState>>,
     collector_running: Arc<AtomicBool>,
-    mode: ViewMode,
-    stream_buffer: Vec<String>,   // rolling hex lines for stream view
-    #[allow(dead_code)]
-    stream_bytes_total: u64,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum ViewMode {
-    Dashboard,  // source table + chart (default)
-    Stream,     // live hex stream of RNG output
+    stream_buffer: Vec<String>,
 }
 
 impl App {
@@ -60,10 +69,14 @@ impl App {
         let infos = pool.source_infos();
         let toggles: Vec<SourceToggle> = infos
             .iter()
-            .map(|info| SourceToggle {
-                name: info.name.clone(),
-                // Start with only fast sources enabled (<1s typical collection)
-                enabled: is_fast_source(&info.name),
+            .map(|info| {
+                let speed = classify_speed(&info.name);
+                SourceToggle {
+                    name: info.name.clone(),
+                    enabled: speed != SpeedTier::Slow, // fast + medium on by default
+                    category: info.category.clone(),
+                    speed_tier: speed,
+                }
             })
             .collect();
 
@@ -71,21 +84,18 @@ impl App {
             pool: Arc::new(pool),
             refresh_rate: Duration::from_secs_f64(refresh_secs),
             selected: 0,
-            show_info: false,
             running: true,
             toggles,
             shared: Arc::new(Mutex::new(SharedState {
                 health: None,
                 rng_output: String::new(),
                 collecting: false,
-                entropy_history: Vec::new(),
+                source_history: HashMap::new(),
                 total_bytes: 0,
                 last_collection_ms: 0,
             })),
             collector_running: Arc::new(AtomicBool::new(false)),
-            mode: ViewMode::Dashboard,
             stream_buffer: Vec::new(),
-            stream_bytes_total: 0,
         }
     }
 
@@ -96,15 +106,12 @@ impl App {
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        // Kick off first collection
         self.start_background_collect();
-
         let mut last_tick = Instant::now();
 
         while self.running {
             terminal.draw(|f| super::ui::draw(f, self))?;
 
-            // Poll for input with short timeout so UI stays responsive
             let timeout = Duration::from_millis(50);
             if event::poll(timeout)?
                 && let Event::Key(key) = event::read()?
@@ -138,39 +145,39 @@ impl App {
                 }
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
-                // Toggle selected source
                 if self.selected < self.toggles.len() {
                     self.toggles[self.selected].enabled = !self.toggles[self.selected].enabled;
                 }
             }
-            KeyCode::Char('i') => self.show_info = !self.show_info,
             KeyCode::Char('a') => {
-                // Enable all
                 for t in &mut self.toggles {
                     t.enabled = true;
                 }
             }
             KeyCode::Char('n') => {
-                // Disable all
                 for t in &mut self.toggles {
                     t.enabled = false;
                 }
             }
-            KeyCode::Char('f') => {
-                // Enable only fast sources
+            KeyCode::Char('1') => {
+                // Only fast
                 for t in &mut self.toggles {
-                    t.enabled = is_fast_source(&t.name);
+                    t.enabled = t.speed_tier == SpeedTier::Fast;
                 }
             }
-            KeyCode::Char('s') => {
-                // Toggle stream view
-                self.mode = match self.mode {
-                    ViewMode::Dashboard => ViewMode::Stream,
-                    ViewMode::Stream => ViewMode::Dashboard,
-                };
+            KeyCode::Char('2') => {
+                // Fast + medium
+                for t in &mut self.toggles {
+                    t.enabled = t.speed_tier != SpeedTier::Slow;
+                }
+            }
+            KeyCode::Char('3') => {
+                // All
+                for t in &mut self.toggles {
+                    t.enabled = true;
+                }
             }
             KeyCode::Char('r') => {
-                // Force refresh
                 self.start_background_collect();
             }
             _ => {}
@@ -178,19 +185,17 @@ impl App {
     }
 
     fn tick(&mut self) {
-        // Update stream buffer from shared state
+        // Update stream buffer
         {
             let shared = self.shared.lock().unwrap();
-            if !shared.rng_output.is_empty() {
+            if !shared.rng_output.is_empty() && shared.rng_output != "(no sources enabled)" {
                 self.stream_buffer.push(shared.rng_output.clone());
-                // Keep last 100 lines
-                if self.stream_buffer.len() > 100 {
+                if self.stream_buffer.len() > 200 {
                     self.stream_buffer.remove(0);
                 }
             }
         }
 
-        // Start a new background collection if the previous one finished
         if !self.collector_running.load(Ordering::Relaxed) {
             self.start_background_collect();
         }
@@ -198,14 +203,13 @@ impl App {
 
     fn start_background_collect(&self) {
         if self.collector_running.load(Ordering::Relaxed) {
-            return; // already collecting
+            return;
         }
 
         let pool = Arc::clone(&self.pool);
         let shared = Arc::clone(&self.shared);
         let flag = Arc::clone(&self.collector_running);
 
-        // Build list of enabled source names
         let enabled: Vec<String> = self
             .toggles
             .iter()
@@ -214,7 +218,6 @@ impl App {
             .collect();
 
         if enabled.is_empty() {
-            // Nothing to collect — just generate from existing buffer
             let mut s = shared.lock().unwrap();
             s.collecting = false;
             s.rng_output = "(no sources enabled)".to_string();
@@ -225,17 +228,13 @@ impl App {
 
         thread::spawn(move || {
             {
-                let mut s = shared.lock().unwrap();
-                s.collecting = true;
+                shared.lock().unwrap().collecting = true;
             }
 
             let t0 = Instant::now();
-
-            // Collect only from enabled sources
             pool.collect_enabled(&enabled);
             let bytes = pool.get_random_bytes(32);
             let health = pool.health_report();
-
             let elapsed_ms = t0.elapsed().as_millis() as u64;
 
             let hex: String = bytes
@@ -251,13 +250,12 @@ impl App {
                 s.rng_output = hex;
                 s.collecting = false;
 
-                // Track entropy history
-                if !health.sources.is_empty() {
-                    let avg = health.sources.iter().map(|s| s.entropy).sum::<f64>()
-                        / health.sources.len() as f64;
-                    s.entropy_history.push(avg);
-                    if s.entropy_history.len() > 120 {
-                        s.entropy_history.remove(0);
+                // Track per-source entropy history
+                for src in &health.sources {
+                    let hist = s.source_history.entry(src.name.clone()).or_default();
+                    hist.push(src.entropy);
+                    if hist.len() > 120 {
+                        hist.remove(0);
                     }
                 }
 
@@ -268,7 +266,7 @@ impl App {
         });
     }
 
-    // --- Public accessors for UI rendering ---
+    // --- Public accessors ---
 
     pub fn health(&self) -> Option<HealthReport> {
         self.shared.lock().unwrap().health.clone()
@@ -278,12 +276,20 @@ impl App {
         self.selected
     }
 
-    pub fn show_info(&self) -> bool {
-        self.show_info
+    pub fn selected_name(&self) -> Option<&str> {
+        self.toggles.get(self.selected).map(|t| t.name.as_str())
     }
 
-    pub fn entropy_history(&self) -> Vec<f64> {
-        self.shared.lock().unwrap().entropy_history.clone()
+    pub fn selected_history(&self) -> Vec<f64> {
+        if let Some(name) = self.selected_name() {
+            self.shared.lock().unwrap()
+                .source_history
+                .get(name)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn rng_output(&self) -> String {
@@ -292,10 +298,6 @@ impl App {
 
     pub fn source_infos(&self) -> Vec<esoteric_core::pool::SourceInfoSnapshot> {
         self.pool.source_infos()
-    }
-
-    pub fn toggles(&self) -> &[SourceToggle] {
-        &self.toggles
     }
 
     pub fn is_collecting(&self) -> bool {
@@ -310,45 +312,32 @@ impl App {
         self.shared.lock().unwrap().last_collection_ms
     }
 
-    pub fn mode(&self) -> ViewMode {
-        self.mode
-    }
-
     pub fn stream_buffer(&self) -> &[String] {
         &self.stream_buffer
     }
 }
 
 impl SourceToggle {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
+    pub fn name(&self) -> &str { &self.name }
+    pub fn enabled(&self) -> bool { self.enabled }
+    pub fn category(&self) -> &str { &self.category }
+    pub fn speed_tier(&self) -> SpeedTier { self.speed_tier }
 }
 
-/// Sources that typically collect in <500ms.
-fn is_fast_source(name: &str) -> bool {
-    matches!(
-        name,
-        "clock_jitter"
-            | "mach_timing"
-            | "sleep_jitter"
-            | "sysctl_deltas"
-            | "vmstat_deltas"
-            | "disk_io"
-            | "memory_timing"
-            | "dram_row_buffer"
-            | "cache_contention"
-            | "page_fault_timing"
-            | "speculative_execution"
-            | "cpu_io_beat"
-            | "cpu_memory_beat"
-            | "multi_domain_beat"
-            | "hash_timing"
-            | "dispatch_queue"
-            | "vm_page_timing"
-            | "compression_timing"
-    )
+fn classify_speed(name: &str) -> SpeedTier {
+    match name {
+        // Fast: <500ms
+        "clock_jitter" | "mach_timing" | "sleep_jitter"
+        | "disk_io" | "memory_timing"
+        | "dram_row_buffer" | "cache_contention" | "page_fault_timing" | "speculative_execution"
+        | "cpu_io_beat" | "cpu_memory_beat" | "multi_domain_beat"
+        | "hash_timing" | "dispatch_queue" | "vm_page_timing" => SpeedTier::Fast,
+
+        // Medium: 500ms-5s
+        "sysctl_deltas" | "vmstat_deltas" | "compression_timing"
+        | "sensor_noise" | "dyld_timing" | "process_table" | "ioregistry" => SpeedTier::Medium,
+
+        // Slow: >5s
+        _ => SpeedTier::Slow,
+    }
 }

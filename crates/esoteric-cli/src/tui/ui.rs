@@ -1,4 +1,19 @@
 //! TUI rendering.
+//!
+//! Layout:
+//! ┌─────────────────────────────────────────────┐
+//! │              🔬 Esoteric Entropy             │
+//! ├──────────────────────┬──────────────────────┤
+//! │   Source Table       │  Selected Source Info │
+//! │   (scrollable)       │  + Physics           │
+//! │                      ├──────────────────────┤
+//! │                      │  Entropy History      │
+//! │                      │  (selected source)    │
+//! ├──────────────────────┴──────────────────────┤
+//! │  Live RNG Output                            │
+//! ├─────────────────────────────────────────────┤
+//! │  keybinds                                   │
+//! └─────────────────────────────────────────────┘
 
 use ratatui::{prelude::*, widgets::*};
 
@@ -8,56 +23,62 @@ pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Title bar
-            Constraint::Min(10),  // Main content
-            Constraint::Length(5), // RNG output
+            Constraint::Length(3),  // Title
+            Constraint::Min(12),   // Main (table + info + chart)
+            Constraint::Length(3), // RNG output
             Constraint::Length(1), // Status bar
         ])
         .split(f.area());
 
-    draw_title(f, chunks[0]);
-
-    match app.mode() {
-        super::app::ViewMode::Dashboard => draw_dashboard(f, chunks[1], app),
-        super::app::ViewMode::Stream => draw_stream(f, chunks[1], app),
-    }
-
+    draw_title(f, chunks[0], app);
+    draw_main(f, chunks[1], app);
     draw_rng_output(f, chunks[2], app);
-    draw_status_bar(f, chunks[3], app);
+    draw_status_bar(f, chunks[3]);
 }
 
-fn draw_title(f: &mut Frame, area: Rect) {
-    let title = Block::default()
+fn draw_title(f: &mut Frame, area: Rect, app: &App) {
+    let enabled = app.toggles.iter().filter(|t| t.enabled()).count();
+    let total = app.toggles.len();
+    let ms = app.last_collection_ms();
+    let bytes = app.total_bytes();
+    let spinner = if app.is_collecting() { " ⟳" } else { "" };
+
+    let title_text = format!(
+        " 🔬 Esoteric Entropy   {enabled}/{total} sources   {bytes} bytes   {ms}ms/cycle{spinner} "
+    );
+
+    let block = Block::default()
         .borders(Borders::ALL)
-        .title(" 🔬 Esoteric Entropy Monitor ")
+        .title(title_text)
         .title_alignment(Alignment::Center)
         .border_style(Style::default().fg(Color::Cyan));
-    f.render_widget(title, area);
+    f.render_widget(block, area);
 }
 
-fn draw_dashboard(f: &mut Frame, area: Rect, app: &App) {
-    if app.show_info() {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-            .split(area);
-        draw_source_table(f, chunks[0], app);
-        draw_info_panel(f, chunks[1], app);
-    } else {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
-            .split(area);
-        draw_source_table(f, chunks[0], app);
-        draw_entropy_chart(f, chunks[1], app);
-    }
+fn draw_main(f: &mut Frame, area: Rect, app: &App) {
+    // Left: source table, Right: info + chart stacked
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    draw_source_table(f, cols[0], app);
+
+    // Right side: info panel on top, chart on bottom
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(cols[1]);
+
+    draw_info_panel(f, right[0], app);
+    draw_entropy_chart(f, right[1], app);
 }
 
 fn draw_source_table(f: &mut Frame, area: Rect, app: &App) {
     let health = app.health();
-    let toggles = app.toggles();
+    let toggles = &app.toggles;
 
-    let header = Row::new(vec!["", "Source", "On", "Bytes", "H", "Time", "Fail"])
+    let header = Row::new(vec!["", "Source", "Cat", "⏱", "●", "H", "Bytes", "Time"])
         .style(Style::default().bold())
         .bottom_margin(1);
 
@@ -67,73 +88,82 @@ fn draw_source_table(f: &mut Frame, area: Rect, app: &App) {
         .map(|(i, toggle)| {
             let is_selected = i == app.selected();
 
-            // Find matching source in health report
             let health_info = health.as_ref().and_then(|h| {
                 h.sources.iter().find(|s| s.name == toggle.name())
             });
 
-            let enabled_marker = if toggle.enabled() { "●" } else { "○" };
-            let pointer = if is_selected { "▶" } else { " " };
+            let pointer = if is_selected { "▸" } else { " " };
+            let enabled = if toggle.enabled() { "●" } else { "○" };
+            let speed = toggle.speed_tier().label();
 
-            let (bytes, entropy, time, failures, healthy) = match health_info {
+            // Short category label
+            let cat = match toggle.category() {
+                "Timing" => "TMG",
+                "System" => "SYS",
+                "Network" => "NET",
+                "Hardware" => "HW",
+                "Silicon" => "SI",
+                "CrossDomain" => "XD",
+                "Novel" => "NOV",
+                _ => "?",
+            };
+
+            let (entropy, bytes, time) = match health_info {
                 Some(s) => (
+                    format!("{:.1}", s.entropy),
                     format!("{}", s.bytes),
-                    format!("{:.2}", s.entropy),
-                    format!("{:.3}s", s.time),
-                    format!("{}", s.failures),
-                    s.healthy,
+                    format!("{:.2}s", s.time),
                 ),
-                None => (
-                    "—".into(),
-                    "—".into(),
-                    "—".into(),
-                    "—".into(),
-                    false,
-                ),
+                None if toggle.enabled() => ("...".into(), "...".into(), "...".into()),
+                None => ("—".into(), "—".into(), "—".into()),
             };
 
             let style = if is_selected {
                 Style::default().bg(Color::DarkGray).fg(Color::White)
             } else if !toggle.enabled() {
                 Style::default().fg(Color::DarkGray)
-            } else if healthy {
-                Style::default().fg(Color::Green)
             } else {
-                Style::default().fg(Color::Yellow)
+                match health_info {
+                    Some(s) if s.entropy >= 7.5 => Style::default().fg(Color::Green),
+                    Some(s) if s.entropy >= 5.0 => Style::default().fg(Color::Yellow),
+                    Some(_) => Style::default().fg(Color::Red),
+                    None => Style::default().fg(Color::White),
+                }
             };
 
             Row::new(vec![
                 pointer.to_string(),
                 toggle.name().to_string(),
-                enabled_marker.to_string(),
-                bytes,
+                cat.to_string(),
+                speed.to_string(),
+                enabled.to_string(),
                 entropy,
+                bytes,
                 time,
-                failures,
             ])
             .style(style)
         })
         .collect();
 
-    let enabled_count = toggles.iter().filter(|t| t.enabled()).count();
-    let total = toggles.len();
-    let collecting = if app.is_collecting() { " ⟳" } else { "" };
-    let title = format!(" Sources ({enabled_count}/{total} enabled){collecting} ");
-
     let table = Table::new(
         rows,
         [
-            Constraint::Length(2),
-            Constraint::Length(25),
-            Constraint::Length(3),
-            Constraint::Length(10),
-            Constraint::Length(6),
-            Constraint::Length(8),
-            Constraint::Length(6),
+            Constraint::Length(2),  // pointer
+            Constraint::Length(22), // name
+            Constraint::Length(4),  // category
+            Constraint::Length(3),  // speed
+            Constraint::Length(2),  // enabled
+            Constraint::Length(5),  // entropy
+            Constraint::Length(7),  // bytes
+            Constraint::Length(7),  // time
         ],
     )
     .header(header)
-    .block(Block::default().borders(Borders::ALL).title(title));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Sources "),
+    );
 
     f.render_widget(table, area);
 }
@@ -144,35 +174,47 @@ fn draw_info_panel(f: &mut Frame, area: Rect, app: &App) {
 
     let text = if selected < infos.len() {
         let info = &infos[selected];
-        let toggle = &app.toggles()[selected];
-        let status = if toggle.enabled() { "ENABLED ●" } else { "DISABLED ○" };
+        let toggle = &app.toggles[selected];
+        let health = app.health();
+        let health_info = health.as_ref().and_then(|h| {
+            h.sources.iter().find(|s| s.name == toggle.name())
+        });
+
+        let status_line = if toggle.enabled() {
+            match health_info {
+                Some(s) => format!(
+                    "ENABLED  H:{:.2}  {}B  {:.2}s",
+                    s.entropy, s.bytes, s.time
+                ),
+                None => "ENABLED (collecting...)".into(),
+            }
+        } else {
+            "DISABLED — press space to enable".into()
+        };
+
+        let status_style = if toggle.enabled() {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
         vec![
-            Line::from(Span::styled(
-                &info.name,
-                Style::default().bold().fg(Color::Cyan),
-            )),
-            Line::from(Span::styled(
-                status,
-                if toggle.enabled() {
-                    Style::default().fg(Color::Green)
-                } else {
-                    Style::default().fg(Color::DarkGray)
-                },
-            )),
+            Line::from(vec![
+                Span::styled(&info.name, Style::default().bold().fg(Color::Cyan)),
+                Span::raw("  "),
+                Span::styled(
+                    format!("[{}]", toggle.category()),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw("  "),
+                Span::raw(toggle.speed_tier().label()),
+            ]),
+            Line::from(Span::styled(status_line, status_style)),
             Line::from(""),
-            Line::from(Span::styled("Category:", Style::default().bold())),
-            Line::from(info.category.clone()),
-            Line::from(""),
-            Line::from(Span::styled("Description:", Style::default().bold())),
-            Line::from(info.description.clone()),
+            Line::from(Span::styled(info.description.clone(), Style::default().italic())),
             Line::from(""),
             Line::from(Span::styled("Physics:", Style::default().bold())),
             Line::from(info.physics.clone()),
-            Line::from(""),
-            Line::from(Span::styled(
-                format!("Est. entropy rate: {:.0} bits/s", info.entropy_rate_estimate),
-                Style::default().bold(),
-            )),
         ]
     } else {
         vec![Line::from("No source selected")]
@@ -180,18 +222,26 @@ fn draw_info_panel(f: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Info (i to toggle) ");
+        .title(format!(
+            " {} ",
+            app.selected_name().unwrap_or("Info")
+        ));
     let paragraph = Paragraph::new(text).wrap(Wrap { trim: true }).block(block);
     f.render_widget(paragraph, area);
 }
 
 fn draw_entropy_chart(f: &mut Frame, area: Rect, app: &App) {
-    let history = app.entropy_history();
+    let history = app.selected_history();
+    let source_name = app.selected_name().unwrap_or("none");
+
     if history.is_empty() {
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(" Entropy History ");
-        f.render_widget(block, area);
+            .title(format!(" {source_name} — no data yet "));
+        let p = Paragraph::new("Enable source and wait for collection cycles")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(block);
+        f.render_widget(p, area);
         return;
     }
 
@@ -201,80 +251,62 @@ fn draw_entropy_chart(f: &mut Frame, area: Rect, app: &App) {
         .map(|(i, &v)| (i as f64, v))
         .collect();
 
+    let latest = history.last().copied().unwrap_or(0.0);
+    let min = history.iter().copied().fold(f64::MAX, f64::min);
+    let max = history.iter().copied().fold(f64::MIN, f64::max);
+
     let datasets = vec![Dataset::default()
-        .name("avg H")
+        .name(format!("H={latest:.2}"))
         .marker(symbols::Marker::Braille)
         .style(Style::default().fg(Color::Cyan))
         .data(&data)];
 
     let x_max = (history.len() as f64).max(10.0);
+    // Auto-scale Y axis around the data range
+    let y_min = (min - 0.5).max(0.0);
+    let y_max = (max + 0.5).min(8.0);
+
     let chart = Chart::new(datasets)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Entropy History (bits/byte) "),
+                .title(format!(" {source_name} entropy (bits/byte) ")),
         )
         .x_axis(
             Axis::default()
                 .bounds([0.0, x_max])
-                .labels(vec![Line::from("0"), Line::from(format!("{}", history.len()))]),
+                .labels(vec![
+                    Line::from("0"),
+                    Line::from(format!("{}", history.len())),
+                ]),
         )
         .y_axis(
             Axis::default()
-                .bounds([0.0, 8.0])
-                .labels(vec![Line::from("0"), Line::from("4"), Line::from("8")]),
+                .bounds([y_min, y_max])
+                .labels(vec![
+                    Line::from(format!("{y_min:.1}")),
+                    Line::from(format!("{:.1}", (y_min + y_max) / 2.0)),
+                    Line::from(format!("{y_max:.1}")),
+                ]),
         );
 
     f.render_widget(chart, area);
 }
 
-fn draw_stream(f: &mut Frame, area: Rect, app: &App) {
-    let buf = app.stream_buffer();
-    let visible_lines = area.height.saturating_sub(2) as usize;
-    let start = buf.len().saturating_sub(visible_lines);
-    let lines: Vec<Line> = buf[start..]
-        .iter()
-        .map(|s| Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Yellow))))
-        .collect();
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Live Entropy Stream (s to toggle) ");
-    let paragraph = Paragraph::new(lines).block(block);
-    f.render_widget(paragraph, area);
-}
-
 fn draw_rng_output(f: &mut Frame, area: Rect, app: &App) {
     let output = app.rng_output();
-    let total = app.total_bytes();
-    let ms = app.last_collection_ms();
-
-    let text = vec![
-        Line::from(Span::styled(&output, Style::default().fg(Color::Yellow))),
-        Line::from(Span::styled(
-            format!("Total: {total} bytes | Last collection: {ms}ms"),
-            Style::default().fg(Color::DarkGray),
-        )),
-    ];
-
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Latest Output ");
-    let paragraph = Paragraph::new(text).block(block);
-    f.render_widget(paragraph, area);
+        .title(" Live Output ");
+    let text = Paragraph::new(output)
+        .style(Style::default().fg(Color::Yellow))
+        .block(block);
+    f.render_widget(text, area);
 }
 
-fn draw_status_bar(f: &mut Frame, area: Rect, app: &App) {
-    let collecting = if app.is_collecting() { " ⟳ collecting..." } else { "" };
-    let mode = match app.mode() {
-        super::app::ViewMode::Dashboard => "dashboard",
-        super::app::ViewMode::Stream => "stream",
-    };
-
-    let status = format!(
-        " [{mode}]{collecting}  space:toggle  a:all  n:none  f:fast  s:stream  i:info  r:refresh  q:quit"
-    );
-
+fn draw_status_bar(f: &mut Frame, area: Rect) {
+    let status =
+        " space:toggle  1:fast  2:fast+med  3:all  n:none  r:refresh  q:quit";
     let bar = Paragraph::new(status).style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }
