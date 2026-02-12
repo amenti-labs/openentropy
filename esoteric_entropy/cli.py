@@ -17,6 +17,11 @@ def main() -> None:
     """🔬 esoteric-entropy — your computer is a quantum noise observatory."""
 
 
+# ────────────────────────────────────────────────────────────
+# Discovery & benchmarking
+# ────────────────────────────────────────────────────────────
+
+
 @main.command()
 def scan() -> None:
     """Discover available entropy sources on this machine."""
@@ -97,15 +102,164 @@ def bench() -> None:
         )
 
 
+# ────────────────────────────────────────────────────────────
+# Stream — continuous entropy to stdout
+# ────────────────────────────────────────────────────────────
+
+
 @main.command()
-@click.option("--bytes", "n_bytes", default=256, help="Number of bytes to output.")
-def stream(n_bytes: int) -> None:
-    """Stream mixed entropy to stdout."""
+@click.option("--rate", default=0, type=int, help="Bytes/sec rate limit (0 = unlimited).")
+@click.option("--format", "fmt", type=click.Choice(["raw", "hex", "base64"]), default="raw",
+              help="Output format.")
+@click.option("--sources", "source_filter", default=None, help="Comma-separated source name filter.")
+@click.option("--bytes", "n_bytes", default=0, type=int, help="Total bytes (0 = infinite).")
+def stream(rate: int, fmt: str, source_filter: str | None, n_bytes: int) -> None:
+    """Stream entropy to stdout.
+
+    Examples:
+
+        esoteric-entropy stream --format raw | dd of=/tmp/entropy.bin bs=1024 count=100
+
+        esoteric-entropy stream --format hex --bytes 256
+
+        esoteric-entropy stream --rate 1024 --format raw > /dev/null
+    """
+    import base64
+
     from esoteric_entropy.pool import EntropyPool
 
-    pool = EntropyPool.auto()
-    data = pool.get_random_bytes(n_bytes)
-    sys.stdout.buffer.write(data)
+    pool = _make_pool(source_filter)
+    chunk_size = min(rate, 4096) if rate > 0 else 4096
+    total = 0
+
+    try:
+        while True:
+            if 0 < n_bytes <= total:
+                break
+            want = chunk_size if n_bytes == 0 else min(chunk_size, n_bytes - total)
+            data = pool.get_random_bytes(want)
+
+            if fmt == "raw":
+                sys.stdout.buffer.write(data)
+                sys.stdout.buffer.flush()
+            elif fmt == "hex":
+                sys.stdout.write(data.hex())
+                sys.stdout.flush()
+            elif fmt == "base64":
+                sys.stdout.write(base64.b64encode(data).decode())
+                sys.stdout.flush()
+
+            total += len(data)
+
+            if rate > 0:
+                time.sleep(len(data) / rate)
+    except (BrokenPipeError, KeyboardInterrupt):
+        pass
+
+
+# ────────────────────────────────────────────────────────────
+# Device — named pipe (FIFO) entropy feeder
+# ────────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.argument("path", default="/tmp/esoteric-rng")
+@click.option("--buffer-size", default=4096, help="Write buffer size in bytes.")
+@click.option("--sources", "source_filter", default=None, help="Comma-separated source name filter.")
+def device(path: str, buffer_size: int, source_filter: str | None) -> None:
+    """Create a named pipe (FIFO) that continuously provides entropy.
+
+    Use with ollama-auxrng:
+
+        esoteric-entropy device /tmp/esoteric-rng &
+
+        OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+    """
+    import os
+    import signal
+
+    pool = _make_pool(source_filter)
+
+    # Create FIFO
+    if os.path.exists(path):
+        if not _is_fifo(path):
+            click.echo(f"Error: {path} exists and is not a FIFO.", err=True)
+            sys.exit(1)
+    else:
+        os.mkfifo(path)
+        click.echo(f"Created FIFO: {path}")
+
+    click.echo(f"Feeding entropy to {path} (buffer={buffer_size}B)")
+    click.echo("Press Ctrl+C to stop.")
+
+    def _cleanup(signum, frame):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT, _cleanup)
+
+    try:
+        while True:
+            # open() blocks until a reader connects
+            with open(path, "wb") as fifo:
+                try:
+                    while True:
+                        data = pool.get_random_bytes(buffer_size)
+                        fifo.write(data)
+                        fifo.flush()
+                except BrokenPipeError:
+                    continue  # reader disconnected, wait for next
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+# ────────────────────────────────────────────────────────────
+# Server — HTTP API (ANU QRNG compatible)
+# ────────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--port", default=8042, help="Port to listen on.")
+@click.option("--host", default="127.0.0.1", help="Bind address.")
+@click.option("--sources", "source_filter", default=None, help="Comma-separated source name filter.")
+def server(port: int, host: str, source_filter: str | None) -> None:
+    """Start an HTTP entropy server (ANU QRNG API compatible).
+
+    Endpoints:
+
+        GET /api/v1/random?length=N&type=hex16|uint8|uint16
+
+        GET /health
+
+        GET /sources
+
+        GET /pool/status
+
+    Compatible with quantum-llama.cpp QRNG backend.
+    """
+    from esoteric_entropy.http_server import run_server
+
+    pool = _make_pool(source_filter)
+    click.echo(f"🔬 Esoteric Entropy Server v{__version__}")
+    click.echo(f"   Listening on http://{host}:{port}")
+    click.echo(f"   Sources: {len(pool.sources)}")
+    click.echo(f"   API: /api/v1/random?length=N&type=hex16|uint8|uint16")
+    click.echo()
+    run_server(pool, host=host, port=port)
+
+
+# ────────────────────────────────────────────────────────────
+# Report & Pool (existing)
+# ────────────────────────────────────────────────────────────
 
 
 @main.command()
@@ -115,9 +269,10 @@ def stream(n_bytes: int) -> None:
 def report(samples: int, source_name: str | None, output_path: str | None) -> None:
     """Full NIST-inspired randomness test battery with Markdown report."""
     from datetime import datetime
+
     from esoteric_entropy.platform import detect_available_sources
-    from esoteric_entropy.test_suite import run_all_tests, calculate_quality_score
     from esoteric_entropy.report import generate_full_report
+    from esoteric_entropy.test_suite import calculate_quality_score, run_all_tests
 
     sources = detect_available_sources()
     if source_name:
@@ -150,13 +305,13 @@ def report(samples: int, source_name: str | None, output_path: str | None) -> No
 
     if output_path is None:
         from pathlib import Path
+
         docs = Path(__file__).parent.parent / "docs" / "findings"
         output_path = str(docs / f"randomness_report_{datetime.now():%Y-%m-%d}.md")
 
     report_text = generate_full_report(source_results, output_path)
     click.echo(f"\n📄 Report saved to: {output_path}")
 
-    # Print summary
     click.echo(f"\n{'='*60}")
     click.echo(f"{'Source':<25} {'Score':>6} {'Grade':>6} {'Pass':>8}")
     click.echo(f"{'-'*60}")
@@ -192,3 +347,38 @@ def pool() -> None:
     click.echo(f"  Shannon entropy: {h:.4f} / 8.0 bits/byte")
 
     p.print_health()
+
+
+# ────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────
+
+
+def _make_pool(source_filter: str | None = None):
+    """Build an EntropyPool, optionally filtering sources by name."""
+    from esoteric_entropy.pool import EntropyPool
+
+    if source_filter is None:
+        return EntropyPool.auto()
+
+    from esoteric_entropy.platform import detect_available_sources
+
+    names = {n.strip().lower() for n in source_filter.split(",")}
+    pool = EntropyPool()
+    for src in detect_available_sources():
+        if any(n in src.name.lower() for n in names):
+            pool.add_source(src)
+    if not pool.sources:
+        click.echo(f"Warning: no sources matched filter '{source_filter}'", err=True)
+        return EntropyPool.auto()
+    return pool
+
+
+def _is_fifo(path: str) -> bool:
+    import os
+    import stat
+
+    try:
+        return stat.S_ISFIFO(os.stat(path).st_mode)
+    except OSError:
+        return False

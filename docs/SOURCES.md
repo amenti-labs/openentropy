@@ -1,56 +1,137 @@
-# Entropy Sources
+# Entropy Source Catalog
 
-Detailed descriptions of every source, the physics behind it, and expected entropy rates.
+30 sources across 7 categories, each exploiting a different physical phenomenon.
 
-## Timing Sources
+## ⏱ Timing Sources
 
-### Clock Jitter (`clock_jitter`)
-**Physics:** Modern CPUs have multiple independent clock domains driven by separate PLLs (Phase-Locked Loops). The phase noise of each PLL is physically random — dominated by thermal noise in the VCO. By comparing `perf_counter` and `monotonic` clocks, we capture this phase drift.
+### `clock_jitter`
+**Physics:** Phase noise between independent oscillators driving `perf_counter` and `monotonic` clocks. PLL jitter in the LSBs is genuine thermal noise.
+**Rate:** ~500 b/s | **Platform:** All
 
-### Mach Timing (`mach_timing`)
-**Physics:** `mach_absolute_time()` on macOS reads the ARM system counter at sub-nanosecond resolution. The LSBs of successive deltas are influenced by interrupt coalescing, power-state transitions, memory controller refresh, and speculative execution pipeline state.
+### `mach_timing`
+**Physics:** Apple Silicon Mach absolute time counter LSBs. The counter runs at a frequency with inherent crystal oscillator phase noise.
+**Rate:** ~1000 b/s | **Platform:** macOS
 
-### Sleep Jitter (`sleep_jitter`)
-**Physics:** Requesting a zero-duration sleep and measuring actual elapsed time captures OS scheduling jitter, timer interrupt granularity, and thermal-dependent clock drift.
+### `sleep_jitter`
+**Physics:** OS scheduler non-determinism. `nanosleep()` wake-up times vary due to interrupt load, cache state, and thermal throttling.
+**Rate:** ~200 b/s | **Platform:** All
 
-## Kernel Sources
+## 🖥 System Sources
 
-### Sysctl Counters (`sysctl_counters`)
-**Physics:** macOS exposes 1600+ kernel counters via sysctl. ~58 change within 0.2s — TCP segment counts, VM page faults, context switches, network packet counts, etc. The deltas between reads are determined by the unpredictable behaviour of every process, network packet, and interrupt on the system.
+### `sysctl`
+**Physics:** Kernel counters (50+ keys) that fluctuate due to interrupt handling, context switches, network packets, and I/O completions.
+**Rate:** ~2000 b/s | **Platform:** macOS, Linux
 
-### VM Statistics (`vmstat`)
-**Physics:** `vm_stat` reports page faults, pageins/outs, swap activity, and memory pressure. These counters change with every memory access pattern across all running processes.
+### `vmstat`
+**Physics:** Virtual memory subsystem counters — page faults, pageins, swapins — driven by unpredictable memory access patterns.
+**Rate:** ~500 b/s | **Platform:** macOS, Linux
 
-## Network Sources
+### `process`
+**Physics:** Process table snapshot — PIDs, memory usage, CPU times. Changes unpredictably with system activity.
+**Rate:** ~300 b/s | **Platform:** All
 
-### DNS Timing (`dns_timing`)
-**Physics:** Each UDP DNS query traverses physical network links whose latency fluctuates due to queuing delays, routing decisions, congestion, and electromagnetic interference on the wire/air.
+## 🌐 Network Sources
 
-### TCP Connect (`tcp_connect`)
-**Physics:** TCP three-way handshake adds server processing time and SYN/ACK round-trip through potentially different network paths.
+### `dns_timing`
+**Physics:** DNS resolution latency includes network propagation, server load, and routing jitter.
+**Rate:** ~400 b/s | **Platform:** All
 
-## Storage Sources
+### `tcp_connect`
+**Physics:** TCP three-way handshake timing varies with network congestion, server load, and routing.
+**Rate:** ~300 b/s | **Platform:** All
 
-### Disk I/O (`disk_io`)
-**Physics:** NVMe/SSD read latency varies due to NAND cell voltage margins, wear leveling decisions, garbage collection interrupts, controller queue state, and thermal effects on NAND read thresholds.
+### `wifi_rssi`
+**Physics:** WiFi received signal strength includes multipath fading, interference, and thermal noise floor.
+**Rate:** ~200 b/s | **Platform:** macOS (CoreWLAN)
 
-## Memory Sources
+## 🔧 Hardware Sources
 
-### Memory Timing (`memory_timing`)
-**Physics:** Memory allocation timing varies due to DRAM refresh cycles (~64ms intervals), cache misses (L1→L2→L3→DRAM), TLB misses, memory controller scheduling, and row buffer hits/misses.
+### `disk_io`
+**Physics:** Block device I/O latency varies with disk arm position, write-back cache, and wear-leveling (SSD).
+**Rate:** ~500 b/s | **Platform:** All
 
-## Compute Sources
+### `memory_timing`
+**Physics:** DRAM access timing varies with row buffer state, refresh timing, and thermal effects.
+**Rate:** ~800 b/s | **Platform:** All
 
-### GPU Timing (`gpu_timing`)
-**Physics:** GPU shader execution is non-deterministic due to thermal throttling micro-decisions, memory controller arbitration, and warp/SIMD group scheduling.
+### `gpu_timing`
+**Physics:** GPU compute kernel dispatch timing varies with shader occupancy, memory bandwidth, and thermal throttling.
+**Rate:** ~600 b/s | **Platform:** macOS (Metal)
 
-## Hardware Sensor Sources (Optional)
+### `audio_noise`
+**Physics:** Microphone preamp thermal noise (Johnson-Nyquist noise). Even with no audio input, the ADC captures genuine thermal fluctuations.
+**Rate:** ~1000 b/s | **Platform:** Requires microphone + sounddevice
 
-### Audio Thermal Noise (`audio_thermal`)
-**Physics:** Johnson-Nyquist noise — thermal agitation of electrons in the microphone/ADC input impedance. This is a well-characterised quantum-origin noise source (Physical Review, 1928).
+### `camera_noise`
+**Physics:** Image sensor dark current — thermally generated electron-hole pairs in silicon photodiodes. Fundamentally quantum.
+**Rate:** ~2000 b/s | **Platform:** Requires camera + opencv
 
-### Camera Shot Noise (`camera_shot_noise`)
-**Physics:** Photon arrival at each pixel follows a Poisson process. In low-light/dark conditions, the LSBs are dominated by quantum shot noise and thermal dark current.
+### `sensor_noise`
+**Physics:** Apple SMC sensor readout jitter from ADC quantization noise and thermal fluctuations.
+**Rate:** ~400 b/s | **Platform:** macOS
 
-### Bluetooth BLE (`bluetooth_ble`)
-**Physics:** BLE advertisement RSSI fluctuates due to multipath fading, device movement, and frequency-hop timing across 40 channels.
+### `bluetooth_noise`
+**Physics:** BLE ambient RF environment scanning. Signal strengths reflect multipath interference and thermal noise.
+**Rate:** ~200 b/s | **Platform:** macOS (CoreBluetooth)
+
+### `ioregistry`
+**Physics:** IOKit registry deep mining — hardware counters, power states, and sensor readings from the IOService tree.
+**Rate:** ~500 b/s | **Platform:** macOS
+
+## 🧬 Silicon Microarchitecture
+
+### `dram_row_buffer`
+**Physics:** DRAM row buffer conflicts. Accessing different rows in the same bank forces a precharge cycle whose latency depends on the row's charge state.
+**Rate:** ~600 b/s | **Platform:** All
+
+### `cache_contention`
+**Physics:** CPU cache line eviction timing. L1/L2 conflicts create measurable timing variations based on the cache replacement policy's internal state.
+**Rate:** ~800 b/s | **Platform:** All
+
+### `page_fault_timing`
+**Physics:** Virtual memory page fault handling latency depends on TLB state, page table walk depth, and physical memory pressure.
+**Rate:** ~400 b/s | **Platform:** All
+
+### `speculative_exec`
+**Physics:** Branch prediction and speculative execution create timing side-channels. The predictor's internal state depends on all prior branches — deeply unpredictable.
+**Rate:** ~500 b/s | **Platform:** All
+
+## 🔀 Cross-Domain Beat Frequencies
+
+### `cpu_io_beat`
+**Physics:** The CPU and I/O subsystem run on independent clocks. Their interaction creates beat frequency patterns driven by two independent noise sources.
+**Rate:** ~300 b/s | **Platform:** All
+
+### `cpu_memory_beat`
+**Physics:** CPU clock and memory controller operate at different frequencies. The beat pattern captures independent PLL phase noise.
+**Rate:** ~400 b/s | **Platform:** All
+
+### `multi_domain_beat`
+**Physics:** Interference pattern from 3+ independent subsystems (CPU, memory, I/O). Multi-source beats have higher entropy density than pairwise.
+**Rate:** ~500 b/s | **Platform:** All
+
+## 🆕 Novel Sources
+
+### `compression_timing`
+**Physics:** zlib compression time is data-dependent. Different byte patterns trigger different code paths, creating measurable timing variation.
+**Rate:** ~300 b/s | **Platform:** All
+
+### `hash_timing`
+**Physics:** SHA-256 hashing time varies subtly with input data due to memory access patterns and microarchitectural state.
+**Rate:** ~400 b/s | **Platform:** All
+
+### `dispatch_queue`
+**Physics:** macOS Grand Central Dispatch queue scheduling jitter. Work items experience non-deterministic queueing delays.
+**Rate:** ~500 b/s | **Platform:** macOS
+
+### `dyld_timing`
+**Physics:** Dynamic linker `dlsym()` lookup timing varies with symbol table size, cache state, and hash collisions.
+**Rate:** ~300 b/s | **Platform:** macOS, Linux
+
+### `vm_page_timing`
+**Physics:** Mach VM page allocation latency depends on the kernel's free page list state and memory pressure.
+**Rate:** ~400 b/s | **Platform:** macOS
+
+### `spotlight_timing`
+**Physics:** Spotlight metadata query timing reflects index size, disk cache state, and concurrent indexing activity.
+**Rate:** ~200 b/s | **Platform:** macOS

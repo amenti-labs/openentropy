@@ -1,33 +1,80 @@
 # Architecture
 
-## Entropy Pool
+## Overview
 
-The core of esoteric-entropy is the `EntropyPool` class that combines multiple independent entropy sources into a single high-quality random byte stream.
+esoteric-entropy is a multi-source entropy harvesting library. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable behavior.
 
-### Pipeline
+## Pipeline
 
-1. **Source Discovery** — `EntropyPool.auto()` instantiates every source class and calls `is_available()` to filter by platform capabilities.
-2. **Collection** — `collect_all()` iterates over registered sources, calling `collect()` on each. Failed sources are tracked but don't halt the pool.
-3. **Buffering** — Raw bytes are appended to a thread-safe internal buffer.
-4. **Conditioning** — `get_random_bytes(n)` extracts conditioned output via SHA-256 mixing:
-   - Internal state (32 bytes, persistent across calls)
-   - Pool buffer sample (up to 256 bytes)
-   - Monotonic counter
-   - Current timestamp
-   - 8 bytes from `os.urandom()` (defense in depth)
-5. **Health Monitoring** — Each source tracks bytes collected, Shannon entropy of last sample, collection time, and failure count.
+```
+Sources (30 classes)
+    │
+    │  each: collect(n_samples) → uint8 array
+    │
+    ▼
+EntropyPool
+    │  - XOR-combine independent streams
+    │  - Weight by measured entropy rate
+    │  - Health monitoring per source
+    │  - Thread-safe buffer
+    │
+    ▼
+Conditioning (SHA-256, NIST SP 800-90B)
+    │  - Counter mode for arbitrary output length
+    │  - Mixes: pool buffer + internal state + counter + timestamp + os.urandom
+    │
+    ▼
+Output interfaces
+    ├── get_random_bytes(n) — Python API
+    ├── stream — continuous stdout (CLI)
+    ├── device — named pipe / FIFO (CLI)
+    ├── server — HTTP API (CLI)
+    └── EsotericRandom — NumPy Generator
+```
 
-### Thread Safety
+## Module Layout
 
-The pool buffer is protected by a `threading.Lock`. Multiple threads can call `get_random_bytes()` concurrently.
+```
+esoteric_entropy/
+├── __init__.py          # Public API: EntropyPool, EsotericRandom
+├── pool.py              # EntropyPool — multi-source collection + conditioning
+├── conditioning.py      # Von Neumann, XOR fold, SHA-256 conditioning
+├── platform.py          # Source auto-discovery
+├── cli.py               # Click CLI (scan/probe/bench/stream/device/server)
+├── http_server.py       # Stdlib HTTP server (ANU QRNG compatible)
+├── numpy_compat.py      # NumPy BitGenerator adapter
+├── test_suite.py        # NIST-inspired test battery
+├── stats.py             # Statistical utilities
+├── report.py            # Markdown report generation
+└── sources/
+    ├── base.py          # EntropySource ABC
+    ├── timing.py        # ClockJitter, MachTiming, SleepJitter
+    ├── sysctl.py        # Kernel counter mining
+    ├── vmstat.py        # VM subsystem counters
+    ├── process.py       # Process table entropy
+    ├── network.py       # DNS timing, TCP connect
+    ├── wifi.py          # WiFi RSSI noise
+    ├── disk.py          # Block I/O timing
+    ├── memory.py        # DRAM access timing
+    ├── gpu.py           # GPU scheduling jitter
+    ├── audio.py         # Microphone thermal noise
+    ├── camera.py        # Sensor dark current
+    ├── sensor.py        # SMC sensor readouts
+    ├── bluetooth.py     # BLE RF noise
+    ├── ioregistry.py    # IOKit deep mining
+    ├── silicon.py       # DRAM row buffer, cache, page fault, speculative
+    ├── cross_domain.py  # Beat frequency sources
+    ├── compression.py   # Compression/hash timing
+    └── novel.py         # GCD dispatch, dyld, VM page, Spotlight
+```
 
-### Graceful Degradation
+## Security Model
 
-If a source fails (exception, empty output, or low entropy), it's marked unhealthy but the pool continues operating with remaining sources. The SHA-256 conditioning ensures output quality even with degraded inputs.
+- **Not a CSPRNG replacement.** This provides entropy *input*, not a complete cryptographic RNG.
+- SHA-256 conditioning ensures output is computationally indistinguishable from random, even if individual sources are weak.
+- Pool always mixes `os.urandom(8)` into every output block as a safety net.
+- Health monitoring detects degraded sources and flags them.
 
-## Source Interface
+## Thread Safety
 
-Every source implements three methods:
-- `is_available()` — platform check (no side effects)
-- `collect(n_samples)` — return uint8 ndarray of raw samples
-- `entropy_quality()` — self-test returning grade and metrics
+`EntropyPool` uses a threading lock around the internal buffer. Multiple threads can call `get_random_bytes()` concurrently.

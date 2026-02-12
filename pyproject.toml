@@ -4,18 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "esoteric-entropy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Your computer is a quantum noise observatory. This library knows where to listen."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [{ name = "Esoteric Entropy Contributors" }]
-keywords = ["entropy", "randomness", "hardware", "noise", "TRNG", "security"]
+authors = [{ name = "Amenti Labs" }]
+keywords = ["entropy", "randomness", "hardware", "noise", "TRNG", "security", "QRNG"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -23,21 +25,33 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Security :: Cryptography",
     "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
 ]
 dependencies = ["numpy>=1.24", "click>=8.0"]
 
 [project.optional-dependencies]
 audio = ["sounddevice>=0.4"]
 camera = ["opencv-python>=4.0"]
-all = ["sounddevice>=0.4", "opencv-python>=4.0"]
+macos = [
+    "pyobjc-framework-CoreWLAN>=9.0",
+    "pyobjc-framework-CoreBluetooth>=9.0",
+]
+all = [
+    "sounddevice>=0.4",
+    "opencv-python>=4.0",
+    "pyobjc-framework-CoreWLAN>=9.0",
+    "pyobjc-framework-CoreBluetooth>=9.0",
+]
 dev = ["pytest>=7.0", "ruff>=0.4"]
 
 [project.scripts]
 esoteric-entropy = "esoteric_entropy.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/esoteric-entropy/esoteric-entropy"
-Repository = "https://github.com/esoteric-entropy/esoteric-entropy"
+Homepage = "https://github.com/amenti-labs/esoteric-entropy"
+Repository = "https://github.com/amenti-labs/esoteric-entropy"
+Documentation = "https://github.com/amenti-labs/esoteric-entropy/tree/main/docs"
+Issues = "https://github.com/amenti-labs/esoteric-entropy/issues"
 
 [tool.ruff]
 target-version = "py310"
