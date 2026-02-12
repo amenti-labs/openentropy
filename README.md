@@ -60,7 +60,9 @@ Most random number generators are **pseudorandom** -- deterministic algorithms s
 - **Network nondeterminism** from DNS resolution timing and TCP handshake variance
 - **Cross-domain beat frequencies** where CPU, memory, and I/O subsystems interfere
 
-Every source exploits a different physical phenomenon. The pool XOR-combines independent streams and applies SHA-256 conditioning (NIST SP 800-90B) to produce cryptographic-quality output. No single source failure can compromise the pool.
+Every source exploits a different physical phenomenon. The pool XOR-combines independent streams and optionally applies SHA-256 conditioning (NIST SP 800-90B) to produce cryptographic-quality output. No single source failure can compromise the pool.
+
+**Crucially, esoteric-entropy supports raw (unconditioned) output.** Most QRNG APIs (ANU, Outshift, etc.) apply DRBG post-processing that destroys the raw noise signal. We preserve it. Use `--unconditioned` on the CLI or `?raw=true` on the HTTP API to get XOR-combined source bytes with zero whitening — ideal for researchers studying the actual hardware noise characteristics. See [docs/CONDITIONING.md](docs/CONDITIONING.md) for the full architecture.
 
 ---
 
@@ -172,9 +174,10 @@ Continuous entropy output to stdout.
 esoteric-entropy stream --format hex --bytes 256         # hex output
 esoteric-entropy stream --format raw --bytes 1024 > /dev/random  # raw bytes
 esoteric-entropy stream --format base64 --rate 1024      # rate-limited base64
+esoteric-entropy stream --unconditioned --format raw     # raw, no SHA-256
 ```
 
-Options: `--format raw|hex|base64`, `--rate N` (bytes/sec), `--bytes N` (0 = infinite), `--sources filter`
+Options: `--format raw|hex|base64`, `--rate N` (bytes/sec), `--bytes N` (0 = infinite), `--sources filter`, `--unconditioned` (skip conditioning)
 
 ### `esoteric-entropy device <path>`
 
@@ -192,9 +195,10 @@ HTTP entropy server with ANU QRNG-compatible API.
 
 ```bash
 esoteric-entropy server --port 8080
+esoteric-entropy server --port 8080 --allow-raw   # enable ?raw=true endpoint
 ```
 
-Options: `--port N` (default 8042), `--host addr` (default 127.0.0.1), `--sources filter`
+Options: `--port N` (default 8042), `--host addr` (default 127.0.0.1), `--sources filter`, `--allow-raw` (enable unconditioned output)
 
 ### `esoteric-entropy monitor`
 
@@ -306,7 +310,7 @@ esoteric-entropy server --port 8080
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/v1/random?length=1024&type=hex16` | Random data (hex16, uint8, uint16) |
+| `GET /api/v1/random?length=1024&type=hex16` | Random data (hex16, uint8, uint16). Add `&raw=true` for unconditioned output (requires `--allow-raw` flag) |
 | `GET /health` | Pool health status |
 | `GET /sources` | List all sources with stats |
 | `GET /pool/status` | Detailed pool metrics |
