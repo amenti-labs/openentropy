@@ -69,9 +69,19 @@ Most random number generators are **pseudorandom** — deterministic algorithms 
 - **Network nondeterminism** — DNS resolution timing, TCP handshake variance
 - **Cross-domain beat frequencies** — interference patterns between CPU, memory, and I/O subsystems
 
-The pool XOR-combines independent streams and applies SHA-256 conditioning (NIST SP 800-90B). No single source failure can compromise the pool.
+The pool XOR-combines independent streams. No single source failure can compromise the pool.
 
-**Raw output supported.** Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise signal. OpenEntropy preserves it — use `--conditioning raw` on the CLI or `?raw=true` on the HTTP API for unwhitened source bytes. See [Conditioning](docs/CONDITIONING.md) for the full architecture.
+### Conditioning Modes
+
+Conditioning is **optional and configurable**. Use `--conditioning` on the CLI or `?conditioning=` on the HTTP API:
+
+| Mode | Flag | Description |
+|------|------|-------------|
+| **SHA-256** (default) | `--conditioning sha256` | Full NIST SP 800-90B conditioning. Cryptographic quality output. |
+| **Von Neumann** | `--conditioning vonneumann` | Debiasing only — removes bias while preserving more of the raw signal structure. |
+| **Raw** | `--conditioning raw` | No processing. XOR-combined source bytes with zero whitening. |
+
+Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise signal. OpenEntropy preserves it — pass `--conditioning raw` for unwhitened bytes, ideal for researchers studying actual hardware noise characteristics. See [Conditioning](docs/CONDITIONING.md) for details.
 
 ---
 
@@ -184,8 +194,10 @@ openentropy bench --sources silicon  # filter by name
 ```bash
 openentropy stream --format hex --bytes 256
 openentropy stream --format raw --bytes 1024 | your-program
-openentropy stream --format base64 --rate 1024    # rate-limited
-openentropy stream --conditioning raw --format raw    # no conditioning
+openentropy stream --format base64 --rate 1024           # rate-limited
+openentropy stream --conditioning raw --format raw       # no conditioning
+openentropy stream --conditioning vonneumann --format hex # debiased only
+openentropy stream --conditioning sha256 --format hex    # full conditioning (default)
 ```
 
 ### `monitor` — Interactive TUI dashboard
@@ -271,12 +283,13 @@ Cargo workspace with 5 crates:
 | `openentropy-python` | Python bindings via PyO3/maturin |
 
 ```
-Sources (30) → raw samples → Entropy Pool (XOR combine) → Conditioning (SHA-256) → Output
-                                                                                    ├── Rust API
-                                                                                    ├── CLI / TUI
-                                                                                    ├── HTTP Server
-                                                                                    ├── Named Pipe
-                                                                                    └── Python SDK
+Sources (30) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+                                                                 │                       ├── Rust API
+                                                           ┌─────┴─────┐                ├── CLI / TUI
+                                                           │ sha256    │ (default)       ├── HTTP Server
+                                                           │ vonneumann│                 ├── Named Pipe
+                                                           │ raw       │ (passthrough)   └── Python SDK
+                                                           └───────────┘
 ```
 
 ---
