@@ -12,7 +12,7 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 - **31 NIST SP 800-22 statistical tests** in a dedicated test suite crate
 - **CLI with 9 commands**: `scan`, `probe`, `bench`, `stream`, `device`, `server`, `monitor`, `report`, `pool`
 - **Interactive TUI monitor** built with ratatui — live charts, source toggling, RNG display
-- **HTTP server** (axum) with ANU-compatible API compatibility for quantum-llama.cpp integration
+- **HTTP server** (axum) with ANU-compatible HTTP API
 - **PyO3 Python bindings** via maturin for seamless Python interop
 - **Zero clippy warnings**, cargo fmt clean across the entire workspace
 - **24/27 available sources achieve Grade A** entropy quality
@@ -37,8 +37,8 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 
 ### New Features
 - **`stream` command** — Continuous entropy output to stdout with rate limiting and format options (raw/hex/base64)
-- **`device` command** — Named pipe (FIFO) entropy feeder for ollama-auxrng integration
-- **`server` command** — HTTP entropy server with ANU-compatible API for quantum-llama.cpp
+- **`device` command** — Named pipe (FIFO) entropy device for feeding hardware entropy to other programs
+- **`server` command** — HTTP entropy server with ANU-compatible API
 - **NumPy Generator interface** — `OpenEntropyRandom()` returns a `numpy.random.Generator` backed by hardware entropy
 - **OpenEntropyBitGenerator** — NumPy `BitGenerator` subclass for low-level integration
 
@@ -53,7 +53,7 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 ### Improvements
 - NIST test battery: 28/31 pass on conditioned pool (Grade A)
 - Source filter support on all CLI commands (`--sources`)
-- Professional documentation overhaul (ARCHITECTURE, API, SOURCES, OLLAMA_INTEGRATION)
+- Professional documentation overhaul (ARCHITECTURE, API, SOURCES, INTEGRATIONS)
 - Updated CI: macOS + Ubuntu, Python 3.10-3.13, ruff + pytest + build
 - Repo cleanup: removed stale files, updated .gitignore
 

@@ -585,7 +585,7 @@ struct SourcesResponse {
 }
 ```
 
-See [OLLAMA_INTEGRATION.md](OLLAMA_INTEGRATION.md) for full endpoint documentation, response examples, and curl commands.
+See [INTEGRATIONS.md](INTEGRATIONS.md) for usage examples and integration guides.
 
 ---
 

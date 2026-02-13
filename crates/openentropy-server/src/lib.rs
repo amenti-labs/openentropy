@@ -1,6 +1,6 @@
 //! HTTP entropy server — ANU QRNG API compatible.
 //!
-//! Serves random bytes via HTTP, compatible with quantum-llama.cpp's
+//! Serves random bytes via HTTP, compatible with the ANU QRNG API format for easy integration with
 //! QRNG backend and any client expecting the ANU API format.
 
 use std::sync::Arc;
