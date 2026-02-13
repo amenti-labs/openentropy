@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Feed hardware entropy to Ollama via a named pipe (FIFO).
+"""Feed hardware entropy to any program via a named pipe (FIFO).
 
-This creates a named pipe at /tmp/openentropy-rng, fills it with
-hardware entropy, and shows how to start Ollama with OLLAMA_AUXRNG_DEV.
+Creates a named pipe at /tmp/openentropy-rng and continuously fills it
+with hardware entropy. Any program can read from the pipe.
 
 Usage:
     # Terminal 1: Run this script
-    python examples/python/ollama_integration.py
+    python examples/python/named_pipe.py
 
-    # Terminal 2: Start Ollama with hardware entropy
-    OLLAMA_AUXRNG_DEV=/tmp/openentropy-rng ollama run llama3
+    # Terminal 2: Read entropy from the pipe
+    head -c 32 /tmp/openentropy-rng | xxd
 """
 
 import os
@@ -36,8 +36,7 @@ if os.path.exists(FIFO_PATH):
 os.mkfifo(FIFO_PATH)
 
 print(f"Created entropy FIFO at {FIFO_PATH}")
-print(f"Run Ollama with:")
-print(f"  OLLAMA_AUXRNG_DEV={FIFO_PATH} ollama run llama3")
+print(f"Read from it with: head -c 32 {FIFO_PATH} | xxd")
 print(f"\nWaiting for reader... (Ctrl+C to stop)")
 
 pool = EntropyPool.auto()
