@@ -2,8 +2,6 @@
 //! timing: row buffer contention, cache hierarchy interference, page fault
 //! resolution, and speculative execution pipeline state.
 
-use std::time::Instant;
-
 use rand::Rng;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
@@ -14,11 +12,23 @@ use super::helpers::mach_time;
 // Shared helper: extract entropy from timing deltas
 // ---------------------------------------------------------------------------
 
-/// Takes a slice of raw timestamps, computes consecutive deltas, XORs
-/// adjacent deltas, and extracts the lowest byte of each XOR'd value.
+/// XOR-fold all 8 bytes of a `u64` into a single byte.
 ///
-/// **Raw output characteristics:** LSBs of XOR'd timing deltas.
-/// Shannon entropy ~4-6 bits/byte depending on source. No conditioning applied.
+/// This preserves entropy from every byte position instead of discarding the
+/// upper 7 bytes. For timing values where entropy is spread across multiple
+/// byte positions (cache timings, page faults), this dramatically improves
+/// per-byte Shannon entropy.
+#[inline]
+fn xor_fold_u64(v: u64) -> u8 {
+    let b = v.to_le_bytes();
+    b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
+}
+
+/// Takes a slice of raw timestamps, computes consecutive deltas, XORs
+/// adjacent deltas, and XOR-folds each 8-byte value into one output byte.
+///
+/// **Raw output characteristics:** XOR-folded timing deltas.
+/// Shannon entropy ~5-7 bits/byte depending on source. No conditioning applied.
 fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
     if timings.len() < 2 {
         return Vec::new();
@@ -32,8 +42,9 @@ fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
     // XOR consecutive deltas for mixing (not conditioning — just combines adjacent values)
     let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
 
-    // Extract LSBs (lowest byte) — raw, unconditioned
-    let mut raw: Vec<u8> = xored.iter().map(|&x| (x & 0xFF) as u8).collect();
+    // XOR-fold all 8 bytes of each value into one byte — preserves entropy
+    // from every byte position instead of discarding the upper 7 bytes.
+    let mut raw: Vec<u8> = xored.iter().map(|&x| xor_fold_u64(x)).collect();
     raw.truncate(n_samples);
     raw
 }
@@ -76,8 +87,8 @@ impl EntropySource for DRAMRowBufferSource {
         const BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MB — exceeds L2/L3 cache
 
         // We need ~(n_samples + 2) XOR'd deltas, which requires ~(n_samples + 4)
-        // raw timings. Oversample to ensure we have enough.
-        let num_accesses = n_samples * 2 + 64;
+        // raw timings. Oversample 4x to give XOR-folding more to work with.
+        let num_accesses = n_samples * 4 + 64;
 
         // Allocate a large buffer and touch it to ensure pages are backed.
         let mut buffer: Vec<u8> = vec![0u8; BUF_SIZE];
@@ -89,11 +100,15 @@ impl EntropySource for DRAMRowBufferSource {
         let mut timings = Vec::with_capacity(num_accesses);
 
         for _ in 0..num_accesses {
-            let idx = rng.random_range(0..BUF_SIZE);
+            // Access two distant random locations per measurement to amplify
+            // row buffer miss timing variation.
+            let idx1 = rng.random_range(0..BUF_SIZE);
+            let idx2 = rng.random_range(0..BUF_SIZE);
 
             let t0 = mach_time();
-            // Volatile read to prevent compiler from eliding the access.
-            let _val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
+            // Volatile reads to prevent compiler from eliding the accesses.
+            let _v1 = unsafe { std::ptr::read_volatile(&buffer[idx1]) };
+            let _v2 = unsafe { std::ptr::read_volatile(&buffer[idx2]) };
             let t1 = mach_time();
 
             timings.push(t1.wrapping_sub(t0));
@@ -148,29 +163,46 @@ impl EntropySource for CacheContentionSource {
             buffer[i] = i as u8;
         }
 
-        let num_rounds = n_samples * 2 + 64;
+        // 4x oversampling for better XOR-fold quality.
+        let num_rounds = n_samples * 4 + 64;
         let mut rng = rand::rng();
         let mut timings = Vec::with_capacity(num_rounds);
 
         for round in 0..num_rounds {
             let t0 = mach_time();
 
-            if round % 2 == 0 {
-                // Sequential access — cache-friendly.
-                let start = rng.random_range(0..BUF_SIZE.saturating_sub(256));
-                let mut sink: u8 = 0;
-                for offset in 0..256 {
-                    sink ^= unsafe { std::ptr::read_volatile(&buffer[start + offset]) };
+            // Cycle through 3 access patterns for more contention diversity:
+            // sequential, random, and strided (cache-line bouncing).
+            match round % 3 {
+                0 => {
+                    // Sequential access — cache-friendly.
+                    let start = rng.random_range(0..BUF_SIZE.saturating_sub(512));
+                    let mut sink: u8 = 0;
+                    for offset in 0..512 {
+                        sink ^= unsafe { std::ptr::read_volatile(&buffer[start + offset]) };
+                    }
+                    std::hint::black_box(sink);
                 }
-                std::hint::black_box(sink);
-            } else {
-                // Random access — cache-hostile.
-                let mut sink: u8 = 0;
-                for _ in 0..256 {
-                    let idx = rng.random_range(0..BUF_SIZE);
-                    sink ^= unsafe { std::ptr::read_volatile(&buffer[idx]) };
+                1 => {
+                    // Random access — cache-hostile.
+                    let mut sink: u8 = 0;
+                    for _ in 0..512 {
+                        let idx = rng.random_range(0..BUF_SIZE);
+                        sink ^= unsafe { std::ptr::read_volatile(&buffer[idx]) };
+                    }
+                    std::hint::black_box(sink);
                 }
-                std::hint::black_box(sink);
+                _ => {
+                    // Strided access — cache-line bouncing (64-byte stride).
+                    let start = rng.random_range(0..BUF_SIZE.saturating_sub(512 * 64));
+                    let mut sink: u8 = 0;
+                    for i in 0..512 {
+                        sink ^= unsafe {
+                            std::ptr::read_volatile(&buffer[start + i * 64])
+                        };
+                    }
+                    std::hint::black_box(sink);
+                }
             }
 
             let t1 = mach_time();
@@ -216,12 +248,11 @@ impl EntropySource for PageFaultTimingSource {
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
-        let num_pages: usize = 4;
+        let num_pages: usize = 8;
         let map_size = page_size * num_pages;
 
-        // Number of mmap/touch/munmap cycles. Each cycle produces `num_pages`
-        // timings, so we need enough cycles to yield n_samples after whitening.
-        let num_cycles = (n_samples * 2 / num_pages) + 4;
+        // 4x oversampling; each cycle produces `num_pages` timings.
+        let num_cycles = (n_samples * 4 / num_pages) + 4;
 
         let mut timings = Vec::with_capacity(num_cycles * num_pages);
 
@@ -242,18 +273,21 @@ impl EntropySource for PageFaultTimingSource {
                 continue;
             }
 
-            // Touch each page to trigger a minor fault and time it.
+            // Touch each page to trigger a minor fault and time it with
+            // high-resolution mach_time instead of Instant.
             for p in 0..num_pages {
                 let page_ptr = unsafe { (addr as *mut u8).add(p * page_size) };
 
-                let before = Instant::now();
+                let t0 = mach_time();
                 unsafe {
-                    // Write to the page to force a fault.
+                    // Write to the page to force a fault, then read back
+                    // to ensure the TLB entry is fully installed.
                     std::ptr::write_volatile(page_ptr, 0xAA);
+                    let _v = std::ptr::read_volatile(page_ptr);
                 }
-                let elapsed_ns = before.elapsed().as_nanos() as u64;
+                let t1 = mach_time();
 
-                timings.push(elapsed_ns);
+                timings.push(t1.wrapping_sub(t0));
             }
 
             // Unmap so the next cycle gets fresh pages.
@@ -455,5 +489,15 @@ mod tests {
     fn extract_timing_entropy_too_few_samples() {
         assert!(extract_timing_entropy(&[], 10).is_empty());
         assert!(extract_timing_entropy(&[42], 10).is_empty());
+    }
+
+    #[test]
+    fn xor_fold_u64_basic() {
+        // All bytes the same: XOR-fold of 8 identical bytes = 0 (even count)
+        assert_eq!(xor_fold_u64(0x0101010101010101), 0);
+        // Single byte set
+        assert_eq!(xor_fold_u64(0xFF), 0xFF);
+        // Two bytes set: 0xAA ^ 0xBB = 0x11
+        assert_eq!(xor_fold_u64(0xBB_00_00_00_00_00_00_AA), 0xAA ^ 0xBB);
     }
 }

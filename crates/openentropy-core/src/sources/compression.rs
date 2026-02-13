@@ -51,28 +51,31 @@ impl EntropySource for CompressionTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // Oversample: each timing delta produces ~1 raw byte
-        let raw_count = n_samples * 2 + 64;
+        // 4x oversampling for better XOR-fold quality.
+        let raw_count = n_samples * 4 + 64;
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
         let mut lcg: u64 = Instant::now().elapsed().as_nanos() as u64 | 1;
 
         for i in 0..raw_count {
-            let mut data = [0u8; 192];
+            // Vary data size (128-512 bytes) to create more timing diversity.
+            let data_len = 128 + (lcg as usize % 385);
+            let mut data = vec![0u8; data_len];
 
-            // First 64 bytes: pseudo-random
-            for byte in data[..64].iter_mut() {
+            // First third: pseudo-random
+            let third = data_len / 3;
+            for byte in data[..third].iter_mut() {
                 lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
                 *byte = (lcg >> 32) as u8;
             }
 
-            // Middle 64 bytes: repeating pattern (highly compressible)
-            for (j, byte) in data[64..128].iter_mut().enumerate() {
+            // Middle third: repeating pattern (highly compressible)
+            for (j, byte) in data[third..third * 2].iter_mut().enumerate() {
                 *byte = (j % 4) as u8;
             }
 
-            // Last 64 bytes: more pseudo-random
-            for byte in data[128..].iter_mut() {
+            // Last third: more pseudo-random
+            for byte in data[third * 2..].iter_mut() {
                 lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(i as u64);
                 *byte = (lcg >> 32) as u8;
             }
@@ -85,16 +88,25 @@ impl EntropySource for CompressionTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Extract raw LSBs of timing deltas
-        let mut raw = Vec::with_capacity(n_samples);
-        for pair in timings.windows(2) {
-            let delta = pair[1].wrapping_sub(pair[0]);
-            raw.push(delta as u8);
-            if raw.len() >= n_samples {
-                break;
-            }
-        }
+        // Compute deltas and XOR consecutive pairs
+        let deltas: Vec<u64> = timings
+            .windows(2)
+            .map(|w| w[1].wrapping_sub(w[0]))
+            .collect();
+        let xored: Vec<u64> = if deltas.len() >= 2 {
+            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
+        } else {
+            deltas
+        };
 
+        // XOR-fold all 8 bytes of each u64 into one byte
+        let mut raw: Vec<u8> = xored
+            .iter()
+            .map(|&x| {
+                let b = x.to_le_bytes();
+                b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
+            })
+            .collect();
         raw.truncate(n_samples);
         raw
     }
@@ -131,39 +143,58 @@ impl EntropySource for HashTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let raw_count = n_samples * 2 + 64;
+        // 4x oversampling for better XOR-fold quality after delta computation.
+        let raw_count = n_samples * 4 + 64;
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
         let mut lcg: u64 = Instant::now().elapsed().as_nanos() as u64 | 1;
 
         for i in 0..raw_count {
-            let size = 64 + (i % 449);
+            // Wider range of sizes (32-2048 bytes) to create more timing diversity.
+            let size = 32 + (lcg as usize % 2017);
             let mut data = Vec::with_capacity(size);
             for _ in 0..size {
                 lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
                 data.push((lcg >> 32) as u8);
             }
 
-            // SHA-256 is the WORKLOAD being timed — not conditioning
+            // SHA-256 is the WORKLOAD being timed — not conditioning.
+            // Hash multiple rounds for smaller inputs to amplify timing variation.
+            let rounds = if size < 256 { 3 } else { 1 };
             let t0 = Instant::now();
-            let mut hasher = Sha256::new();
-            hasher.update(&data);
-            let digest = hasher.finalize();
-            std::hint::black_box(&digest);
+            for _ in 0..rounds {
+                let mut hasher = Sha256::new();
+                hasher.update(&data);
+                let digest = hasher.finalize();
+                std::hint::black_box(&digest);
+                // Feed digest back as additional data to prevent loop elision
+                if let Some(b) = data.last_mut() {
+                    *b ^= digest[i % 32];
+                }
+            }
             let elapsed_ns = t0.elapsed().as_nanos() as u64;
             timings.push(elapsed_ns);
         }
 
-        // Extract raw LSBs of timing deltas
-        let mut raw = Vec::with_capacity(n_samples);
-        for pair in timings.windows(2) {
-            let delta = pair[1].wrapping_sub(pair[0]);
-            raw.push(delta as u8);
-            if raw.len() >= n_samples {
-                break;
-            }
-        }
+        // Compute deltas and XOR consecutive pairs
+        let deltas: Vec<u64> = timings
+            .windows(2)
+            .map(|w| w[1].wrapping_sub(w[0]))
+            .collect();
+        let xored: Vec<u64> = if deltas.len() >= 2 {
+            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
+        } else {
+            deltas
+        };
 
+        // XOR-fold all 8 bytes of each u64 into one byte
+        let mut raw: Vec<u8> = xored
+            .iter()
+            .map(|&x| {
+                let b = x.to_le_bytes();
+                b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
+            })
+            .collect();
         raw.truncate(n_samples);
         raw
     }
