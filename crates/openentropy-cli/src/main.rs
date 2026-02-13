@@ -50,15 +50,15 @@ enum Commands {
         #[arg(long, default_value = "0")]
         bytes: usize,
 
-        /// Output raw unconditioned entropy (no SHA-256, no whitening)
-        #[arg(long)]
-        unconditioned: bool,
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
     },
 
     /// Create a named pipe (FIFO) that continuously provides entropy
     Device {
         /// Path to FIFO
-        #[arg(default_value = "/tmp/esoteric-rng")]
+        #[arg(default_value = "/tmp/openentropy-rng")]
         path: String,
 
         /// Write buffer size in bytes
@@ -69,9 +69,9 @@ enum Commands {
         #[arg(long)]
         sources: Option<String>,
 
-        /// Output raw unconditioned entropy (no SHA-256, no whitening)
-        #[arg(long)]
-        unconditioned: bool,
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
     },
 
     /// Start an HTTP entropy server (ANU QRNG API compatible)
@@ -88,7 +88,7 @@ enum Commands {
         #[arg(long)]
         sources: Option<String>,
 
-        /// Allow raw=true parameter for unconditioned entropy
+        /// Allow conditioning mode selection via ?conditioning=raw|vonneumann|sha256
         #[arg(long)]
         allow_raw: bool,
     },
@@ -139,14 +139,14 @@ fn main() {
             rate,
             sources,
             bytes,
-            unconditioned,
-        } => commands::stream::run(&format, rate, sources.as_deref(), bytes, unconditioned),
+            conditioning,
+        } => commands::stream::run(&format, rate, sources.as_deref(), bytes, &conditioning),
         Commands::Device {
             path,
             buffer_size,
             sources,
-            unconditioned,
-        } => commands::device::run(&path, buffer_size, sources.as_deref(), unconditioned),
+            conditioning,
+        } => commands::device::run(&path, buffer_size, sources.as_deref(), &conditioning),
         Commands::Server {
             port,
             host,

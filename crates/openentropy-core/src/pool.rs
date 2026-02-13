@@ -259,6 +259,25 @@ impl EntropyPool {
         output
     }
 
+    /// Return `n_bytes` of entropy with the specified conditioning mode.
+    ///
+    /// - `Raw`: XOR-combined source bytes, no whitening
+    /// - `VonNeumann`: debiased but structure-preserving
+    /// - `Sha256`: full cryptographic conditioning (default)
+    pub fn get_bytes(&self, n_bytes: usize, mode: crate::conditioning::ConditioningMode) -> Vec<u8> {
+        use crate::conditioning::ConditioningMode;
+        match mode {
+            ConditioningMode::Raw => self.get_raw_bytes(n_bytes),
+            ConditioningMode::VonNeumann => {
+                // VN debiasing yields ~25% of input, so collect 6x
+                let raw = self.get_raw_bytes(n_bytes * 6);
+                let debiased = crate::conditioning::condition(&raw, n_bytes, ConditioningMode::VonNeumann);
+                debiased
+            }
+            ConditioningMode::Sha256 => self.get_random_bytes(n_bytes),
+        }
+    }
+
     /// Health report as structured data.
     pub fn health_report(&self) -> HealthReport {
         let mut sources = Vec::new();

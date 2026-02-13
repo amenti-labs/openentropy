@@ -9,6 +9,7 @@ pub mod server;
 pub mod stream;
 
 use openentropy_core::EntropyPool;
+use openentropy_core::conditioning::ConditioningMode;
 
 /// Sources that collect in <2 seconds — safe for real-time use.
 const FAST_SOURCES: &[&str] = &[
@@ -58,4 +59,17 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
         return make_pool(None);
     }
     pool
+}
+
+/// Parse a conditioning mode string into the enum.
+pub fn parse_conditioning(s: &str) -> ConditioningMode {
+    match s {
+        "raw" => ConditioningMode::Raw,
+        "vonneumann" | "von_neumann" | "vn" => ConditioningMode::VonNeumann,
+        "sha256" | "sha" => ConditioningMode::Sha256,
+        _ => {
+            eprintln!("Unknown conditioning mode '{s}', using sha256");
+            ConditioningMode::Sha256
+        }
+    }
 }

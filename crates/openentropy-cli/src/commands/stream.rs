@@ -1,7 +1,8 @@
 use std::io::Write;
 
-pub fn run(format: &str, rate: usize, source_filter: Option<&str>, n_bytes: usize, raw: bool) {
+pub fn run(format: &str, rate: usize, source_filter: Option<&str>, n_bytes: usize, conditioning: &str) {
     let pool = super::make_pool(source_filter);
+    let mode = super::parse_conditioning(conditioning);
     let chunk_size = if rate > 0 { rate.min(4096) } else { 4096 };
     let mut total = 0usize;
 
@@ -18,11 +19,7 @@ pub fn run(format: &str, rate: usize, source_filter: Option<&str>, n_bytes: usiz
             chunk_size.min(n_bytes - total)
         };
 
-        let data = if raw {
-            pool.get_raw_bytes(want)
-        } else {
-            pool.get_random_bytes(want)
-        };
+        let data = pool.get_bytes(want, mode);
 
         let write_result = match format {
             "raw" => out.write_all(&data),
