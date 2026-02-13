@@ -1,4 +1,4 @@
-//! All 30 entropy source implementations.
+//! All 35 entropy source implementations.
 
 pub mod helpers;
 
@@ -8,6 +8,7 @@ pub mod camera;
 pub mod compression;
 pub mod cross_domain;
 pub mod disk;
+pub mod frontier;
 pub mod gpu;
 pub mod ioregistry;
 pub mod memory;
@@ -65,5 +66,11 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(novel::DyldTimingSource),
         Box::new(novel::VMPageTimingSource),
         Box::new(novel::SpotlightTimingSource),
+        // Frontier (novel unexplored sources)
+        Box::new(frontier::AMXTimingSource),
+        Box::new(frontier::ThreadLifecycleSource),
+        Box::new(frontier::MachIPCSource),
+        Box::new(frontier::TLBShootdownSource),
+        Box::new(frontier::PipeBufferSource),
     ]
 }

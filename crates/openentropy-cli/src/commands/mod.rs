@@ -32,6 +32,12 @@ const FAST_SOURCES: &[&str] = &[
     "compression_timing",
     "dispatch_queue",
     "vm_page_timing",
+    // Frontier sources (all < 0.1s)
+    "amx_timing",
+    "thread_lifecycle",
+    "mach_ipc",
+    "tlb_shootdown",
+    "pipe_buffer",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.
