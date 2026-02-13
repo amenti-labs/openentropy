@@ -271,8 +271,7 @@ impl EntropyPool {
             ConditioningMode::VonNeumann => {
                 // VN debiasing yields ~25% of input, so collect 6x
                 let raw = self.get_raw_bytes(n_bytes * 6);
-                let debiased = crate::conditioning::condition(&raw, n_bytes, ConditioningMode::VonNeumann);
-                debiased
+                crate::conditioning::condition(&raw, n_bytes, ConditioningMode::VonNeumann)
             }
             ConditioningMode::Sha256 => self.get_random_bytes(n_bytes),
         }

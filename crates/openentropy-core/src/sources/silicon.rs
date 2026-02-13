@@ -8,36 +8,7 @@ use rand::Rng;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-// ---------------------------------------------------------------------------
-// Platform-specific high-resolution timing
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn mach_absolute_time() -> u64;
-}
-
-/// High-resolution timestamp. On macOS this reads the ARM system counter
-/// directly via `mach_absolute_time()`; on other platforms it falls back to
-/// `std::time::Instant` converted to nanoseconds.
-#[cfg(target_os = "macos")]
-fn mach_time() -> u64 {
-    unsafe { mach_absolute_time() }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn mach_time() -> u64 {
-    // Use a thread-local epoch so successive calls produce meaningful deltas.
-    use std::cell::RefCell;
-    thread_local! {
-        static EPOCH: RefCell<Option<Instant>> = const { RefCell::new(None) };
-    }
-    EPOCH.with(|cell| {
-        let mut slot = cell.borrow_mut();
-        let epoch = *slot.get_or_insert_with(Instant::now);
-        epoch.elapsed().as_nanos() as u64
-    })
-}
+use super::helpers::mach_time;
 
 // ---------------------------------------------------------------------------
 // Shared helper: extract entropy from timing deltas

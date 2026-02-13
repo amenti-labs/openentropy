@@ -1,5 +1,7 @@
 //! All 30 entropy source implementations.
 
+pub mod helpers;
+
 pub mod audio;
 pub mod bluetooth;
 pub mod camera;

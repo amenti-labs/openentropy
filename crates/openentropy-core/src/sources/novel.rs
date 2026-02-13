@@ -9,25 +9,6 @@ use std::time::{Duration, Instant};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-/// Extract LSBs from u64 deltas, packing 8 bits per byte.
-#[allow(dead_code)]
-fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
-    let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
-    for d in deltas {
-        bits.push((d & 1) as u8);
-    }
-
-    let mut bytes = Vec::with_capacity(bits.len() / 8 + 1);
-    for chunk in bits.chunks(8) {
-        let mut byte = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            byte |= bit << (7 - i);
-        }
-        bytes.push(byte);
-    }
-    bytes
-}
-
 // ---------------------------------------------------------------------------
 // DispatchQueueSource
 // ---------------------------------------------------------------------------
@@ -395,6 +376,7 @@ impl EntropySource for SpotlightTimingSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::helpers::extract_lsbs_u64;
 
     #[test]
     fn dispatch_queue_info() {

@@ -159,7 +159,7 @@ impl App {
             }
 
             let t0 = Instant::now();
-            pool.collect_enabled(&[active_name.clone()]);
+            pool.collect_enabled(std::slice::from_ref(&active_name));
             let bytes = pool.get_random_bytes(32);
             let health = pool.health_report();
             let elapsed_ms = t0.elapsed().as_millis() as u64;
@@ -207,10 +207,6 @@ impl App {
 
     pub fn active_name(&self) -> Option<&str> {
         self.active.map(|i| self.source_names[i].as_str())
-    }
-
-    pub fn cursor_name(&self) -> &str {
-        &self.source_names[self.cursor]
     }
 
     pub fn source_names(&self) -> &[String] {

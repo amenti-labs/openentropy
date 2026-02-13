@@ -67,9 +67,7 @@ impl EntropySource for ClockJitterSource {
 // MachTimingSource  (macOS only)
 // ---------------------------------------------------------------------------
 
-unsafe extern "C" {
-    fn mach_absolute_time() -> u64;
-}
+use super::helpers::mach_time;
 
 /// Reads the ARM system counter (`mach_absolute_time`) at sub-nanosecond
 /// resolution with variable micro-workloads between samples. Returns raw
@@ -104,7 +102,7 @@ impl EntropySource for MachTimingSource {
         let mut raw = Vec::with_capacity(n_samples);
 
         for i in 0..raw_count {
-            let t0 = unsafe { mach_absolute_time() };
+            let t0 = mach_time();
 
             // Variable micro-workload to perturb pipeline state.
             let iterations = (i % 7) + 1;
@@ -114,7 +112,7 @@ impl EntropySource for MachTimingSource {
             }
             std::hint::black_box(sink);
 
-            let t1 = unsafe { mach_absolute_time() };
+            let t1 = mach_time();
             let delta = t1.wrapping_sub(t0);
 
             // Raw LSB of the delta — unconditioned

@@ -122,25 +122,6 @@ fn extract_quoted_key_numbers(s: &str, map: &mut HashMap<String, i64>) {
     }
 }
 
-/// Extract LSBs from a slice of i64 deltas, packing 8 bits per byte.
-#[allow(dead_code)]
-fn extract_lsbs(deltas: &[i64]) -> Vec<u8> {
-    let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
-    for d in deltas {
-        bits.push((d & 1) as u8);
-    }
-
-    let mut bytes = Vec::with_capacity(bits.len() / 8 + 1);
-    for chunk in bits.chunks(8) {
-        let mut byte = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            byte |= bit << (7 - i);
-        }
-        bytes.push(byte);
-    }
-    bytes
-}
-
 impl EntropySource for IORegistryEntropySource {
     fn info(&self) -> &SourceInfo {
         &IOREGISTRY_INFO
@@ -234,6 +215,7 @@ impl EntropySource for IORegistryEntropySource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::helpers::extract_lsbs_i64 as extract_lsbs;
 
     #[test]
     fn ioregistry_info() {

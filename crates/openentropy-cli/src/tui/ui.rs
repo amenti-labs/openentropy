@@ -52,7 +52,7 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Cyan))
         .title(Line::from(vec![
             Span::styled(" 🔬 OpenEntropy ", Style::default().bold().fg(Color::Cyan)),
-            Span::raw(format!("  watching: ")),
+            Span::raw("  watching: "),
             Span::styled(active_label, Style::default().bold().fg(Color::Yellow)),
             Span::styled(
                 format!("  #{cycle}  {ms}ms  {bytes}B{spin} "),

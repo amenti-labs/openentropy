@@ -6,55 +6,11 @@
 
 use std::io::Write;
 
-
 use tempfile::NamedTempFile;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-// ---------------------------------------------------------------------------
-// mach_absolute_time FFI (macOS high-resolution timer)
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn mach_absolute_time() -> u64;
-}
-
-#[cfg(target_os = "macos")]
-fn mach_time() -> u64 {
-    unsafe { mach_absolute_time() }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn mach_time() -> u64 {
-    // Fallback: use Instant-based nanoseconds on non-macOS platforms.
-    // We anchor to a lazy-initialized epoch so the values are comparable
-    // within a single session.
-    use std::sync::OnceLock;
-    use std::time::Instant;
-    static EPOCH: OnceLock<Instant> = OnceLock::new();
-    let epoch = EPOCH.get_or_init(Instant::now);
-    epoch.elapsed().as_nanos() as u64
-}
-
-/// Extract LSBs from u64 deltas, packing 8 bits per byte.
-#[allow(dead_code)]
-fn extract_lsbs_u64(deltas: &[u64]) -> Vec<u8> {
-    let mut bits: Vec<u8> = Vec::with_capacity(deltas.len());
-    for d in deltas {
-        bits.push((d & 1) as u8);
-    }
-
-    let mut bytes = Vec::with_capacity(bits.len() / 8 + 1);
-    for chunk in bits.chunks(8) {
-        let mut byte = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            byte |= bit << (7 - i);
-        }
-        bytes.push(byte);
-    }
-    bytes
-}
+use super::helpers::mach_time;
 
 // ---------------------------------------------------------------------------
 // CPUIOBeatSource
@@ -338,6 +294,7 @@ impl EntropySource for MultiDomainBeatSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::helpers::extract_lsbs_u64;
 
     #[test]
     fn cpu_io_beat_info() {
