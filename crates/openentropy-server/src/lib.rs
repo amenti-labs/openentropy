@@ -14,6 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::pool::EntropyPool;
 
 /// Shared server state.
@@ -29,6 +30,8 @@ struct RandomParams {
     data_type: Option<String>,
     /// If true, return raw unconditioned entropy (no SHA-256/DRBG).
     raw: Option<bool>,
+    /// Conditioning mode: raw, vonneumann, sha256 (overrides `raw` flag).
+    conditioning: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -73,14 +76,24 @@ async fn handle_random(
 ) -> Json<RandomResponse> {
     let length = params.length.unwrap_or(1024).clamp(1, 65536);
     let data_type = params.data_type.unwrap_or_else(|| "hex16".to_string());
-    let use_raw = params.raw.unwrap_or(false) && state.allow_raw;
+
+    // Determine conditioning mode: ?conditioning= takes priority, then ?raw=true
+    let mode = if let Some(ref c) = params.conditioning {
+        match c.as_str() {
+            "raw" if state.allow_raw => ConditioningMode::Raw,
+            "vonneumann" | "von_neumann" | "vn" => ConditioningMode::VonNeumann,
+            "raw" => ConditioningMode::Sha256, // raw not allowed
+            _ => ConditioningMode::Sha256,
+        }
+    } else if params.raw.unwrap_or(false) && state.allow_raw {
+        ConditioningMode::Raw
+    } else {
+        ConditioningMode::Sha256
+    };
 
     let pool = state.pool.lock().await;
-    let raw = if use_raw {
-        pool.get_raw_bytes(length)
-    } else {
-        pool.get_random_bytes(length)
-    };
+    let raw = pool.get_bytes(length, mode);
+    let use_raw = mode == ConditioningMode::Raw;
 
     let data = match data_type.as_str() {
         "hex16" => {
