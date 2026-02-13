@@ -94,7 +94,6 @@ impl EntropySource for CPUIOBeatSource {
         // Extract LSBs.
         let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-
         entropy.truncate(n_samples);
         entropy
     }
@@ -190,7 +189,6 @@ impl EntropySource for CPUMemoryBeatSource {
         // Extract LSBs.
         let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-
         entropy.truncate(n_samples);
         entropy
     }
@@ -285,7 +283,6 @@ impl EntropySource for MultiDomainBeatSource {
         // Extract LSBs.
         let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
 
-
         entropy.truncate(n_samples);
         entropy
     }
@@ -293,8 +290,8 @@ impl EntropySource for MultiDomainBeatSource {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::helpers::extract_lsbs_u64;
+    use super::*;
 
     #[test]
     fn cpu_io_beat_info() {
@@ -310,7 +307,8 @@ mod tests {
         let src = CPUIOBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert!(!data.is_empty()); assert!(data.len() <= 64);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]
@@ -327,7 +325,8 @@ mod tests {
         let src = CPUMemoryBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert!(!data.is_empty()); assert!(data.len() <= 64);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]
@@ -344,7 +343,8 @@ mod tests {
         let src = MultiDomainBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert!(!data.is_empty()); assert!(data.len() <= 64);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]

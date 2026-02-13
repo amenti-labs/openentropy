@@ -113,7 +113,8 @@ mod tests {
         let src = MemoryTimingSource;
         assert!(src.is_available());
         let data = src.collect(128);
-        assert!(!data.is_empty()); assert!(data.len() <= 128);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 128);
     }
 
     #[test]

@@ -70,10 +70,18 @@ fn ctrlc_handler(path: &str) {
 mod ctrlc {
     pub fn set_handler<F: Fn() + Send + 'static>(handler: F) -> Result<(), ()> {
         unsafe {
-            libc::signal(libc::SIGINT, signal_handler as *const () as libc::sighandler_t);
-            libc::signal(libc::SIGTERM, signal_handler as *const () as libc::sighandler_t);
+            libc::signal(
+                libc::SIGINT,
+                signal_handler as *const () as libc::sighandler_t,
+            );
+            libc::signal(
+                libc::SIGTERM,
+                signal_handler as *const () as libc::sighandler_t,
+            );
         }
-        std::thread::spawn(move || { let _ = handler; });
+        std::thread::spawn(move || {
+            let _ = handler;
+        });
         Ok(())
     }
 

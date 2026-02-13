@@ -1,6 +1,11 @@
 use std::time::Instant;
 
-pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>, conditioning: &str) {
+pub fn run(
+    samples: usize,
+    source_name: Option<&str>,
+    output_path: Option<&str>,
+    conditioning: &str,
+) {
     let mode = super::parse_conditioning(conditioning);
     // Use make_pool which defaults to fast sources
     let pool = super::make_pool(source_name);

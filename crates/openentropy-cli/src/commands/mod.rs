@@ -14,13 +14,24 @@ use openentropy_core::conditioning::ConditioningMode;
 
 /// Sources that collect in <2 seconds — safe for real-time use.
 const FAST_SOURCES: &[&str] = &[
-    "clock_jitter", "mach_timing", "sleep_jitter",
-    "sysctl_deltas", "vmstat_deltas",
-    "disk_io", "memory_timing",
-    "dram_row_buffer", "cache_contention", "page_fault_timing", "speculative_execution",
-    "cpu_io_beat", "cpu_memory_beat", "multi_domain_beat",
-    "hash_timing", "compression_timing",
-    "dispatch_queue", "vm_page_timing",
+    "clock_jitter",
+    "mach_timing",
+    "sleep_jitter",
+    "sysctl_deltas",
+    "vmstat_deltas",
+    "disk_io",
+    "memory_timing",
+    "dram_row_buffer",
+    "cache_contention",
+    "page_fault_timing",
+    "speculative_execution",
+    "cpu_io_beat",
+    "cpu_memory_beat",
+    "multi_domain_beat",
+    "hash_timing",
+    "compression_timing",
+    "dispatch_queue",
+    "vm_page_timing",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.
@@ -90,8 +101,14 @@ mod tests {
 
     #[test]
     fn test_parse_vonneumann_variants() {
-        assert_eq!(parse_conditioning("vonneumann"), ConditioningMode::VonNeumann);
-        assert_eq!(parse_conditioning("von_neumann"), ConditioningMode::VonNeumann);
+        assert_eq!(
+            parse_conditioning("vonneumann"),
+            ConditioningMode::VonNeumann
+        );
+        assert_eq!(
+            parse_conditioning("von_neumann"),
+            ConditioningMode::VonNeumann
+        );
         assert_eq!(parse_conditioning("vn"), ConditioningMode::VonNeumann);
     }
 
@@ -143,7 +160,10 @@ mod tests {
         // Default pool should include fast sources (on macOS at least some will be available)
         let pool = make_pool(None);
         // On any supported platform, at least the timing sources should work
-        assert!(pool.source_count() > 0, "Default pool should have at least one source");
+        assert!(
+            pool.source_count() > 0,
+            "Default pool should have at least one source"
+        );
     }
 
     #[test]

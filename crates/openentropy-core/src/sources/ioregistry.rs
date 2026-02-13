@@ -51,7 +51,10 @@ fn snapshot_ioreg() -> Option<HashMap<String, i64>> {
 
     for line in stdout.lines() {
         let trimmed = line.trim();
-        let trimmed = trimmed.trim_start_matches('|').trim_start_matches('+').trim();
+        let trimmed = trimmed
+            .trim_start_matches('|')
+            .trim_start_matches('+')
+            .trim();
 
         // Extract all "key"=number patterns from the line (covers both
         // top-level `"key" = 123` and nested dict `"key"=123` formats).
@@ -181,8 +184,8 @@ impl EntropySource for IORegistryEntropySource {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::helpers::extract_lsbs_i64 as extract_lsbs;
+    use super::*;
 
     #[test]
     fn ioregistry_info() {

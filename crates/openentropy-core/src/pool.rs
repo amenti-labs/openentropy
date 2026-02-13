@@ -3,8 +3,8 @@
 //! Architecture:
 //! 1. Auto-discover available sources on this machine
 //! 2. Collect raw entropy from each source in parallel
-//! 3. XOR-combine independent streams
-//! 4. SHA-256 final conditioning
+//! 3. Concatenate source bytes into a shared buffer
+//! 4. Apply conditioning (Raw / VonNeumann / SHA-256) on output
 //! 5. Continuous health monitoring per source
 //! 6. Graceful degradation when sources fail
 //! 7. Thread-safe for concurrent access
@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use sha2::{Digest, Sha256};
 
-use crate::conditioning::{quick_shannon, quick_min_entropy};
+use crate::conditioning::{quick_min_entropy, quick_shannon};
 use crate::source::{EntropySource, SourceState};
 
 /// Thread-safe multi-source entropy pool.
@@ -265,7 +265,11 @@ impl EntropyPool {
     /// - `Raw`: XOR-combined source bytes, no whitening
     /// - `VonNeumann`: debiased but structure-preserving
     /// - `Sha256`: full cryptographic conditioning (default)
-    pub fn get_bytes(&self, n_bytes: usize, mode: crate::conditioning::ConditioningMode) -> Vec<u8> {
+    pub fn get_bytes(
+        &self,
+        n_bytes: usize,
+        mode: crate::conditioning::ConditioningMode,
+    ) -> Vec<u8> {
         use crate::conditioning::ConditioningMode;
         match mode {
             ConditioningMode::Raw => self.get_raw_bytes(n_bytes),
@@ -575,10 +579,7 @@ mod tests {
     #[test]
     fn test_get_raw_bytes_length() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let bytes = pool.get_raw_bytes(64);
         assert_eq!(bytes.len(), 64);
     }
@@ -586,10 +587,7 @@ mod tests {
     #[test]
     fn test_get_random_bytes_length() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let bytes = pool.get_random_bytes(64);
         assert_eq!(bytes.len(), 64);
     }
@@ -597,10 +595,7 @@ mod tests {
     #[test]
     fn test_get_random_bytes_various_sizes() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         for size in [1, 16, 32, 64, 100, 256] {
             let bytes = pool.get_random_bytes(size);
             assert_eq!(bytes.len(), size, "Expected {size} bytes");
@@ -610,10 +605,7 @@ mod tests {
     #[test]
     fn test_get_bytes_raw_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let bytes = pool.get_bytes(32, crate::conditioning::ConditioningMode::Raw);
         assert_eq!(bytes.len(), 32);
     }
@@ -621,10 +613,7 @@ mod tests {
     #[test]
     fn test_get_bytes_sha256_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let bytes = pool.get_bytes(32, crate::conditioning::ConditioningMode::Sha256);
         assert_eq!(bytes.len(), 32);
     }
@@ -632,10 +621,7 @@ mod tests {
     #[test]
     fn test_get_bytes_von_neumann_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let bytes = pool.get_bytes(16, crate::conditioning::ConditioningMode::VonNeumann);
         // VonNeumann may produce fewer bytes due to debiasing yield
         assert!(bytes.len() <= 16);
@@ -688,10 +674,7 @@ mod tests {
     #[test]
     fn test_health_report_mixed_sources() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("good", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("good", (0..=255).collect())), 1.0);
         pool.add_source(Box::new(FailingSource::new("bad")), 1.0);
         pool.collect_all();
         let report = pool.health_report();
@@ -704,10 +687,7 @@ mod tests {
     #[test]
     fn test_health_report_tracks_output_bytes() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock", (0..=255).collect())),
-            1.0,
-        );
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
         let _ = pool.get_random_bytes(64);
         let report = pool.health_report();
         assert!(report.output_bytes >= 64);
@@ -749,7 +729,10 @@ mod tests {
 
         let bytes1 = pool1.get_random_bytes(32);
         let bytes2 = pool2.get_random_bytes(32);
-        assert_ne!(bytes1, bytes2, "Different seeds should produce different output");
+        assert_ne!(
+            bytes1, bytes2,
+            "Different seeds should produce different output"
+        );
     }
 
     // -----------------------------------------------------------------------

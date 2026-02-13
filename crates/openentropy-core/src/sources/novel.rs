@@ -375,8 +375,8 @@ impl EntropySource for SpotlightTimingSource {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::helpers::extract_lsbs_u64;
+    use super::*;
 
     #[test]
     fn dispatch_queue_info() {
@@ -392,7 +392,8 @@ mod tests {
         let src = DispatchQueueSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert!(!data.is_empty()); assert!(data.len() <= 64);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]
@@ -418,7 +419,8 @@ mod tests {
         let src = VMPageTimingSource;
         assert!(src.is_available());
         let data = src.collect(64);
-        assert!(!data.is_empty()); assert!(data.len() <= 64);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 64);
     }
 
     #[test]

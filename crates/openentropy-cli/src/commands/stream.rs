@@ -1,6 +1,12 @@
 use std::io::Write;
 
-pub fn run(format: &str, rate: usize, source_filter: Option<&str>, n_bytes: usize, conditioning: &str) {
+pub fn run(
+    format: &str,
+    rate: usize,
+    source_filter: Option<&str>,
+    n_bytes: usize,
+    conditioning: &str,
+) {
     let pool = super::make_pool(source_filter);
     let mode = super::parse_conditioning(conditioning);
     let chunk_size = if rate > 0 { rate.min(4096) } else { 4096 };

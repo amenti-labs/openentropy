@@ -156,7 +156,10 @@ fn main() {
     match cli.command {
         Commands::Scan => commands::scan::run(),
         Commands::Probe { source_name } => commands::probe::run(&source_name),
-        Commands::Bench { sources, conditioning } => commands::bench::run(sources.as_deref(), &conditioning),
+        Commands::Bench {
+            sources,
+            conditioning,
+        } => commands::bench::run(sources.as_deref(), &conditioning),
         Commands::Stream {
             format,
             rate,
@@ -185,7 +188,13 @@ fn main() {
             output,
             conditioning,
         } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
-        Commands::Entropy { sources, conditioning } => commands::entropy::run(sources.as_deref(), &conditioning),
-        Commands::Pool { sources, conditioning } => commands::pool::run(sources.as_deref(), &conditioning),
+        Commands::Entropy {
+            sources,
+            conditioning,
+        } => commands::entropy::run(sources.as_deref(), &conditioning),
+        Commands::Pool {
+            sources,
+            conditioning,
+        } => commands::pool::run(sources.as_deref(), &conditioning),
     }
 }

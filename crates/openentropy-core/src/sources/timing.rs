@@ -198,7 +198,8 @@ mod tests {
         let src = ClockJitterSource;
         assert!(src.is_available());
         let data = src.collect(128);
-        assert!(!data.is_empty()); assert!(data.len() <= 128);
+        assert!(!data.is_empty());
+        assert!(data.len() <= 128);
         let first = data[0];
         assert!(data.iter().any(|&b| b != first), "all bytes were identical");
     }

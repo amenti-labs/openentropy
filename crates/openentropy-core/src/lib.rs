@@ -25,18 +25,21 @@
 //!
 //! ## Architecture
 //!
-//! Sources → Pool (XOR combine) → Output
+//! Sources → Pool (concatenate) → Conditioning → Output
 //!
-//! Two output modes:
-//! - **Conditioned** (default): SHA-256 final conditioning with OS entropy mixed in
-//! - **Raw** (`get_raw_bytes`): XOR-combined only — no hashing, no whitening
+//! Three output modes:
+//! - **Sha256** (default): SHA-256 conditioning mixes all source bytes with state,
+//!   counter, timestamp, and OS entropy. Cryptographically strong output.
+//! - **VonNeumann**: debiases raw bytes without destroying noise structure.
+//! - **Raw** (`get_raw_bytes`): source bytes pass through unchanged — no hashing,
+//!   no whitening, no mixing between sources.
 //!
 //! Raw mode preserves the actual hardware noise signal for researchers studying
 //! device entropy characteristics. Most QRNG APIs (ANU, Outshift) run DRBG
 //! post-processing that destroys the raw hardware signal. We don't.
 //!
 //! Every source implements the [`EntropySource`] trait. The [`EntropyPool`]
-//! collects from all registered sources and XOR-combines independent streams.
+//! collects from all registered sources and concatenates their byte streams.
 
 pub mod conditioning;
 pub mod platform;
@@ -45,8 +48,8 @@ pub mod source;
 pub mod sources;
 
 pub use conditioning::{
-    ConditioningMode, MinEntropyReport, QualityReport,
-    condition, min_entropy_estimate, quick_min_entropy, quick_quality, quick_shannon,
+    ConditioningMode, MinEntropyReport, QualityReport, condition, min_entropy_estimate,
+    quick_min_entropy, quick_quality, quick_shannon,
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};

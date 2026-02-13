@@ -240,7 +240,7 @@ pub fn longest_run_of_ones(data: &[u8]) -> TestResult {
     let num_blocks = n / block_size;
 
     // For each block, find the longest run of 1s
-    let mut observed = [0u64; 4]; // bins: 0, 1, 2, >=3
+    let mut observed = [0u64; 4]; // NIST bins for M=8: {≤1, 2, 3, ≥4}
     for i in 0..num_blocks {
         let start = i * block_size;
         let block = &bits[start..start + block_size];
@@ -257,9 +257,9 @@ pub fn longest_run_of_ones(data: &[u8]) -> TestResult {
             }
         }
         match max_run {
-            0 => observed[0] += 1,
-            1 => observed[1] += 1,
-            2 => observed[2] += 1,
+            0 | 1 => observed[0] += 1,
+            2 => observed[1] += 1,
+            3 => observed[2] += 1,
             _ => observed[3] += 1,
         }
     }
@@ -377,8 +377,10 @@ pub fn approximate_entropy(data: &[u8]) -> TestResult {
     let phi_m = phi(m);
     let phi_m1 = phi(m + 1);
     let apen = phi_m - phi_m1;
-    // chi2 = 2 * n * (log2(2) - apen) = 2 * n * (1.0 - apen)
-    let chi2 = 2.0 * n as f64 * (1.0 - apen);
+    // NIST formula (natural log): chi2 = 2*n*(ln(2) - ApEn_ln).
+    // Since phi uses log2, ApEn_log2 = ApEn_ln / ln(2), so:
+    // chi2 = 2*n*ln(2)*(1 - ApEn_log2)
+    let chi2 = 2.0 * n as f64 * 2.0_f64.ln() * (1.0 - apen);
 
     let df = (1u64 << m) as f64;
     let dist = ChiSquared::new(df).unwrap();
@@ -927,7 +929,9 @@ pub fn ks_test(data: &[u8]) -> TestResult {
     if n < 50 {
         return insufficient(name, 50, n);
     }
-    let mut normalized: Vec<f64> = data.iter().map(|&b| b as f64 / 255.0).collect();
+    // Map discrete bytes to continuous [0,1] with continuity correction
+    // (matching the Anderson-Darling test mapping)
+    let mut normalized: Vec<f64> = data.iter().map(|&b| (b as f64 + 0.5) / 256.0).collect();
     normalized.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     // KS statistic: max |F_n(x) - F(x)|

@@ -34,7 +34,14 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
             "  {} {:<25} H={:.3}  H∞={:.3}  {:.2}s  {}B",
             grade, src.name, src.entropy, min_h, src.time, src.bytes
         );
-        results.push((src.name.clone(), grade, src.entropy, min_h, src.time, src.bytes));
+        results.push((
+            src.name.clone(),
+            grade,
+            src.entropy,
+            min_h,
+            src.time,
+            src.bytes,
+        ));
     }
 
     results.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
