@@ -360,13 +360,10 @@ impl EntropyPool {
     }
 }
 
-/// Fill buffer with OS random bytes.
+/// Fill buffer with OS random bytes via the `getrandom` crate.
+/// Works cross-platform (Unix, Windows, WASM, etc.) without manual file I/O.
 fn getrandom(buf: &mut [u8]) {
-    // Use /dev/urandom on Unix
-    use std::io::Read;
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        let _ = f.read_exact(buf);
-    }
+    let _ = getrandom::fill(buf);
 }
 
 /// Overall health report for the entropy pool.
