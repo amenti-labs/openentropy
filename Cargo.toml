@@ -5,6 +5,7 @@ members = [
     "crates/openentropy-server",
     "crates/openentropy-tests",
     "crates/openentropy-python",
+    "crates/openentropy-wasm",
 ]
 resolver = "2"
 

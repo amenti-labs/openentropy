@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OpenEntropy WASM Demo</title>
+  <style>
+    body { font-family: monospace; max-width: 720px; margin: 2em auto; }
+    pre { background: #f4f4f4; padding: 1em; overflow-x: auto; }
+    button { margin: 0.5em 0; padding: 0.5em 1em; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>OpenEntropy WASM Demo</h1>
+  <p>Entropy collection in the browser via WebAssembly.</p>
+
+  <button id="btn-timing">Collect Timing Jitter (32 bytes)</button>
+  <button id="btn-crypto">Collect Crypto Random (32 bytes)</button>
+  <button id="btn-combined">Get Random Bytes (64 bytes, SHA-256 conditioned)</button>
+  <button id="btn-sources">Available Sources</button>
+
+  <h2>Output</h2>
+  <pre id="output">Click a button above to collect entropy...</pre>
+
+  <script type="module">
+    import init, {
+      collect_timing_jitter,
+      collect_crypto_random,
+      get_random_bytes,
+      available_source_count,
+    } from './pkg/openentropy_wasm.js';
+
+    function hexEncode(bytes) {
+      return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join(' ');
+    }
+
+    async function main() {
+      await init();
+
+      const out = document.getElementById('output');
+
+      document.getElementById('btn-timing').addEventListener('click', () => {
+        const bytes = collect_timing_jitter(32);
+        out.textContent = `Timing Jitter (${bytes.length} bytes):\n${hexEncode(bytes)}`;
+      });
+
+      document.getElementById('btn-crypto').addEventListener('click', () => {
+        const bytes = collect_crypto_random(32);
+        out.textContent = `Crypto Random (${bytes.length} bytes):\n${hexEncode(bytes)}`;
+      });
+
+      document.getElementById('btn-combined').addEventListener('click', () => {
+        const bytes = get_random_bytes(64);
+        out.textContent = `SHA-256 Conditioned (${bytes.length} bytes):\n${hexEncode(bytes)}`;
+      });
+
+      document.getElementById('btn-sources').addEventListener('click', () => {
+        const count = available_source_count();
+        out.textContent = `Available entropy sources: ${count}`;
+      });
+    }
+
+    main();
+  </script>
+</body>
+</html>
