@@ -1,5 +1,6 @@
 pub mod bench;
 pub mod device;
+pub mod entropy;
 pub mod monitor;
 pub mod pool;
 pub mod probe;

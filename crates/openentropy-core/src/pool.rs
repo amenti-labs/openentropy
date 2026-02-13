@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use sha2::{Digest, Sha256};
 
-use crate::conditioning::quick_shannon;
+use crate::conditioning::{quick_shannon, quick_min_entropy};
 use crate::source::{EntropySource, SourceState};
 
 /// Thread-safe multi-source entropy pool.
@@ -159,6 +159,7 @@ impl EntropyPool {
                 ss.last_collect_time = t0.elapsed();
                 ss.total_bytes += data.len() as u64;
                 ss.last_entropy = quick_shannon(&data);
+                ss.last_min_entropy = quick_min_entropy(&data);
                 ss.healthy = ss.last_entropy > 1.0;
                 data
             }
@@ -294,6 +295,7 @@ impl EntropyPool {
                 healthy: ss.healthy,
                 bytes: ss.total_bytes,
                 entropy: ss.last_entropy,
+                min_entropy: ss.last_min_entropy,
                 time: ss.last_collect_time.as_secs_f64(),
                 failures: ss.failures,
             });
@@ -322,15 +324,15 @@ impl EntropyPool {
             r.output_bytes, r.buffer_size
         );
         println!(
-            "\n{:<25} {:>4} {:>10} {:>6} {:>7} {:>5}",
-            "Source", "OK", "Bytes", "H", "Time", "Fail"
+            "\n{:<25} {:>4} {:>10} {:>6} {:>6} {:>7} {:>5}",
+            "Source", "OK", "Bytes", "H", "H∞", "Time", "Fail"
         );
-        println!("{}", "-".repeat(60));
+        println!("{}", "-".repeat(68));
         for s in &r.sources {
             let ok = if s.healthy { "✓" } else { "✗" };
             println!(
-                "{:<25} {:>4} {:>10} {:>5.2} {:>6.3}s {:>5}",
-                s.name, ok, s.bytes, s.entropy, s.time, s.failures
+                "{:<25} {:>4} {:>10} {:>5.2} {:>5.2} {:>6.3}s {:>5}",
+                s.name, ok, s.bytes, s.entropy, s.min_entropy, s.time, s.failures
             );
         }
     }
@@ -391,6 +393,8 @@ pub struct SourceHealth {
     pub bytes: u64,
     /// Shannon entropy of the last collection (bits per byte, max 8.0).
     pub entropy: f64,
+    /// Min-entropy of the last collection (bits per byte, max 8.0). More conservative than Shannon.
+    pub min_entropy: f64,
     /// Time taken for the last collection in seconds.
     pub time: f64,
     /// Number of collection failures.

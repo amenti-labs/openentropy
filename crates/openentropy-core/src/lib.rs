@@ -44,7 +44,10 @@ pub mod pool;
 pub mod source;
 pub mod sources;
 
-pub use conditioning::{ConditioningMode, QualityReport, condition, quick_quality, quick_shannon};
+pub use conditioning::{
+    ConditioningMode, MinEntropyReport, QualityReport,
+    condition, min_entropy_estimate, quick_min_entropy, quick_quality, quick_shannon,
+};
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
 pub use source::{EntropySource, SourceCategory, SourceInfo};

@@ -127,6 +127,17 @@ enum Commands {
         conditioning: String,
     },
 
+    /// Deep min-entropy analysis (NIST SP 800-90B estimators)
+    Entropy {
+        /// Comma-separated source name filter, or "all"
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
+    },
+
     /// Run the entropy pool and output quality metrics
     Pool {
         /// Comma-separated source name filter, or "all"
@@ -174,6 +185,7 @@ fn main() {
             output,
             conditioning,
         } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
+        Commands::Entropy { sources, conditioning } => commands::entropy::run(sources.as_deref(), &conditioning),
         Commands::Pool { sources, conditioning } => commands::pool::run(sources.as_deref(), &conditioning),
     }
 }

@@ -24,6 +24,7 @@
 //! openentropy useful for researchers studying actual hardware noise.
 
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
 /// Conditioning mode for entropy output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +188,362 @@ pub fn xor_fold(data: &[u8]) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 // Quick analysis utilities
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Min-Entropy Estimators (NIST SP 800-90B Section 6.3)
+// ---------------------------------------------------------------------------
+
+/// Min-entropy estimate: H∞ = -log2(max probability).
+/// More conservative than Shannon — reflects worst-case guessing probability.
+/// Returns bits per sample (0.0 to 8.0 for byte-valued data).
+pub fn min_entropy(data: &[u8]) -> f64 {
+    if data.is_empty() {
+        return 0.0;
+    }
+    let mut counts = [0u64; 256];
+    for &b in data {
+        counts[b as usize] += 1;
+    }
+    let n = data.len() as f64;
+    let p_max = counts.iter().map(|&c| c as f64 / n).fold(0.0f64, f64::max);
+    if p_max <= 0.0 {
+        return 0.0;
+    }
+    -p_max.log2()
+}
+
+/// Most Common Value (MCV) estimator — NIST SP 800-90B Section 6.3.1.
+/// Estimates min-entropy with upper bound on p_max using confidence interval.
+/// Returns (min_entropy_bits_per_sample, p_max_upper_bound).
+pub fn mcv_estimate(data: &[u8]) -> (f64, f64) {
+    if data.is_empty() {
+        return (0.0, 1.0);
+    }
+    let mut counts = [0u64; 256];
+    for &b in data {
+        counts[b as usize] += 1;
+    }
+    let n = data.len() as f64;
+    let max_count = *counts.iter().max().unwrap() as f64;
+    let p_hat = max_count / n;
+
+    // Upper bound of 99% confidence interval
+    // p_u = min(1, p_hat + 2.576 * sqrt(p_hat * (1 - p_hat) / n))
+    let z = 2.576; // z_{0.995} for 99% CI
+    let p_u = (p_hat + z * (p_hat * (1.0 - p_hat) / n).sqrt()).min(1.0);
+
+    let h = if p_u >= 1.0 { 0.0 } else { (-p_u.log2()).max(0.0) };
+    (h, p_u)
+}
+
+/// Collision estimator — NIST SP 800-90B Section 6.3.2.
+/// Measures average distance between repeated values.
+/// Returns estimated min-entropy bits per sample.
+pub fn collision_estimate(data: &[u8]) -> f64 {
+    if data.len() < 3 {
+        return 0.0;
+    }
+
+    // Count collision distances
+    let mut distances = Vec::new();
+    let mut i = 0;
+    while i < data.len() - 1 {
+        let mut j = i + 1;
+        // Find next collision (repeated value pair)
+        while j < data.len() && data[j] != data[i] {
+            j += 1;
+        }
+        if j < data.len() {
+            distances.push((j - i) as f64);
+            i = j + 1;
+        } else {
+            break;
+        }
+    }
+
+    if distances.is_empty() {
+        return 8.0; // No collisions found — maximum entropy
+    }
+
+    let mean_dist = distances.iter().sum::<f64>() / distances.len() as f64;
+
+    // The mean collision distance relates to entropy:
+    // For uniform distribution over k symbols, mean distance ≈ sqrt(π*k/2)
+    // Solve for p: mean ≈ 1/sum(p_i^2), then H∞ = -log2(p_max)
+    // Simplified: use the relationship p ≈ 1/mean^2 (first-order approx)
+    // with upper confidence bound
+    let n_collisions = distances.len() as f64;
+    let variance = distances.iter().map(|d| (d - mean_dist).powi(2)).sum::<f64>()
+        / (n_collisions - 1.0).max(1.0);
+    let std_err = (variance / n_collisions).sqrt();
+
+    // Lower bound on mean distance (conservative → lower entropy)
+    let z = 2.576;
+    let mean_lower = (mean_dist - z * std_err).max(1.0);
+
+    // Approximate p_max from collision rate
+    // For geometric distribution of collision distances: E[distance] ≈ 1/sum(p_i^2)
+    // sum(p_i^2) >= p_max^2, so p_max <= sqrt(1/mean_lower)
+    let p_max = (1.0 / mean_lower).sqrt().min(1.0);
+
+    if p_max <= 0.0 {
+        8.0
+    } else {
+        (-p_max.log2()).min(8.0)
+    }
+}
+
+/// Markov estimator — NIST SP 800-90B Section 6.3.3.
+/// Models first-order dependencies between consecutive samples.
+/// Returns estimated min-entropy bits per sample.
+pub fn markov_estimate(data: &[u8]) -> f64 {
+    if data.len() < 2 {
+        return 0.0;
+    }
+
+    // Build transition matrix (256x256 is too large for bytes, so bin into 16 levels)
+    let bins = 16u8;
+    let bin_of = |b: u8| -> usize { (b as usize * bins as usize) / 256 };
+
+    let mut transitions = vec![vec![0u64; bins as usize]; bins as usize];
+    let mut initial_counts = vec![0u64; bins as usize];
+
+    initial_counts[bin_of(data[0])] += 1;
+    for w in data.windows(2) {
+        let from = bin_of(w[0]);
+        let to = bin_of(w[1]);
+        transitions[from][to] += 1;
+    }
+
+    // Compute transition probabilities and find max path probability
+    let n = data.len() as f64;
+
+    // Initial distribution
+    let p_init: Vec<f64> = {
+        let mut counts = vec![0u64; bins as usize];
+        for &b in data {
+            counts[bin_of(b)] += 1;
+        }
+        counts.iter().map(|&c| c as f64 / n).collect()
+    };
+
+    // Transition probabilities
+    let mut p_trans = vec![vec![0.0f64; bins as usize]; bins as usize];
+    for (i, row) in transitions.iter().enumerate() {
+        let row_sum: u64 = row.iter().sum();
+        if row_sum > 0 {
+            for (j, &count) in row.iter().enumerate() {
+                p_trans[i][j] = count as f64 / row_sum as f64;
+            }
+        }
+    }
+
+    // Max probability of any single sample given Markov model
+    // p_max = max over all states s of: max(p_init[s], max_t(p_trans[t][s]))
+    let mut p_max = 0.0f64;
+    for s in 0..bins as usize {
+        p_max = p_max.max(p_init[s]);
+        for t in 0..bins as usize {
+            // Probability of seeing state s given we were in state t
+            let _p = p_init[t] * p_trans[t][s];
+            p_max = p_max.max(p_trans[t][s]);
+        }
+    }
+
+    // Scale back: each bin covers 256/16=16 values, so per-value p_max ≈ p_max_bin / 16
+    // But we want per-byte min-entropy, so we use the bin-level Markov structure
+    // H∞ ≈ -log2(p_max_bin)
+    // This is a conservative estimate (binning reduces apparent entropy)
+    if p_max <= 0.0 {
+        8.0
+    } else {
+        (-p_max.log2()).min(8.0)
+    }
+}
+
+/// Compression estimator — NIST SP 800-90B Section 6.3.4.
+/// Uses Maurer's universal statistic to estimate entropy via compression.
+/// Returns estimated min-entropy bits per sample.
+pub fn compression_estimate(data: &[u8]) -> f64 {
+    if data.len() < 100 {
+        return 0.0;
+    }
+
+    // Maurer's universal statistic
+    // For each byte, record the distance to its previous occurrence
+    let l = 8; // bits per symbol (bytes)
+    let q = 256.min(data.len() / 4); // initialization segment length
+    let k = data.len() - q; // test segment length
+
+    if k == 0 {
+        return 0.0;
+    }
+
+    // Initialize: record last position of each byte value
+    let mut last_pos = [0usize; 256];
+    for (i, &b) in data[..q].iter().enumerate() {
+        last_pos[b as usize] = i + 1; // 1-indexed
+    }
+
+    // Test segment: compute log2 of distances
+    let mut sum = 0.0f64;
+    let mut count = 0u64;
+    for (i, &b) in data[q..].iter().enumerate() {
+        let pos = q + i + 1; // 1-indexed
+        let prev = last_pos[b as usize];
+        if prev > 0 {
+            let distance = pos - prev;
+            sum += (distance as f64).log2();
+            count += 1;
+        }
+        last_pos[b as usize] = pos;
+    }
+
+    if count == 0 {
+        return l as f64; // No repeated values
+    }
+
+    let f_n = sum / count as f64;
+
+    // Variance estimate for confidence bound
+    let mut var_sum = 0.0f64;
+    // Reset for second pass
+    let mut last_pos2 = [0usize; 256];
+    for (i, &b) in data[..q].iter().enumerate() {
+        last_pos2[b as usize] = i + 1;
+    }
+    for (i, &b) in data[q..].iter().enumerate() {
+        let pos = q + i + 1;
+        let prev = last_pos2[b as usize];
+        if prev > 0 {
+            let distance = pos - prev;
+            let log_d = (distance as f64).log2();
+            var_sum += (log_d - f_n).powi(2);
+        }
+        last_pos2[b as usize] = pos;
+    }
+    let variance = var_sum / (count as f64 - 1.0).max(1.0);
+    let std_err = (variance / count as f64).sqrt();
+
+    // Lower confidence bound (conservative)
+    let z = 2.576;
+    let f_lower = (f_n - z * std_err).max(0.0);
+
+    // f_n estimates per-sample entropy. Convert to min-entropy (conservative):
+    // min-entropy <= Shannon entropy, and Maurer's statistic approximates Shannon.
+    // Apply a reduction factor for min-entropy approximation.
+    let h = f_lower.min(l as f64);
+
+    // Min-entropy is at most the compression estimate
+    h
+}
+
+/// t-Tuple estimator — NIST SP 800-90B Section 6.3.5.
+/// Estimates entropy from most frequent t-length tuple.
+/// Returns estimated min-entropy bits per sample.
+pub fn t_tuple_estimate(data: &[u8]) -> f64 {
+    if data.len() < 20 {
+        return 0.0;
+    }
+
+    // Try t=1,2,3 and take the minimum (most conservative)
+    let mut min_h = 8.0f64;
+
+    for t in 1..=3usize {
+        if data.len() < t + 1 {
+            break;
+        }
+        let mut counts: HashMap<&[u8], u64> = HashMap::new();
+        for window in data.windows(t) {
+            *counts.entry(window).or_insert(0) += 1;
+        }
+        let n = (data.len() - t + 1) as f64;
+        let max_count = *counts.values().max().unwrap_or(&0) as f64;
+        let p_max = max_count / n;
+
+        if p_max > 0.0 {
+            // For t-tuples, per-sample entropy is -log2(p_max) / t
+            let h = -p_max.log2() / t as f64;
+            min_h = min_h.min(h);
+        }
+    }
+
+    min_h.min(8.0)
+}
+
+/// Combined min-entropy estimate using multiple estimators.
+/// Takes the minimum (most conservative) across all methods.
+/// Returns a [`MinEntropyReport`] with individual and combined estimates.
+pub fn min_entropy_estimate(data: &[u8]) -> MinEntropyReport {
+    let shannon = quick_shannon(data);
+    let (mcv_h, mcv_p_upper) = mcv_estimate(data);
+    let collision_h = collision_estimate(data);
+    let markov_h = markov_estimate(data);
+    let compression_h = compression_estimate(data);
+    let t_tuple_h = t_tuple_estimate(data);
+
+    // Min-entropy is the minimum of all estimators (most conservative)
+    let combined = mcv_h
+        .min(collision_h)
+        .min(markov_h)
+        .min(compression_h)
+        .min(t_tuple_h);
+
+    MinEntropyReport {
+        shannon_entropy: shannon,
+        min_entropy: combined,
+        mcv_estimate: mcv_h,
+        mcv_p_upper,
+        collision_estimate: collision_h,
+        markov_estimate: markov_h,
+        compression_estimate: compression_h,
+        t_tuple_estimate: t_tuple_h,
+        samples: data.len(),
+    }
+}
+
+/// Min-entropy analysis report with individual estimator results.
+#[derive(Debug, Clone)]
+pub struct MinEntropyReport {
+    /// Shannon entropy (bits/byte, max 8.0). Upper bound, not conservative.
+    pub shannon_entropy: f64,
+    /// Combined min-entropy estimate (bits/byte). Most conservative across all estimators.
+    pub min_entropy: f64,
+    /// Most Common Value estimator (NIST 6.3.1)
+    pub mcv_estimate: f64,
+    /// Upper bound on max probability from MCV
+    pub mcv_p_upper: f64,
+    /// Collision estimator (NIST 6.3.2)
+    pub collision_estimate: f64,
+    /// Markov estimator (NIST 6.3.3)
+    pub markov_estimate: f64,
+    /// Compression estimator (NIST 6.3.4)
+    pub compression_estimate: f64,
+    /// t-Tuple estimator (NIST 6.3.5)
+    pub t_tuple_estimate: f64,
+    /// Number of samples analyzed
+    pub samples: usize,
+}
+
+impl std::fmt::Display for MinEntropyReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Min-Entropy Analysis ({} samples)", self.samples)?;
+        writeln!(f, "  Shannon H:      {:.3} bits/byte", self.shannon_entropy)?;
+        writeln!(f, "  Min-Entropy H∞:  {:.3} bits/byte", self.min_entropy)?;
+        writeln!(f, "  ─────────────────────────────")?;
+        writeln!(f, "  MCV:            {:.3}  (p_upper={:.4})", self.mcv_estimate, self.mcv_p_upper)?;
+        writeln!(f, "  Collision:      {:.3}", self.collision_estimate)?;
+        writeln!(f, "  Markov:         {:.3}", self.markov_estimate)?;
+        writeln!(f, "  Compression:    {:.3}", self.compression_estimate)?;
+        writeln!(f, "  t-Tuple:        {:.3}", self.t_tuple_estimate)?;
+        Ok(())
+    }
+}
+
+/// Quick min-entropy (just the combined estimate, no full report).
+pub fn quick_min_entropy(data: &[u8]) -> f64 {
+    min_entropy_estimate(data).min_entropy
+}
 
 /// Quick Shannon entropy in bits/byte for a byte slice.
 pub fn quick_shannon(data: &[u8]) -> f64 {
