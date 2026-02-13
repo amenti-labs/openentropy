@@ -127,10 +127,10 @@ openentropy stream --format base64 --bytes 64
 
 ```bash
 # For research — bypasses SHA-256 conditioning
-openentropy stream --unconditioned --format raw --bytes 4096 > noise.bin
+openentropy stream --conditioning raw --format raw --bytes 4096 > noise.bin
 
 # Analyze with your own tools
-openentropy stream --unconditioned --format hex --bytes 256
+openentropy stream --conditioning raw --format hex --bytes 256
 ```
 
 ⚠️ Raw output will show biases and patterns from the physical sources. This is expected — the hardware noise is real, not whitened.
