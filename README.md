@@ -29,7 +29,7 @@
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server API (ANU-compatible format) |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
-| [Ollama Integration](docs/OLLAMA_INTEGRATION.md) | Feed hardware entropy to LLMs |
+| [Integrations](docs/INTEGRATIONS.md) | Named pipe device, HTTP API, piping to other programs |
 | [Python SDK](docs/PYTHON_SDK.md) | PyO3 bindings and NumPy integration |
 
 ---
@@ -341,9 +341,7 @@ pool.collect_all(parallel=True, timeout=10.0)
 
 ---
 
-## HTTP Server and Ollama Integration
-
-### Server API
+## HTTP Server
 
 Start the server and query entropy over HTTP:
 
@@ -365,28 +363,15 @@ curl "http://localhost:8080/sources"
 curl "http://localhost:8080/pool/status"
 ```
 
-The API is compatible with the ANU QRNG format, so any client expecting that protocol will work.
+### Named Pipe Device
 
-### Ollama Integration
-
-Feed hardware entropy into LLM inference via a named pipe:
+Create a FIFO that any program can read entropy from:
 
 ```bash
-# Terminal 1: Start entropy device
 openentropy device /tmp/openentropy-rng
 
-# Terminal 2: Run Ollama with hardware entropy
-OLLAMA_AUXRNG_DEV=/tmp/openentropy-rng ollama run llama3
-```
-
-Or via HTTP with quantum-llama.cpp:
-
-```bash
-# Terminal 1: Start entropy server
-openentropy server --port 8080
-
-# Terminal 2: Point quantum-llama.cpp at it
-./llama-cli -m model.gguf --qrng-url http://localhost:8080/api/v1/random
+# In another terminal:
+head -c 32 /tmp/openentropy-rng | xxd
 ```
 
 ---
@@ -504,7 +489,7 @@ maturin build --release
 ## Documentation
 
 - [**Examples**](examples/) — Rust and Python code examples
-- [**Integrations**](docs/INTEGRATIONS.md) — ollama-auxrng, quantum-llama.cpp, generic piping
+- [**Integrations**](docs/INTEGRATIONS.md) — Named pipe device, HTTP server, piping to other programs
 - [**Troubleshooting**](docs/TROUBLESHOOTING.md) — common issues and fixes
 - [**Security**](SECURITY.md) — threat model, responsible disclosure, conditioning modes
 - [**Conditioning**](docs/CONDITIONING.md) — entropy conditioning architecture
