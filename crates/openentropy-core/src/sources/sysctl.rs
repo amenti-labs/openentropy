@@ -3,13 +3,12 @@
 //! changing values, XORs consecutive deltas, and extracts LSBs.
 
 use std::collections::HashMap;
-use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-use super::helpers::extract_delta_bytes_i64;
+use super::helpers::{extract_delta_bytes_i64, run_command};
 
 /// Path to the sysctl binary on macOS.
 const SYSCTL_PATH: &str = "/usr/sbin/sysctl";
@@ -50,13 +49,7 @@ impl Default for SysctlSource {
 ///
 /// Handles both `key: value` (macOS) and `key = value` (Linux) formats.
 fn snapshot_sysctl() -> Option<HashMap<String, i64>> {
-    let output = Command::new(SYSCTL_PATH).arg("-a").output().ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = run_command(SYSCTL_PATH, &["-a"])?;
     let mut map = HashMap::new();
 
     for line in stdout.lines() {

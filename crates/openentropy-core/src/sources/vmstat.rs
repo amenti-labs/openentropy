@@ -2,13 +2,12 @@
 //! snapshots, and extracts entropy from the deltas of changing counters.
 
 use std::collections::HashMap;
-use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-use super::helpers::extract_delta_bytes_i64;
+use super::helpers::{extract_delta_bytes_i64, run_command};
 
 /// Delay between consecutive vm_stat snapshots.
 const SNAPSHOT_DELAY: Duration = Duration::from_millis(50);
@@ -52,13 +51,10 @@ fn vm_stat_path() -> Option<String> {
     }
 
     // Fall back to searching PATH via `which`
-    let output = Command::new("which").arg("vm_stat").output().ok()?;
-
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.is_empty() {
-            return Some(path);
-        }
+    let path = run_command("which", &["vm_stat"])?;
+    let path = path.trim().to_string();
+    if !path.is_empty() {
+        return Some(path);
     }
 
     None
@@ -75,13 +71,7 @@ fn vm_stat_path() -> Option<String> {
 ///
 /// We strip the trailing period and parse the integer.
 fn snapshot_vmstat(path: &str) -> Option<HashMap<String, i64>> {
-    let output = Command::new(path).output().ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = run_command(path, &[])?;
     let mut map = HashMap::new();
 
     for line in stdout.lines() {

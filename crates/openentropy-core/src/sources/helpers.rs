@@ -79,6 +79,41 @@ pub fn command_exists(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Run a subprocess command and return its stdout as a `String`.
+///
+/// Returns `None` if the command fails to execute or exits with a non-zero
+/// status. This is the shared helper for sources that shell out to system
+/// utilities (sysctl, vm_stat, ps, ioreg, mdls, etc.).
+pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Run a subprocess command and return its raw stdout bytes.
+///
+/// Returns `None` if the command fails to execute or exits with a non-zero
+/// status.
+pub fn run_command_raw(program: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(output.stdout)
+}
+
 // ---------------------------------------------------------------------------
 // Nibble packing
 // ---------------------------------------------------------------------------
@@ -332,5 +367,36 @@ mod tests {
         let deltas: Vec<i64> = (1..=100).collect();
         let bytes = extract_delta_bytes_i64(&deltas, 50);
         assert_eq!(bytes.len(), 50);
+    }
+
+    // -----------------------------------------------------------------------
+    // run_command / run_command_raw tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn run_command_echo() {
+        let out = run_command("echo", &["hello"]);
+        assert!(out.is_some());
+        assert_eq!(out.unwrap().trim(), "hello");
+    }
+
+    #[test]
+    fn run_command_nonexistent() {
+        let out = run_command("/nonexistent/binary", &[]);
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn run_command_raw_echo() {
+        let out = run_command_raw("echo", &["bytes"]);
+        assert!(out.is_some());
+        assert!(out.unwrap().starts_with(b"bytes"));
+    }
+
+    #[test]
+    fn run_command_failing_status() {
+        // `false` always exits with status 1
+        let out = run_command("false", &[]);
+        assert!(out.is_none());
     }
 }

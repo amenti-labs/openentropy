@@ -5,10 +5,11 @@
 //! deltas. Shannon entropy ~3-5 bits/byte. The timing jitter component has
 //! higher entropy density than the process table bytes.
 
-use std::process::Command;
 use std::time::Instant;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
+
+use super::helpers::run_command_raw;
 
 /// Number of getpid() calls to measure for timing jitter.
 const JITTER_ROUNDS: usize = 256;
@@ -70,16 +71,7 @@ fn collect_getpid_jitter(n_bytes: usize) -> Vec<u8> {
 
 /// Run `ps -eo pid,pcpu,rss` and return its raw stdout bytes.
 fn snapshot_process_table() -> Option<Vec<u8>> {
-    let output = Command::new("ps")
-        .args(["-eo", "pid,pcpu,rss"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    Some(output.stdout)
+    run_command_raw("ps", &["-eo", "pid,pcpu,rss"])
 }
 
 impl EntropySource for ProcessSource {
@@ -88,7 +80,7 @@ impl EntropySource for ProcessSource {
     }
 
     fn is_available(&self) -> bool {
-        Command::new("ps").arg("--version").output().is_ok() || Command::new("ps").output().is_ok()
+        super::helpers::command_exists("ps")
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
