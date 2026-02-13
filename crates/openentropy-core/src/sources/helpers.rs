@@ -79,12 +79,8 @@ pub fn command_exists(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Run a subprocess command and return its stdout as a `String`.
-///
-/// Returns `None` if the command fails to execute or exits with a non-zero
-/// status. This is the shared helper for sources that shell out to system
-/// utilities (sysctl, vm_stat, ps, ioreg, mdls, etc.).
-pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
+/// Execute a command and return its `Output` if it succeeds.
+fn run_command_output(program: &str, args: &[&str]) -> Option<std::process::Output> {
     let output = std::process::Command::new(program)
         .args(args)
         .output()
@@ -94,6 +90,16 @@ pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
         return None;
     }
 
+    Some(output)
+}
+
+/// Run a subprocess command and return its stdout as a `String`.
+///
+/// Returns `None` if the command fails to execute or exits with a non-zero
+/// status. This is the shared helper for sources that shell out to system
+/// utilities (sysctl, vm_stat, ps, ioreg, mdls, etc.).
+pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
+    let output = run_command_output(program, args)?;
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
@@ -102,16 +108,53 @@ pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
 /// Returns `None` if the command fails to execute or exits with a non-zero
 /// status.
 pub fn run_command_raw(program: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
+    run_command_output(program, args).map(|o| o.stdout)
+}
 
-    if !output.status.success() {
-        return None;
+// ---------------------------------------------------------------------------
+// XOR-fold
+// ---------------------------------------------------------------------------
+
+/// XOR-fold all 8 bytes of a `u64` into a single byte.
+///
+/// Preserves entropy from every byte position instead of discarding the
+/// upper 7 bytes. Used by timing-based sources where entropy is spread
+/// across multiple byte positions.
+#[inline]
+pub fn xor_fold_u64(v: u64) -> u8 {
+    let b = v.to_le_bytes();
+    b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
+}
+
+// ---------------------------------------------------------------------------
+// Timing entropy extraction
+// ---------------------------------------------------------------------------
+
+/// Extract entropy bytes from a slice of raw timestamps.
+///
+/// Computes consecutive deltas, XORs adjacent deltas for mixing, then
+/// XOR-folds each 8-byte value into one output byte. Returns at most
+/// `n_samples` bytes.
+///
+/// Requires at least 4 input timings to produce any output (2 deltas
+/// needed for the XOR mixing step).
+pub fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
+    if timings.len() < 2 {
+        return Vec::new();
     }
 
-    Some(output.stdout)
+    let deltas: Vec<u64> = timings
+        .windows(2)
+        .map(|w| w[1].wrapping_sub(w[0]))
+        .collect();
+
+    // XOR consecutive deltas for mixing (not conditioning — just combines adjacent values)
+    let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
+
+    // XOR-fold all 8 bytes of each value into one byte
+    let mut raw: Vec<u8> = xored.iter().map(|&x| xor_fold_u64(x)).collect();
+    raw.truncate(n_samples);
+    raw
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +413,85 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // xor_fold_u64 tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn xor_fold_u64_zero() {
+        assert_eq!(xor_fold_u64(0), 0);
+    }
+
+    #[test]
+    fn xor_fold_u64_identical_bytes() {
+        // All bytes the same: XOR-fold of 8 identical bytes = 0 (even count)
+        assert_eq!(xor_fold_u64(0x0101010101010101), 0);
+    }
+
+    #[test]
+    fn xor_fold_u64_single_byte() {
+        assert_eq!(xor_fold_u64(0xFF), 0xFF);
+    }
+
+    #[test]
+    fn xor_fold_u64_two_bytes() {
+        // 0xAA ^ 0xBB = 0x11
+        assert_eq!(xor_fold_u64(0xBB_00_00_00_00_00_00_AA), 0xAA ^ 0xBB);
+    }
+
+    #[test]
+    fn xor_fold_u64_max() {
+        // All 0xFF bytes: XOR of 8 identical = 0 (even count)
+        assert_eq!(xor_fold_u64(u64::MAX), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // extract_timing_entropy tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn extract_timing_entropy_basic() {
+        let timings = vec![100, 110, 105, 120, 108, 130, 112, 125];
+        let result = extract_timing_entropy(&timings, 4);
+        assert!(!result.is_empty());
+        assert!(result.len() <= 4);
+    }
+
+    #[test]
+    fn extract_timing_entropy_too_few_samples() {
+        assert!(extract_timing_entropy(&[], 10).is_empty());
+        assert!(extract_timing_entropy(&[42], 10).is_empty());
+    }
+
+    #[test]
+    fn extract_timing_entropy_exactly_two_timings() {
+        // 2 timings → 1 delta → 0 XOR'd pairs → empty
+        let result = extract_timing_entropy(&[100, 200], 10);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn extract_timing_entropy_exactly_three_timings() {
+        // 3 timings → 2 deltas → 1 XOR'd pair → 1 byte
+        let result = extract_timing_entropy(&[100, 200, 150], 10);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn extract_timing_entropy_truncates_to_n_samples() {
+        let timings: Vec<u64> = (0..100).collect();
+        let result = extract_timing_entropy(&timings, 5);
+        assert_eq!(result.len(), 5);
+    }
+
+    #[test]
+    fn extract_timing_entropy_constant_timings() {
+        // Constant timings → all deltas are 0 → XOR of 0s = 0 → all zeros
+        let timings = vec![42u64; 20];
+        let result = extract_timing_entropy(&timings, 10);
+        assert!(result.iter().all(|&b| b == 0));
+    }
+
+    // -----------------------------------------------------------------------
     // run_command / run_command_raw tests
     // -----------------------------------------------------------------------
 
@@ -398,5 +520,29 @@ mod tests {
         // `false` always exits with status 1
         let out = run_command("false", &[]);
         assert!(out.is_none());
+    }
+
+    #[test]
+    fn run_command_raw_failing_status() {
+        let out = run_command_raw("false", &[]);
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn run_command_empty_output() {
+        // `true` exits 0 with no output
+        let out = run_command("true", &[]);
+        assert!(out.is_some());
+        assert!(out.unwrap().is_empty());
+    }
+
+    #[test]
+    fn command_exists_true() {
+        assert!(command_exists("echo"));
+    }
+
+    #[test]
+    fn command_exists_false() {
+        assert!(!command_exists("nonexistent_binary_xyz_12345"));
     }
 }

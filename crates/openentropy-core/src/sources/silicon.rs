@@ -6,48 +6,7 @@ use rand::Rng;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-use super::helpers::mach_time;
-
-// ---------------------------------------------------------------------------
-// Shared helper: extract entropy from timing deltas
-// ---------------------------------------------------------------------------
-
-/// XOR-fold all 8 bytes of a `u64` into a single byte.
-///
-/// This preserves entropy from every byte position instead of discarding the
-/// upper 7 bytes. For timing values where entropy is spread across multiple
-/// byte positions (cache timings, page faults), this dramatically improves
-/// per-byte Shannon entropy.
-#[inline]
-fn xor_fold_u64(v: u64) -> u8 {
-    let b = v.to_le_bytes();
-    b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
-}
-
-/// Takes a slice of raw timestamps, computes consecutive deltas, XORs
-/// adjacent deltas, and XOR-folds each 8-byte value into one output byte.
-///
-/// **Raw output characteristics:** XOR-folded timing deltas.
-/// Shannon entropy ~5-7 bits/byte depending on source. No conditioning applied.
-fn extract_timing_entropy(timings: &[u64], n_samples: usize) -> Vec<u8> {
-    if timings.len() < 2 {
-        return Vec::new();
-    }
-
-    let deltas: Vec<u64> = timings
-        .windows(2)
-        .map(|w| w[1].wrapping_sub(w[0]))
-        .collect();
-
-    // XOR consecutive deltas for mixing (not conditioning — just combines adjacent values)
-    let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
-
-    // XOR-fold all 8 bytes of each value into one byte — preserves entropy
-    // from every byte position instead of discarding the upper 7 bytes.
-    let mut raw: Vec<u8> = xored.iter().map(|&x| xor_fold_u64(x)).collect();
-    raw.truncate(n_samples);
-    raw
-}
+use super::helpers::{extract_timing_entropy, mach_time};
 
 // ---------------------------------------------------------------------------
 // 1. DRAMRowBufferSource
@@ -197,9 +156,7 @@ impl EntropySource for CacheContentionSource {
                     let start = rng.random_range(0..BUF_SIZE.saturating_sub(512 * 64));
                     let mut sink: u8 = 0;
                     for i in 0..512 {
-                        sink ^= unsafe {
-                            std::ptr::read_volatile(&buffer[start + i * 64])
-                        };
+                        sink ^= unsafe { std::ptr::read_volatile(&buffer[start + i * 64]) };
                     }
                     std::hint::black_box(sink);
                 }
@@ -474,30 +431,5 @@ mod tests {
         assert_eq!(CacheContentionSource.name(), "cache_contention");
         assert_eq!(PageFaultTimingSource.name(), "page_fault_timing");
         assert_eq!(SpeculativeExecutionSource.name(), "speculative_execution");
-    }
-
-    #[test]
-    fn extract_timing_entropy_basic() {
-        // Hand-crafted timings to verify the extraction logic.
-        let timings = vec![100, 110, 105, 120, 108, 130, 112, 125];
-        let result = extract_timing_entropy(&timings, 4);
-        assert!(!result.is_empty());
-        assert!(result.len() <= 4);
-    }
-
-    #[test]
-    fn extract_timing_entropy_too_few_samples() {
-        assert!(extract_timing_entropy(&[], 10).is_empty());
-        assert!(extract_timing_entropy(&[42], 10).is_empty());
-    }
-
-    #[test]
-    fn xor_fold_u64_basic() {
-        // All bytes the same: XOR-fold of 8 identical bytes = 0 (even count)
-        assert_eq!(xor_fold_u64(0x0101010101010101), 0);
-        // Single byte set
-        assert_eq!(xor_fold_u64(0xFF), 0xFF);
-        // Two bytes set: 0xAA ^ 0xBB = 0x11
-        assert_eq!(xor_fold_u64(0xBB_00_00_00_00_00_00_AA), 0xAA ^ 0xBB);
     }
 }

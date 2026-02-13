@@ -1,13 +1,13 @@
 //! OpenEntropy WebAssembly bindings — browser-based entropy collection.
 //!
-//! Exposes three entropy sources via `wasm-bindgen`:
+//! Exposes two entropy sources via `wasm-bindgen`:
 //!
 //! 1. **Timing jitter** — `performance.now()` micro-timing variations
 //! 2. **Crypto seed mixer** — `crypto.getRandomValues()` as an OS entropy seed
-//! 3. **Scheduling jitter** — `setTimeout(0)` / Promise.resolve() latency
 //!
-//! All sources produce raw bytes that can be SHA-256 conditioned on the JS side
-//! or consumed directly.
+//! Plus a combined SHA-256 conditioned output (`get_random_bytes`) that mixes
+//! both sources. All raw sources produce bytes that can be further conditioned
+//! on the JS side or consumed directly.
 
 use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::*;
@@ -20,14 +20,10 @@ use wasm_bindgen::prelude::*;
 fn performance_now() -> f64 {
     js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("performance"))
         .ok()
-        .and_then(|perf| {
-            js_sys::Reflect::get(&perf, &JsValue::from_str("now")).ok()
-        })
+        .and_then(|perf| js_sys::Reflect::get(&perf, &JsValue::from_str("now")).ok())
         .and_then(|func| {
             let func: js_sys::Function = func.dyn_into().ok()?;
-            func.call0(&js_sys::global().into())
-                .ok()?
-                .as_f64()
+            func.call0(&js_sys::global().into()).ok()?.as_f64()
         })
         .unwrap_or(0.0)
 }
@@ -35,16 +31,14 @@ fn performance_now() -> f64 {
 /// Fill a buffer with `crypto.getRandomValues()`.
 fn crypto_get_random(buf: &mut [u8]) -> bool {
     let global = js_sys::global();
-    let crypto = js_sys::Reflect::get(&global, &JsValue::from_str("crypto"))
-        .ok();
+    let crypto = js_sys::Reflect::get(&global, &JsValue::from_str("crypto")).ok();
     let crypto = match crypto {
         Some(c) if !c.is_undefined() => c,
         _ => return false,
     };
 
     let array = js_sys::Uint8Array::new_with_length(buf.len() as u32);
-    let func = js_sys::Reflect::get(&crypto, &JsValue::from_str("getRandomValues"))
-        .ok();
+    let func = js_sys::Reflect::get(&crypto, &JsValue::from_str("getRandomValues")).ok();
     let func = match func {
         Some(f) => match f.dyn_into::<js_sys::Function>() {
             Ok(f) => f,
@@ -107,10 +101,7 @@ pub fn collect_timing_jitter(n_bytes: usize) -> Vec<u8> {
     }
 
     // Compute deltas
-    let deltas: Vec<f64> = timings
-        .windows(2)
-        .map(|w| w[1] - w[0])
-        .collect();
+    let deltas: Vec<f64> = timings.windows(2).map(|w| w[1] - w[0]).collect();
 
     // XOR consecutive deltas and fold
     let mut raw = Vec::with_capacity(n_bytes);
@@ -165,12 +156,11 @@ pub fn get_random_bytes(n_bytes: usize) -> Vec<u8> {
     let crypto = collect_crypto_random(32);
 
     // Initial state from crypto source
-    let mut state = {
+    let mut state: [u8; 32] = {
         let mut h = Sha256::new();
         h.update(&crypto);
         h.update(performance_now().to_le_bytes());
-        let d: [u8; 32] = h.finalize().into();
-        d
+        h.finalize().into()
     };
 
     while output.len() < n_bytes {
@@ -219,12 +209,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn xor_fold_f64_basic() {
+    fn xor_fold_f64_zero() {
         assert_eq!(xor_fold_f64(0.0), 0);
-        // Non-zero float should produce non-trivial fold
+    }
+
+    #[test]
+    fn xor_fold_f64_one() {
         let v = xor_fold_f64(1.0);
         // 1.0 as f64 = 0x3FF0000000000000
         // bytes: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F]
-        assert_eq!(v, 0x00 ^ 0x00 ^ 0x00 ^ 0x00 ^ 0x00 ^ 0x00 ^ 0xF0 ^ 0x3F);
+        assert_eq!(v, 0xF0 ^ 0x3F);
+    }
+
+    #[test]
+    fn xor_fold_f64_negative_zero() {
+        // -0.0 as f64 = 0x8000000000000000
+        // bytes: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80]
+        assert_eq!(xor_fold_f64(-0.0), 0x80);
+    }
+
+    #[test]
+    fn xor_fold_f64_nan() {
+        let v = xor_fold_f64(f64::NAN);
+        // NaN has non-zero bits, so fold should be non-trivial
+        // (exact value depends on NaN representation, just check it runs)
+        let _ = v;
+    }
+
+    #[test]
+    fn xor_fold_f64_infinity() {
+        let v = xor_fold_f64(f64::INFINITY);
+        // INFINITY = 0x7FF0000000000000
+        // bytes: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]
+        assert_eq!(v, 0xF0 ^ 0x7F);
     }
 }

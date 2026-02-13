@@ -362,8 +362,11 @@ impl EntropyPool {
 
 /// Fill buffer with OS random bytes via the `getrandom` crate.
 /// Works cross-platform (Unix, Windows, WASM, etc.) without manual file I/O.
+///
+/// # Panics
+/// Panics if the OS CSPRNG fails — this indicates a fatal platform issue.
 fn getrandom(buf: &mut [u8]) {
-    let _ = getrandom::fill(buf);
+    getrandom::fill(buf).expect("OS CSPRNG failed");
 }
 
 /// Overall health report for the entropy pool.

@@ -4,8 +4,8 @@
 //! micro-architectural side-effects to extract timing entropy from
 //! compression (zlib) and hashing (SHA-256) operations.
 //!
-//! **Raw output characteristics:** LSBs of timing deltas between successive
-//! operations. Shannon entropy ~3-5 bits/byte. The timing jitter is driven
+//! **Raw output characteristics:** XOR-folded timing deltas between successive
+//! operations. Shannon entropy ~5-7 bits/byte. The timing jitter is driven
 //! by branch predictor state, cache contention, and pipeline hazards.
 //!
 //! Note: HashTimingSource uses SHA-256 as its *workload* (the thing being
@@ -20,6 +20,8 @@ use flate2::write::ZlibEncoder;
 use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
+
+use super::helpers::{extract_timing_entropy, mach_time};
 
 // ---------------------------------------------------------------------------
 // CompressionTimingSource
@@ -55,7 +57,8 @@ impl EntropySource for CompressionTimingSource {
         let raw_count = n_samples * 4 + 64;
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
-        let mut lcg: u64 = Instant::now().elapsed().as_nanos() as u64 | 1;
+        // Seed from high-resolution timer for per-call variation.
+        let mut lcg: u64 = mach_time() | 1;
 
         for i in 0..raw_count {
             // Vary data size (128-512 bytes) to create more timing diversity.
@@ -88,27 +91,7 @@ impl EntropySource for CompressionTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Compute deltas and XOR consecutive pairs
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-        let xored: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas
-        };
-
-        // XOR-fold all 8 bytes of each u64 into one byte
-        let mut raw: Vec<u8> = xored
-            .iter()
-            .map(|&x| {
-                let b = x.to_le_bytes();
-                b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
-            })
-            .collect();
-        raw.truncate(n_samples);
-        raw
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -147,7 +130,8 @@ impl EntropySource for HashTimingSource {
         let raw_count = n_samples * 4 + 64;
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
-        let mut lcg: u64 = Instant::now().elapsed().as_nanos() as u64 | 1;
+        // Seed from high-resolution timer for per-call variation.
+        let mut lcg: u64 = mach_time() | 1;
 
         for i in 0..raw_count {
             // Wider range of sizes (32-2048 bytes) to create more timing diversity.
@@ -176,27 +160,7 @@ impl EntropySource for HashTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Compute deltas and XOR consecutive pairs
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-        let xored: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas
-        };
-
-        // XOR-fold all 8 bytes of each u64 into one byte
-        let mut raw: Vec<u8> = xored
-            .iter()
-            .map(|&x| {
-                let b = x.to_le_bytes();
-                b[0] ^ b[1] ^ b[2] ^ b[3] ^ b[4] ^ b[5] ^ b[6] ^ b[7]
-            })
-            .collect();
-        raw.truncate(n_samples);
-        raw
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
