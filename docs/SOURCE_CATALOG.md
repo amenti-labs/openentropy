@@ -1,6 +1,6 @@
 # OpenEntropy — Source Catalog
 
-All 30 entropy sources, their physics, quality, and operational characteristics.
+All 35 entropy sources, their physics, quality, and operational characteristics.
 
 > **Grades are for raw (unconditioned) output.** After SHA-256 conditioning, all sources produce Grade A output. The raw grades reflect the true hardware entropy density before any whitening.
 
@@ -38,6 +38,11 @@ All 30 entropy sources, their physics, quality, and operational characteristics.
 | 28 | `dyld_timing` | Novel | A | 7.33 | 1.2s | macOS/Linux |
 | 29 | `vm_page_timing` | Novel | A | 7.85 | 0.11s | macOS/Linux |
 | 30 | `spotlight_timing` | Novel | A | 7.00 | 12.7s | macOS |
+| 31 | `amx_timing` | Frontier | B | 5.19 | 0.05s | macOS (Apple Silicon) |
+| 32 | `thread_lifecycle` | Frontier | A | 6.79 | 0.08s | All |
+| 33 | `mach_ipc` | Frontier | B | 4.92 | 0.04s | macOS |
+| 34 | `tlb_shootdown` | Frontier | A | 6.46 | 0.03s | All |
+| 35 | `pipe_buffer` | Frontier | C | 3.22 | 0.01s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -218,13 +223,45 @@ All 30 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 12.7s (spawns mdls process per query)
 - **Platform:** macOS
 
+### Frontier Sources
+
+#### 31. `amx_timing` — Apple Matrix eXtensions coprocessor dispatch jitter
+- **Physics:** Dispatches SGEMM (single-precision matrix multiply) operations to the AMX coprocessor via the Accelerate framework (`cblas_sgemm`) with varying matrix sizes [16,32,48,64,96,128]. The AMX is a dedicated coprocessor with its own instruction pipeline, shared across all CPU cores. Timing jitter comes from: AMX dispatch queue arbitration, memory controller bandwidth contention during matrix data transfer, thermal throttling affecting coprocessor clock frequency, and cache line eviction patterns for the matrix data. NIST: 90.3/100 (Grade A).
+- **Raw entropy:** B (5.19 bits/byte)
+- **Speed:** 50ms — very fast
+- **Platform:** macOS Apple Silicon only (requires Accelerate framework)
+
+#### 32. `thread_lifecycle` — pthread create/join cycle timing
+- **Physics:** Spawns and joins threads with variable workloads per iteration. The kernel must: allocate a thread structure from the zone allocator, assign a TID, create a kernel stack, choose a CPU core (P-core vs E-core scheduling decision), set up the Mach thread port, and reverse all of this on join. Timing captures: zone allocator fragmentation, scheduler run-queue depth, P/E core migration latency, stack page zeroing, and thread port namespace operations. Richest source by unique LSBs (89/256). NIST: 89.5/100 (Grade A).
+- **Raw entropy:** A (6.79 bits/byte)
+- **Speed:** 80ms
+- **Platform:** All (uses pthreads)
+
+#### 33. `mach_ipc` — Mach port IPC timing
+- **Physics:** Allocates and deallocates Mach ports in the kernel port namespace. Mach ports are the fundamental IPC primitive in XNU. Each allocation requires: port name space lookup/insertion (splay tree), ipc_port zone allocation, port rights management, and notification setup. Deallocation triggers reference counting and zone free. Timing captures kernel lock contention, zone allocator state, and port namespace tree rebalancing. NIST: 91.9/100 (Grade A) — highest NIST score of all frontier sources.
+- **Raw entropy:** B (4.92 bits/byte)
+- **Speed:** 40ms
+- **Platform:** macOS only
+
+#### 34. `tlb_shootdown` — TLB invalidation via mprotect
+- **Physics:** Allocates a 64-page memory region and repeatedly toggles page protection (RW→RO→RW) using `mprotect()`. Each protection change requires: updating the page table entry, then sending a TLB shootdown Inter-Processor Interrupt (IPI) to ALL cores to invalidate their cached TLB entries. The IPI latency depends on: what each remote core is currently executing, interrupt priority levels, and cross-cluster communication latency (P-core cluster ↔ E-core cluster on Apple Silicon). NIST: 87.1/100 (Grade A).
+- **Raw entropy:** A (6.46 bits/byte)
+- **Speed:** 30ms
+- **Platform:** All
+
+#### 35. `pipe_buffer` — Kernel zone allocator via pipe lifecycle
+- **Physics:** Creates a pipe (allocating from kernel pipe zone and mbuf zone), writes variable-size data (1-256 bytes) through the pipe buffer, reads it back, then closes both file descriptors (returning zone allocations). Timing captures: kernel zone allocator fragmentation and free-list state, file descriptor table operations, mbuf allocation/deallocation, and copyout/copyin kernel-user data transfer. NIST: 86.3/100 (Grade A).
+- **Raw entropy:** C (3.22 bits/byte)
+- **Speed:** 10ms — fastest frontier source
+- **Platform:** All (uses POSIX pipes)
+
 ## Grade Distribution (Raw Output)
 
 | Grade | Count | Sources |
 |-------|-------|---------|
-| A | 8 | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing |
-| B | 4 | clock_jitter, cache_contention, compression_timing, dispatch_queue |
-| C | 6 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat |
+| A | 10 | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown** |
+| B | 6 | clock_jitter, cache_contention, compression_timing, dispatch_queue, **amx_timing**, **mach_ipc** |
+| C | 7 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat, **pipe_buffer** |
 | D | 6 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter* |
 | F | 2 | mach_timing, speculative_execution |
 | N/A | 4 | audio_noise, camera_noise, wifi_noise, sensor_noise |

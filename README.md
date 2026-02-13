@@ -8,7 +8,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*Harvest real entropy from 30 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
+*Harvest real entropy from 35 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -89,7 +89,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCE_CATALOG.md) | All 30 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCE_CATALOG.md) | All 35 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -103,7 +103,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 ## Entropy Sources
 
-30 sources across 7 categories. Results from `openentropy bench` on Apple Silicon:
+35 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
 
 ### Timing (3)
 
@@ -168,6 +168,16 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `dyld_timing` | 7.967 | 1.35s | Dynamic linker dlsym() timing |
 | `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
 | `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
+
+### Frontier (5)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `amx_timing` | 5.188 | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
+| `thread_lifecycle` | 6.788 | 0.08s | pthread create/join cycle timing |
+| `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
+| `tlb_shootdown` | 6.456 | 0.03s | mprotect() TLB invalidation IPI latency |
+| `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
 
 Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
 
