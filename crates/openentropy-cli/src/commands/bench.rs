@@ -1,4 +1,5 @@
-pub fn run(source_filter: Option<&str>) {
+pub fn run(source_filter: Option<&str>, conditioning: &str) {
+    let _mode = super::parse_conditioning(conditioning);
     let pool = super::make_pool(source_filter);
     let infos = pool.source_infos();
     let count = infos.len();

@@ -1,6 +1,7 @@
 use std::time::Instant;
 
-pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>) {
+pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>, conditioning: &str) {
+    let mode = super::parse_conditioning(conditioning);
     // Use make_pool which defaults to fast sources
     let filter = source_name.or(None);
     let pool = super::make_pool(filter);
@@ -43,7 +44,8 @@ pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>)
         print!("  Collecting from {}...", info.name);
 
         let t0 = Instant::now();
-        let data = src.collect(samples);
+        let raw_data = src.collect(samples);
+        let data = openentropy_core::conditioning::condition(&raw_data, raw_data.len(), mode);
         print!(" {} bytes", data.len());
 
         if data.is_empty() {

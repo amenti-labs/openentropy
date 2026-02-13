@@ -30,6 +30,10 @@ enum Commands {
         /// Comma-separated source name filter, or "all" for every source
         #[arg(long)]
         sources: Option<String>,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
     },
 
     /// Stream entropy to stdout
@@ -117,6 +121,10 @@ enum Commands {
         /// Output path for report
         #[arg(long)]
         output: Option<String>,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
     },
 
     /// Run the entropy pool and output quality metrics
@@ -124,6 +132,10 @@ enum Commands {
         /// Comma-separated source name filter, or "all"
         #[arg(long)]
         sources: Option<String>,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
     },
 }
 
@@ -133,7 +145,7 @@ fn main() {
     match cli.command {
         Commands::Scan => commands::scan::run(),
         Commands::Probe { source_name } => commands::probe::run(&source_name),
-        Commands::Bench { sources } => commands::bench::run(sources.as_deref()),
+        Commands::Bench { sources, conditioning } => commands::bench::run(sources.as_deref(), &conditioning),
         Commands::Stream {
             format,
             rate,
@@ -160,7 +172,8 @@ fn main() {
             samples,
             source,
             output,
-        } => commands::report::run(samples, source.as_deref(), output.as_deref()),
-        Commands::Pool { sources } => commands::pool::run(sources.as_deref()),
+            conditioning,
+        } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
+        Commands::Pool { sources, conditioning } => commands::pool::run(sources.as_deref(), &conditioning),
     }
 }

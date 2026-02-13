@@ -1,14 +1,15 @@
 use openentropy_core::conditioning::quick_shannon;
 
-pub fn run(source_filter: Option<&str>) {
+pub fn run(source_filter: Option<&str>, conditioning: &str) {
+    let mode = super::parse_conditioning(conditioning);
     let pool = super::make_pool(source_filter);
-    println!("Pool created with {} sources", pool.source_count());
+    println!("Pool created with {} sources (conditioning: {conditioning})", pool.source_count());
     println!("Collecting entropy...");
 
     let raw = pool.collect_all();
     println!("Raw entropy: {} bytes", raw);
 
-    let output = pool.get_random_bytes(1024);
+    let output = pool.get_bytes(1024, mode);
     let h = quick_shannon(&output);
     println!("\nConditioned output: 1024 bytes");
     println!("  Shannon entropy: {:.4} / 8.0 bits/byte", h);
