@@ -27,8 +27,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 /// Conditioning mode for entropy output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ConditioningMode {
     /// No conditioning. Raw bytes pass through unchanged.
     Raw,
@@ -38,7 +37,6 @@ pub enum ConditioningMode {
     #[default]
     Sha256,
 }
-
 
 impl std::fmt::Display for ConditioningMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -306,9 +304,7 @@ pub fn markov_estimate(data: &[u8]) -> f64 {
     let bin_of = |b: u8| -> usize { (b as usize * bins as usize) / 256 };
 
     let mut transitions = vec![vec![0u64; bins as usize]; bins as usize];
-    let mut initial_counts = vec![0u64; bins as usize];
 
-    initial_counts[bin_of(data[0])] += 1;
     for w in data.windows(2) {
         let from = bin_of(w[0]);
         let to = bin_of(w[1]);
@@ -343,10 +339,8 @@ pub fn markov_estimate(data: &[u8]) -> f64 {
     let mut p_max = 0.0f64;
     for s in 0..bins as usize {
         p_max = p_max.max(p_init[s]);
-        for t in 0..bins as usize {
-            // Probability of seeing state s given we were in state t
-            let _p = p_init[t] * p_trans[t][s];
-            p_max = p_max.max(p_trans[t][s]);
+        for row in p_trans.iter().take(bins as usize) {
+            p_max = p_max.max(row[s]);
         }
     }
 
@@ -432,10 +426,8 @@ pub fn compression_estimate(data: &[u8]) -> f64 {
     // f_n estimates per-sample entropy. Convert to min-entropy (conservative):
     // min-entropy <= Shannon entropy, and Maurer's statistic approximates Shannon.
     // Apply a reduction factor for min-entropy approximation.
-    let h = f_lower.min(l as f64);
-
-    // Min-entropy is at most the compression estimate
-    h
+    // Min-entropy is at most the compression estimate.
+    f_lower.min(l as f64)
 }
 
 /// t-Tuple estimator — NIST SP 800-90B Section 6.3.5.
@@ -635,6 +627,10 @@ pub struct QualityReport {
 mod tests {
     use super::*;
 
+    // -----------------------------------------------------------------------
+    // Conditioning mode tests
+    // -----------------------------------------------------------------------
+
     #[test]
     fn test_condition_raw_passthrough() {
         let data = vec![1, 2, 3, 4, 5];
@@ -643,10 +639,51 @@ mod tests {
     }
 
     #[test]
+    fn test_condition_raw_exact_length() {
+        let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
+        let out = condition(&data, 100, ConditioningMode::Raw);
+        assert_eq!(out, data);
+    }
+
+    #[test]
+    fn test_condition_raw_truncates() {
+        let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
+        let out = condition(&data, 50, ConditioningMode::Raw);
+        assert_eq!(out.len(), 50);
+        assert_eq!(out, &data[..50]);
+    }
+
+    #[test]
     fn test_condition_sha256_produces_exact_length() {
         let data = vec![42u8; 100];
-        let out = condition(&data, 64, ConditioningMode::Sha256);
-        assert_eq!(out.len(), 64);
+        for len in [1, 16, 32, 64, 100, 256] {
+            let out = condition(&data, len, ConditioningMode::Sha256);
+            assert_eq!(out.len(), len, "SHA256 should produce exactly {len} bytes");
+        }
+    }
+
+    #[test]
+    fn test_sha256_deterministic() {
+        let data = vec![42u8; 100];
+        let out1 = sha256_condition_bytes(&data, 64);
+        let out2 = sha256_condition_bytes(&data, 64);
+        assert_eq!(out1, out2, "SHA256 conditioning should be deterministic for same input");
+    }
+
+    #[test]
+    fn test_sha256_different_inputs_differ() {
+        let data1 = vec![1u8; 100];
+        let data2 = vec![2u8; 100];
+        let out1 = sha256_condition_bytes(&data1, 32);
+        let out2 = sha256_condition_bytes(&data2, 32);
+        assert_ne!(out1, out2);
+    }
+
+    #[test]
+    fn test_sha256_empty_input() {
+        let out = sha256_condition_bytes(&[], 32);
+        assert_eq!(out.len(), 32);
+        assert_eq!(out, vec![0u8; 32], "Empty input should produce zero bytes");
     }
 
     #[test]
@@ -657,10 +694,425 @@ mod tests {
     }
 
     #[test]
+    fn test_von_neumann_known_output() {
+        // Input: 0b10_10_10_10 = pairs (1,0)(1,0)(1,0)(1,0)
+        // Von Neumann: (1,0) -> 1, repeated 4 times = 4 bits = 1111 per byte
+        // But we need 8 bits for one output byte.
+        // Two input bytes = 8 pairs of bits -> each (1,0) -> 1, so 8 bits -> 0b11111111
+        let input = vec![0b10101010u8; 2];
+        let output = von_neumann_debias(&input);
+        assert_eq!(output.len(), 1);
+        assert_eq!(output[0], 0b11111111);
+    }
+
+    #[test]
+    fn test_von_neumann_alternating_01() {
+        // Input: 0b01_01_01_01 = pairs (0,1)(0,1)(0,1)(0,1)
+        // Von Neumann: (0,1) -> 0, repeated 4 times per byte
+        // Two input bytes = 8 pairs -> 8 zero bits -> 0b00000000
+        let input = vec![0b01010101u8; 2];
+        let output = von_neumann_debias(&input);
+        assert_eq!(output.len(), 1);
+        assert_eq!(output[0], 0b00000000);
+    }
+
+    #[test]
+    fn test_von_neumann_all_same_discards() {
+        // Input: all 0xFF = pairs (1,1)(1,1)... -> all discarded
+        let input = vec![0xFF; 100];
+        let output = von_neumann_debias(&input);
+        assert!(output.is_empty(), "All-ones should produce no output");
+    }
+
+    #[test]
+    fn test_von_neumann_all_zeros_discards() {
+        // Input: all 0x00 = pairs (0,0)(0,0)... -> all discarded
+        let input = vec![0x00; 100];
+        let output = von_neumann_debias(&input);
+        assert!(output.is_empty(), "All-zeros should produce no output");
+    }
+
+    #[test]
     fn test_condition_modes_differ() {
         let data: Vec<u8> = (0..256).map(|i| i as u8).collect();
         let raw = condition(&data, 64, ConditioningMode::Raw);
         let sha = condition(&data, 64, ConditioningMode::Sha256);
         assert_ne!(raw, sha);
+    }
+
+    #[test]
+    fn test_conditioning_mode_display() {
+        assert_eq!(ConditioningMode::Raw.to_string(), "raw");
+        assert_eq!(ConditioningMode::VonNeumann.to_string(), "von_neumann");
+        assert_eq!(ConditioningMode::Sha256.to_string(), "sha256");
+    }
+
+    #[test]
+    fn test_conditioning_mode_default() {
+        assert_eq!(ConditioningMode::default(), ConditioningMode::Sha256);
+    }
+
+    // -----------------------------------------------------------------------
+    // XOR fold tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_xor_fold_basic() {
+        let data = vec![0xFF, 0x00, 0xAA, 0x55];
+        let folded = xor_fold(&data);
+        assert_eq!(folded.len(), 2);
+        assert_eq!(folded[0], 0xFF ^ 0xAA);
+        assert_eq!(folded[1], 0x00 ^ 0x55);
+    }
+
+    #[test]
+    fn test_xor_fold_single_byte() {
+        let data = vec![42];
+        let folded = xor_fold(&data);
+        assert_eq!(folded, vec![42]);
+    }
+
+    #[test]
+    fn test_xor_fold_empty() {
+        let folded = xor_fold(&[]);
+        assert!(folded.is_empty());
+    }
+
+    #[test]
+    fn test_xor_fold_odd_length() {
+        // With 5 bytes, half=2, so XOR data[0..2] with data[2..4]
+        let data = vec![1, 2, 3, 4, 5];
+        let folded = xor_fold(&data);
+        assert_eq!(folded.len(), 2);
+        assert_eq!(folded[0], 1 ^ 3);
+        assert_eq!(folded[1], 2 ^ 4);
+    }
+
+    // -----------------------------------------------------------------------
+    // Shannon entropy tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_shannon_empty() {
+        assert_eq!(quick_shannon(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_shannon_single_byte() {
+        // One byte = one value, p=1.0, H = -1.0 * log2(1.0) = 0.0
+        assert_eq!(quick_shannon(&[42]), 0.0);
+    }
+
+    #[test]
+    fn test_shannon_all_same() {
+        let data = vec![0u8; 1000];
+        assert_eq!(quick_shannon(&data), 0.0);
+    }
+
+    #[test]
+    fn test_shannon_two_values_equal() {
+        // 50/50 split between two values = 1.0 bits
+        let mut data = vec![0u8; 500];
+        data.extend(vec![1u8; 500]);
+        let h = quick_shannon(&data);
+        assert!((h - 1.0).abs() < 0.01, "Expected ~1.0, got {h}");
+    }
+
+    #[test]
+    fn test_shannon_uniform_256() {
+        // Perfectly uniform over 256 values = 8.0 bits
+        let data: Vec<u8> = (0..=255).collect();
+        let h = quick_shannon(&data);
+        assert!((h - 8.0).abs() < 0.01, "Expected ~8.0, got {h}");
+    }
+
+    #[test]
+    fn test_shannon_uniform_large() {
+        // Large uniform sample — each value appears ~40 times
+        let mut data = Vec::with_capacity(256 * 40);
+        for _ in 0..40 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let h = quick_shannon(&data);
+        assert!((h - 8.0).abs() < 0.01, "Expected ~8.0, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Min-entropy estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_min_entropy_empty() {
+        assert_eq!(min_entropy(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_min_entropy_all_same() {
+        let data = vec![42u8; 1000];
+        let h = min_entropy(&data);
+        assert!(h < 0.01, "All-same should have ~0 min-entropy, got {h}");
+    }
+
+    #[test]
+    fn test_min_entropy_uniform() {
+        let mut data = Vec::with_capacity(256 * 40);
+        for _ in 0..40 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let h = min_entropy(&data);
+        assert!((h - 8.0).abs() < 0.1, "Uniform should have ~8.0 min-entropy, got {h}");
+    }
+
+    #[test]
+    fn test_min_entropy_two_values() {
+        let mut data = vec![0u8; 500];
+        data.extend(vec![1u8; 500]);
+        let h = min_entropy(&data);
+        // p_max = 0.5, H∞ = -log2(0.5) = 1.0
+        assert!((h - 1.0).abs() < 0.01, "Expected ~1.0, got {h}");
+    }
+
+    #[test]
+    fn test_min_entropy_biased() {
+        // 90% value 0, 10% value 1: p_max=0.9, H∞ = -log2(0.9) ≈ 0.152
+        let mut data = vec![0u8; 900];
+        data.extend(vec![1u8; 100]);
+        let h = min_entropy(&data);
+        let expected = -(0.9f64.log2());
+        assert!((h - expected).abs() < 0.02, "Expected ~{expected:.3}, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // MCV estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_mcv_empty() {
+        let (h, p) = mcv_estimate(&[]);
+        assert_eq!(h, 0.0);
+        assert_eq!(p, 1.0);
+    }
+
+    #[test]
+    fn test_mcv_all_same() {
+        let data = vec![42u8; 1000];
+        let (h, p_upper) = mcv_estimate(&data);
+        assert!(h < 0.1, "All-same should have ~0 MCV entropy, got {h}");
+        assert!((p_upper - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_mcv_uniform() {
+        let mut data = Vec::with_capacity(256 * 100);
+        for _ in 0..100 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let (h, _p_upper) = mcv_estimate(&data);
+        assert!(h > 7.0, "Uniform should have high MCV entropy, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Collision estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_collision_too_short() {
+        assert_eq!(collision_estimate(&[1, 2]), 0.0);
+    }
+
+    #[test]
+    fn test_collision_all_same() {
+        let data = vec![0u8; 1000];
+        let h = collision_estimate(&data);
+        // All same -> every adjacent pair is a collision -> mean distance = 1
+        // -> p_max = 1.0 -> H = 0
+        assert!(h < 1.0, "All-same should have very low collision entropy, got {h}");
+    }
+
+    #[test]
+    fn test_collision_uniform_large() {
+        let mut data = Vec::with_capacity(256 * 100);
+        for _ in 0..100 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let h = collision_estimate(&data);
+        assert!(h > 3.0, "Uniform should have reasonable collision entropy, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Markov estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_markov_too_short() {
+        assert_eq!(markov_estimate(&[42]), 0.0);
+    }
+
+    #[test]
+    fn test_markov_all_same() {
+        let data = vec![0u8; 1000];
+        let h = markov_estimate(&data);
+        assert!(h < 1.0, "All-same should have low Markov entropy, got {h}");
+    }
+
+    #[test]
+    fn test_markov_uniform_large() {
+        // Markov estimator bins into 16 levels and finds max transition probability.
+        // Even good pseudo-random data will show some transition bias due to binning
+        // and finite sample size. We just verify it's meaningfully above the all-same
+        // baseline (~0) while accepting the conservative nature of this estimator.
+        let mut data = Vec::with_capacity(256 * 100);
+        for i in 0..(256 * 100) {
+            let v = ((i as u64).wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407) >> 56) as u8;
+            data.push(v);
+        }
+        let h = markov_estimate(&data);
+        assert!(h > 0.5, "Pseudo-random should have Markov entropy > 0.5, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Compression estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_compression_too_short() {
+        assert_eq!(compression_estimate(&[1; 50]), 0.0);
+    }
+
+    #[test]
+    fn test_compression_all_same() {
+        let data = vec![0u8; 1000];
+        let h = compression_estimate(&data);
+        assert!(h < 2.0, "All-same should have low compression entropy, got {h}");
+    }
+
+    #[test]
+    fn test_compression_uniform_large() {
+        let mut data = Vec::with_capacity(256 * 100);
+        for _ in 0..100 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let h = compression_estimate(&data);
+        assert!(h > 4.0, "Uniform should have reasonable compression entropy, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // t-Tuple estimator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_t_tuple_too_short() {
+        assert_eq!(t_tuple_estimate(&[1; 10]), 0.0);
+    }
+
+    #[test]
+    fn test_t_tuple_all_same() {
+        let data = vec![0u8; 1000];
+        let h = t_tuple_estimate(&data);
+        assert!(h < 0.1, "All-same should have ~0 t-tuple entropy, got {h}");
+    }
+
+    #[test]
+    fn test_t_tuple_uniform_large() {
+        // t-Tuple estimator finds the most frequent t-length tuple and computes
+        // -log2(p_max)/t. For t>1, pseudo-random data with sequential correlation
+        // may show elevated tuple frequencies. We verify the result is well above
+        // the all-same baseline (~0).
+        let mut data = Vec::with_capacity(256 * 100);
+        for i in 0..(256 * 100) {
+            let v = ((i as u64).wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407) >> 56) as u8;
+            data.push(v);
+        }
+        let h = t_tuple_estimate(&data);
+        assert!(h > 2.5, "Pseudo-random should have t-tuple entropy > 2.5, got {h}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Combined min-entropy report tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_min_entropy_estimate_all_same() {
+        let data = vec![0u8; 1000];
+        let report = min_entropy_estimate(&data);
+        assert!(report.min_entropy < 1.0, "All-same combined estimate: {}", report.min_entropy);
+        assert!(report.shannon_entropy < 0.01);
+        assert_eq!(report.samples, 1000);
+    }
+
+    #[test]
+    fn test_min_entropy_estimate_uniform() {
+        // Combined estimate takes the minimum across all estimators, so it will
+        // be limited by the most conservative one (often Markov). We verify it's
+        // meaningfully above the all-same baseline and Shannon is near maximum.
+        let mut data = Vec::with_capacity(256 * 100);
+        for i in 0..(256 * 100) {
+            let v = ((i as u64).wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407) >> 56) as u8;
+            data.push(v);
+        }
+        let report = min_entropy_estimate(&data);
+        assert!(report.min_entropy > 0.5, "Combined estimate should be > 0.5: {}", report.min_entropy);
+        assert!(report.shannon_entropy > 7.9, "Shannon should be near 8.0 for uniform marginals: {}", report.shannon_entropy);
+    }
+
+    #[test]
+    fn test_min_entropy_report_display() {
+        let data = vec![0u8; 1000];
+        let report = min_entropy_estimate(&data);
+        let s = format!("{report}");
+        assert!(s.contains("Min-Entropy Analysis"));
+        assert!(s.contains("1000 samples"));
+    }
+
+    #[test]
+    fn test_quick_min_entropy_matches_report() {
+        let data: Vec<u8> = (0..=255).collect();
+        let quick = quick_min_entropy(&data);
+        let report = min_entropy_estimate(&data);
+        assert!((quick - report.min_entropy).abs() < f64::EPSILON);
+    }
+
+    // -----------------------------------------------------------------------
+    // Quality report tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_quality_too_short() {
+        let q = quick_quality(&[1, 2, 3]);
+        assert_eq!(q.grade, 'F');
+        assert_eq!(q.quality_score, 0.0);
+    }
+
+    #[test]
+    fn test_quality_all_same() {
+        let data = vec![0u8; 1000];
+        let q = quick_quality(&data);
+        assert!(q.grade == 'F' || q.grade == 'D', "All-same should grade poorly, got {}", q.grade);
+        assert_eq!(q.unique_values, 1);
+        assert!(q.shannon_entropy < 0.01);
+    }
+
+    #[test]
+    fn test_quality_uniform() {
+        let mut data = Vec::with_capacity(256 * 40);
+        for _ in 0..40 {
+            for b in 0..=255u8 {
+                data.push(b);
+            }
+        }
+        let q = quick_quality(&data);
+        assert!(q.grade == 'A' || q.grade == 'B', "Uniform should grade well, got {}", q.grade);
+        assert_eq!(q.unique_values, 256);
+        assert!(q.shannon_entropy > 7.9);
     }
 }

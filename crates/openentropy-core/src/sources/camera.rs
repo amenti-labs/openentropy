@@ -4,9 +4,9 @@
 //! as raw grayscale video, then extracts the lower 4 bits of each pixel value.
 //! In darkness, these LSBs are dominated by shot noise and dark current.
 
-use std::process::Command;
-
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
+
+use super::helpers::{command_exists, pack_nibbles};
 
 static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
     name: "camera_noise",
@@ -24,17 +24,6 @@ static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
 /// Entropy source that harvests sensor noise from camera dark frames.
 pub struct CameraNoiseSource;
 
-/// Check if a command exists by running `which`.
-fn command_exists(name: &str) -> bool {
-    Command::new("which")
-        .arg(name)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
 impl EntropySource for CameraNoiseSource {
     fn info(&self) -> &SourceInfo {
         &CAMERA_NOISE_INFO
@@ -47,7 +36,7 @@ impl EntropySource for CameraNoiseSource {
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         // Capture one frame of raw grayscale video from the default camera.
         // ffmpeg -f avfoundation -i "0" -frames:v 1 -f rawvideo -pix_fmt gray pipe:1
-        let result = Command::new("ffmpeg")
+        let result = std::process::Command::new("ffmpeg")
             .args([
                 "-f",
                 "avfoundation",
@@ -71,37 +60,9 @@ impl EntropySource for CameraNoiseSource {
             _ => return Vec::new(),
         };
 
-        // Extract the lower 4 bits of each pixel value.
-        // Pack two 4-bit nibbles into one byte for efficient output.
-        let mut output = Vec::with_capacity(n_samples);
-        let mut nibble_buf: u8 = 0;
-        let mut nibble_count: u8 = 0;
-
-        for &pixel in &raw_frame {
-            // Lower 4 bits contain noise-dominated LSBs.
-            let noise_nibble = pixel & 0x0F;
-
-            if nibble_count == 0 {
-                nibble_buf = noise_nibble << 4;
-                nibble_count = 1;
-            } else {
-                nibble_buf |= noise_nibble;
-                output.push(nibble_buf);
-                nibble_count = 0;
-
-                if output.len() >= n_samples {
-                    break;
-                }
-            }
-        }
-
-        // If we have an odd nibble left and still need more, include it.
-        if nibble_count == 1 && output.len() < n_samples {
-            output.push(nibble_buf);
-        }
-
-        output.truncate(n_samples);
-        output
+        // Extract the lower 4 bits of each pixel value and pack nibbles.
+        let nibbles = raw_frame.iter().map(|pixel| pixel & 0x0F);
+        pack_nibbles(nibbles, n_samples)
     }
 }
 

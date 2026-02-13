@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 /// Category of entropy source, used for classification and filtering.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SourceCategory {
     Timing,
     System,

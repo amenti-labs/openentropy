@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
+use super::helpers::extract_delta_bytes_i64;
+
 /// Path to the sysctl binary on macOS.
 const SYSCTL_PATH: &str = "/usr/sbin/sysctl";
 
@@ -110,37 +112,6 @@ impl EntropySource for SysctlSource {
             }
         }
 
-        // If we have at least two deltas, XOR consecutive pairs for extra mixing
-        let xor_deltas: Vec<i64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas.clone()
-        };
-
-        // Extract raw bytes from all deltas
-        let mut entropy = Vec::with_capacity(n_samples);
-        for d in &deltas {
-            let bytes = d.to_le_bytes();
-            for &b in &bytes {
-                entropy.push(b);
-            }
-            if entropy.len() >= n_samples {
-                break;
-            }
-        }
-        if entropy.len() < n_samples {
-            for d in &xor_deltas {
-                let bytes = d.to_le_bytes();
-                for &b in &bytes {
-                    entropy.push(b);
-                }
-                if entropy.len() >= n_samples {
-                    break;
-                }
-            }
-        }
-
-        entropy.truncate(n_samples);
-        entropy
+        extract_delta_bytes_i64(&deltas, n_samples)
     }
 }

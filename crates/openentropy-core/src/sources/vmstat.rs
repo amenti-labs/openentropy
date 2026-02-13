@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
+use super::helpers::extract_delta_bytes_i64;
+
 /// Delay between consecutive vm_stat snapshots.
 const SNAPSHOT_DELAY: Duration = Duration::from_millis(50);
 
@@ -147,37 +149,6 @@ impl EntropySource for VmstatSource {
             }
         }
 
-        // XOR consecutive deltas for extra mixing
-        let xor_deltas: Vec<i64> = if all_deltas.len() >= 2 {
-            all_deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            all_deltas.clone()
-        };
-
-        // Extract raw bytes from all deltas
-        let mut entropy = Vec::with_capacity(n_samples);
-        for d in &all_deltas {
-            let bytes = d.to_le_bytes();
-            for &b in &bytes {
-                entropy.push(b);
-            }
-            if entropy.len() >= n_samples {
-                break;
-            }
-        }
-        if entropy.len() < n_samples {
-            for d in &xor_deltas {
-                let bytes = d.to_le_bytes();
-                for &b in &bytes {
-                    entropy.push(b);
-                }
-                if entropy.len() >= n_samples {
-                    break;
-                }
-            }
-        }
-
-        entropy.truncate(n_samples);
-        entropy
+        extract_delta_bytes_i64(&all_deltas, n_samples)
     }
 }

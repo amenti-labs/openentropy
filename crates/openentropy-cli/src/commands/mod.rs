@@ -74,3 +74,98 @@ pub fn parse_conditioning(s: &str) -> ConditioningMode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // parse_conditioning tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_raw() {
+        assert_eq!(parse_conditioning("raw"), ConditioningMode::Raw);
+    }
+
+    #[test]
+    fn test_parse_vonneumann_variants() {
+        assert_eq!(parse_conditioning("vonneumann"), ConditioningMode::VonNeumann);
+        assert_eq!(parse_conditioning("von_neumann"), ConditioningMode::VonNeumann);
+        assert_eq!(parse_conditioning("vn"), ConditioningMode::VonNeumann);
+    }
+
+    #[test]
+    fn test_parse_sha256_variants() {
+        assert_eq!(parse_conditioning("sha256"), ConditioningMode::Sha256);
+        assert_eq!(parse_conditioning("sha"), ConditioningMode::Sha256);
+    }
+
+    #[test]
+    fn test_parse_unknown_defaults_sha256() {
+        assert_eq!(parse_conditioning("unknown"), ConditioningMode::Sha256);
+        assert_eq!(parse_conditioning(""), ConditioningMode::Sha256);
+        assert_eq!(parse_conditioning("RAW"), ConditioningMode::Sha256); // case-sensitive
+    }
+
+    // -----------------------------------------------------------------------
+    // FAST_SOURCES constant tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_fast_sources_not_empty() {
+        assert!(!FAST_SOURCES.is_empty());
+    }
+
+    #[test]
+    fn test_fast_sources_contains_expected() {
+        assert!(FAST_SOURCES.contains(&"clock_jitter"));
+        assert!(FAST_SOURCES.contains(&"mach_timing"));
+        assert!(FAST_SOURCES.contains(&"sleep_jitter"));
+        assert!(FAST_SOURCES.contains(&"disk_io"));
+    }
+
+    #[test]
+    fn test_fast_sources_excludes_slow() {
+        // These slow sources should not be in the fast list
+        assert!(!FAST_SOURCES.contains(&"audio_noise"));
+        assert!(!FAST_SOURCES.contains(&"camera_noise"));
+        assert!(!FAST_SOURCES.contains(&"bluetooth_rssi"));
+        assert!(!FAST_SOURCES.contains(&"wifi_rssi"));
+    }
+
+    // -----------------------------------------------------------------------
+    // make_pool tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_make_pool_default_has_sources() {
+        // Default pool should include fast sources (on macOS at least some will be available)
+        let pool = make_pool(None);
+        // On any supported platform, at least the timing sources should work
+        assert!(pool.source_count() > 0, "Default pool should have at least one source");
+    }
+
+    #[test]
+    fn test_make_pool_all_sources() {
+        let pool = make_pool(Some("all"));
+        // "all" should include everything available
+        assert!(pool.source_count() > 0);
+    }
+
+    #[test]
+    fn test_make_pool_filter_by_name() {
+        let pool = make_pool(Some("clock_jitter"));
+        // Should find the clock_jitter source if available on this platform
+        // (may be 0 on non-macOS, but the function handles that gracefully)
+        // Just verify it doesn't panic
+        let _ = pool.source_count();
+    }
+
+    #[test]
+    fn test_make_pool_filter_comma_separated() {
+        let pool = make_pool(Some("clock_jitter,sleep_jitter"));
+        // Should accept comma-separated names without panicking
+        let _ = pool.source_count();
+    }
+}

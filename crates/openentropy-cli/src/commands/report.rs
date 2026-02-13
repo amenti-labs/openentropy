@@ -3,8 +3,7 @@ use std::time::Instant;
 pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>, conditioning: &str) {
     let mode = super::parse_conditioning(conditioning);
     // Use make_pool which defaults to fast sources
-    let filter = source_name.or(None);
-    let pool = super::make_pool(filter);
+    let pool = super::make_pool(source_name);
     let infos = pool.source_infos();
 
     // Get sources from platform detection, filtered same way
@@ -90,14 +89,15 @@ pub fn run(samples: usize, source_name: Option<&str>, output_path: Option<&str>,
     );
     println!("{}", "-".repeat(60));
 
-    let mut sorted = all_results.clone();
-    sorted.sort_by(|a, b| {
-        let sa = openentropy_tests::calculate_quality_score(&a.2);
-        let sb = openentropy_tests::calculate_quality_score(&b.2);
+    let mut sorted_indices: Vec<usize> = (0..all_results.len()).collect();
+    sorted_indices.sort_by(|&a, &b| {
+        let sa = openentropy_tests::calculate_quality_score(&all_results[a].2);
+        let sb = openentropy_tests::calculate_quality_score(&all_results[b].2);
         sb.partial_cmp(&sa).unwrap()
     });
 
-    for (name, _, results) in &sorted {
+    for &idx in &sorted_indices {
+        let (ref name, _, ref results) = all_results[idx];
         let score = openentropy_tests::calculate_quality_score(results);
         let grade = if score >= 80.0 {
             'A'

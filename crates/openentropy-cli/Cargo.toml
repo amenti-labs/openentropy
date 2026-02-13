@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "CLI for openentropy — your computer is a quantum noise observatory"
+description = "CLI for openentropy — your computer is a hardware noise observatory"
 
 [[bin]]
 name = "openentropy"
