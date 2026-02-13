@@ -236,9 +236,9 @@
 **Platform:** Requires camera (built-in or USB)
 **Estimated Rate:** ~2000 b/s
 
-**Physics:** Image sensor dark current -- thermally generated electron-hole pairs in silicon photodiodes. At the quantum level, each pixel independently generates charge carriers through thermal excitation across the silicon bandgap. The process is fundamentally quantum mechanical (Poisson-distributed photon/electron events).
+**Physics:** Image sensor dark current -- thermally generated electron-hole pairs in silicon photodiodes. At the physical level, each pixel independently generates charge carriers through thermal excitation across the silicon bandgap. The process is fundamentally stochastic (Poisson-distributed photon/electron events).
 
-**Implementation:** Captures frames via `ffmpeg` with the lens covered or in darkness. Pixel-to-pixel variation in dark frames is genuine quantum noise.
+**Implementation:** Captures frames via `ffmpeg` with the lens covered or in darkness. Pixel-to-pixel variation in dark frames is genuine thermal noise.
 
 **Benchmark (raw):** Shannon entropy H=1.976 (4 unique values), but 921,600 samples per frame. Low per-sample entropy compensated by massive parallelism.
 

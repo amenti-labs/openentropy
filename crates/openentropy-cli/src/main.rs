@@ -1,4 +1,4 @@
-//! CLI for openentropy — your computer is a quantum noise observatory.
+//! CLI for openentropy — your computer is a hardware noise observatory.
 
 mod commands;
 mod tui;
@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "openentropy")]
-#[command(about = "🔬 openentropy — your computer is a quantum noise observatory")]
+#[command(about = "🔬 openentropy — your computer is a hardware noise observatory")]
 #[command(version = openentropy_core::VERSION)]
 struct Cli {
     #[command(subcommand)]

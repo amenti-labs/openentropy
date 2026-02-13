@@ -51,7 +51,7 @@ Raw mode returns XOR-combined source bytes with **no conditioning at all** — n
 - **Transparency** — users can verify what the hardware actually produces
 - **Research** — entropy researchers need unconditioned samples for statistical analysis
 - **NIST compliance** — SP 800-90B requires testing the noise source *before* conditioning
-- **Differentiation** — most QRNG APIs (ANU, Outshift) only expose post-DRBG output; you can never see the raw quantum/hardware signal
+- **Differentiation** — most hardware RNG APIs (ANU, Outshift) only expose post-DRBG output; you can never see the raw raw hardware signal
 
 **Raw mode access:**
 
@@ -103,7 +103,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 
 ### The DRBG Problem
 
-Most "quantum random number" APIs don't actually give you quantum randomness. They give you the output of a DRBG (Deterministic Random Bit Generator) that was *seeded* with quantum entropy. The DRBG's output is computationally indistinguishable from the quantum input — but it's not the quantum signal itself.
+Most "hardware random number" APIs don't actually give you hardware randomness. They give you the output of a DRBG (Deterministic Random Bit Generator) that was *seeded* with hardware entropy. The DRBG's output is computationally indistinguishable from the hardware input — but it's not the raw signal itself.
 
 OpenEntropy's raw mode is the equivalent of tapping the wire *before* the DRBG. You get the actual hardware signal with all its imperfections, correlations, and physical characteristics intact.
 

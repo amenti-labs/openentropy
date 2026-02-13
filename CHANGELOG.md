@@ -12,7 +12,7 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 - **31 NIST SP 800-22 statistical tests** in a dedicated test suite crate
 - **CLI with 9 commands**: `scan`, `probe`, `bench`, `stream`, `device`, `server`, `monitor`, `report`, `pool`
 - **Interactive TUI monitor** built with ratatui — live charts, source toggling, RNG display
-- **HTTP server** (axum) with ANU QRNG API compatibility for quantum-llama.cpp integration
+- **HTTP server** (axum) with ANU-compatible API compatibility for quantum-llama.cpp integration
 - **PyO3 Python bindings** via maturin for seamless Python interop
 - **Zero clippy warnings**, cargo fmt clean across the entire workspace
 - **24/27 available sources achieve Grade A** entropy quality
@@ -38,9 +38,9 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 ### New Features
 - **`stream` command** — Continuous entropy output to stdout with rate limiting and format options (raw/hex/base64)
 - **`device` command** — Named pipe (FIFO) entropy feeder for ollama-auxrng integration
-- **`server` command** — HTTP entropy server with ANU QRNG-compatible API for quantum-llama.cpp
-- **NumPy Generator interface** — `EsotericRandom()` returns a `numpy.random.Generator` backed by hardware entropy
-- **EsotericBitGenerator** — NumPy `BitGenerator` subclass for low-level integration
+- **`server` command** — HTTP entropy server with ANU-compatible API for quantum-llama.cpp
+- **NumPy Generator interface** — `OpenEntropyRandom()` returns a `numpy.random.Generator` backed by hardware entropy
+- **OpenEntropyBitGenerator** — NumPy `BitGenerator` subclass for low-level integration
 
 ### Sources (30 total)
 - Added 15 new sources since v0.1.0:

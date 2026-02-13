@@ -2,7 +2,7 @@
 
 # openentropy
 
-**Your computer is a quantum noise observatory.**
+**Your computer is a hardware noise observatory.**
 
 [![Crates.io](https://img.shields.io/crates/v/openentropy.svg)](https://crates.io/crates/openentropy)
 [![docs.rs](https://img.shields.io/docsrs/openentropy-core)](https://docs.rs/openentropy-core)
@@ -18,6 +18,31 @@
 **By [Amenti Labs](https://github.com/amenti-labs)**
 
 </div>
+
+---
+
+## 📖 Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Source Catalog](docs/SOURCE_CATALOG.md) | All 30 entropy sources with physics explanations |
+| [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
+| [API Reference](docs/API.md) | HTTP server API (ANU-compatible format) |
+| [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
+| [Ollama Integration](docs/OLLAMA_INTEGRATION.md) | Feed hardware entropy to LLMs |
+| [Python SDK](docs/PYTHON_SDK.md) | PyO3 bindings and NumPy integration |
+
+---
+
+## Quick Install
+
+```bash
+# One-liner install (macOS)
+curl -sSf https://raw.githubusercontent.com/amenti-labs/openentropy/master/install.sh | sh
+
+# Or via Cargo
+cargo install --git https://github.com/amenti-labs/openentropy openentropy-cli
+```
 
 ---
 
@@ -67,7 +92,7 @@ print(f"{len(data)} random bytes from hardware entropy")
 
 ## What Makes This Different
 
-Most random number generators are **pseudorandom** -- deterministic algorithms seeded once. Esoteric-entropy is different. It continuously harvests **real physical noise** from your computer's hardware:
+Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy is different. It continuously harvests **real physical noise** from your computer's hardware:
 
 - **Timing jitter** from clock phase noise, scheduling nondeterminism, and nanosleep drift
 - **Silicon microarchitecture** effects: DRAM row buffer conflicts, CPU cache contention, speculative execution variance, page fault latency
@@ -77,7 +102,7 @@ Most random number generators are **pseudorandom** -- deterministic algorithms s
 
 Every source exploits a different physical phenomenon. The pool XOR-combines independent streams and optionally applies SHA-256 conditioning (NIST SP 800-90B) to produce cryptographic-quality output. No single source failure can compromise the pool.
 
-**Crucially, openentropy supports raw (unconditioned) output.** Most QRNG APIs (ANU, Outshift, etc.) apply DRBG post-processing that destroys the raw noise signal. We preserve it. Use `--unconditioned` on the CLI or `?raw=true` on the HTTP API to get XOR-combined source bytes with zero whitening — ideal for researchers studying the actual hardware noise characteristics. See [docs/CONDITIONING.md](docs/CONDITIONING.md) for the full architecture.
+**Crucially, openentropy supports raw (unconditioned) output.** Most hardware RNG APIs (ANU, Outshift, etc.) apply DRBG post-processing that destroys the raw noise signal. We preserve it. Use `--unconditioned` on the CLI or `?raw=true` on the HTTP API to get XOR-combined source bytes with zero whitening — ideal for researchers studying the actual hardware noise characteristics. See [docs/CONDITIONING.md](docs/CONDITIONING.md) for the full architecture.
 
 ---
 
@@ -348,10 +373,10 @@ Feed hardware entropy into LLM inference via a named pipe:
 
 ```bash
 # Terminal 1: Start entropy device
-openentropy device /tmp/esoteric-rng
+openentropy device /tmp/openentropy-rng
 
 # Terminal 2: Run Ollama with hardware entropy
-OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+OLLAMA_AUXRNG_DEV=/tmp/openentropy-rng ollama run llama3
 ```
 
 Or via HTTP with quantum-llama.cpp:
@@ -368,7 +393,7 @@ openentropy server --port 8080
 
 ## Architecture
 
-Esoteric-entropy is a Rust workspace with 5 crates:
+OpenEntropy is a Rust workspace with 5 crates:
 
 | Crate | Description |
 |-------|-------------|
@@ -473,6 +498,16 @@ To build a distributable wheel:
 maturin build --release
 # Output in target/wheels/
 ```
+
+---
+
+## Documentation
+
+- [**Examples**](examples/) — Rust and Python code examples
+- [**Integrations**](docs/INTEGRATIONS.md) — ollama-auxrng, quantum-llama.cpp, generic piping
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md) — common issues and fixes
+- [**Security**](SECURITY.md) — threat model, responsible disclosure, conditioning modes
+- [**Conditioning**](docs/CONDITIONING.md) — entropy conditioning architecture
 
 ---
 

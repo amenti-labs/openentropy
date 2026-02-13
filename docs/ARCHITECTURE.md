@@ -103,7 +103,7 @@ The command-line binary (`openentropy`). Provides nine subcommands for interacti
 
 ### 3. openentropy-server
 
-An HTTP entropy server built on axum. Implements an API compatible with the ANU Quantum Random Number Generator format, allowing any QRNG client to consume hardware entropy over HTTP.
+An HTTP entropy server built on axum. Implements an API compatible with the ANU QRNG format, allowing any QRNG client to consume hardware entropy over HTTP.
 
 **Key dependencies:** `openentropy-core`, `axum`, `tokio`, `serde`, `serde_json`
 
@@ -184,7 +184,7 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
                  │                                       │
                  ▼                                       ▼
          NumPy Generator                         ANU QRNG API
-         EsotericBitGenerator                    /api/v1/random
+         OpenEntropyBitGenerator                    /api/v1/random
 ```
 
 ## Key Traits and Types

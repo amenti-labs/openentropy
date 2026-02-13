@@ -24,22 +24,22 @@ The `device` command creates a FIFO (named pipe) that acts as a character device
 
 ```bash
 # Terminal 1: Start the entropy device (runs in foreground)
-openentropy device /tmp/esoteric-rng
+openentropy device /tmp/openentropy-rng
 
 # Terminal 2: Run Ollama with the external RNG
-OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+OLLAMA_AUXRNG_DEV=/tmp/openentropy-rng ollama run llama3
 ```
 
 Or run the device in the background:
 
 ```bash
-openentropy device /tmp/esoteric-rng &
-OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
+openentropy device /tmp/openentropy-rng &
+OLLAMA_AUXRNG_DEV=/tmp/openentropy-rng ollama run llama3
 ```
 
 ### How It Works
 
-1. `openentropy device` creates a FIFO at the given path (e.g., `/tmp/esoteric-rng`)
+1. `openentropy device` creates a FIFO at the given path (e.g., `/tmp/openentropy-rng`)
 2. The CLI continuously collects entropy from all available sources and feeds conditioned bytes into the pipe
 3. When ollama-auxrng needs random numbers for token sampling, it reads from the pipe instead of `math/rand`
 4. The LLM's temperature-based softmax sampling uses hardware entropy for token selection
@@ -48,27 +48,27 @@ OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
 
 ```bash
 # Custom buffer size (default: 4096 bytes)
-openentropy device /tmp/esoteric-rng --buffer-size 8192
+openentropy device /tmp/openentropy-rng --buffer-size 8192
 
 # Filter to specific source categories for faster collection
-openentropy device /tmp/esoteric-rng --sources timing,silicon
+openentropy device /tmp/openentropy-rng --sources timing,silicon
 
 # Use only cross-platform sources (for Linux)
-openentropy device /tmp/esoteric-rng --sources timing,network,disk
+openentropy device /tmp/openentropy-rng --sources timing,network,disk
 ```
 
 ### Verifying the Device
 
 ```bash
 # Check that the FIFO exists
-ls -la /tmp/esoteric-rng
-# prw-r--r-- 1 user group 0 ... /tmp/esoteric-rng
+ls -la /tmp/openentropy-rng
+# prw-r--r-- 1 user group 0 ... /tmp/openentropy-rng
 
 # Read some bytes (will block until the device process is running)
-head -c 32 /tmp/esoteric-rng | xxd
+head -c 32 /tmp/openentropy-rng | xxd
 
 # Verify entropy quality of the device output
-head -c 10000 /tmp/esoteric-rng > /tmp/test.bin
+head -c 10000 /tmp/openentropy-rng > /tmp/test.bin
 openentropy report --source pool
 ```
 
@@ -76,7 +76,7 @@ openentropy report --source pool
 
 ## Method 2: Server Mode (HTTP API)
 
-The `server` command starts an HTTP entropy server compatible with the ANU Quantum Random Number Generator API format. This allows any HTTP-capable client to consume hardware entropy.
+The `server` command starts an HTTP entropy server compatible with the ANU QRNG API format. This allows any HTTP-capable client to consume hardware entropy.
 
 ### Setup with quantum-llama.cpp
 

@@ -167,14 +167,14 @@ This function is only available when the Rust backend is loaded.
 
 openentropy provides a NumPy-compatible random number generator backed by hardware entropy.
 
-### EsotericRandom
+### OpenEntropyRandom
 
 A factory function that returns a `numpy.random.Generator` backed by hardware entropy.
 
 ```python
-from openentropy import EsotericRandom
+from openentropy import OpenEntropyRandom
 
-rng = EsotericRandom()
+rng = OpenEntropyRandom()
 ```
 
 #### Generating random data
@@ -216,17 +216,17 @@ uniform = rng.uniform(low=-1.0, high=1.0, size=50)
 
 #### Full NumPy Generator compatibility
 
-`EsotericRandom()` returns a standard `numpy.random.Generator` object. All methods documented in the [NumPy Generator API](https://numpy.org/doc/stable/reference/random/generator.html) are available.
+`OpenEntropyRandom()` returns a standard `numpy.random.Generator` object. All methods documented in the [NumPy Generator API](https://numpy.org/doc/stable/reference/random/generator.html) are available.
 
-### EsotericBitGenerator
+### OpenEntropyBitGenerator
 
 The underlying `numpy.random.BitGenerator` subclass. Use directly if you need lower-level control or want to construct a Generator manually.
 
 ```python
-from openentropy import EsotericBitGenerator
+from openentropy import OpenEntropyBitGenerator
 import numpy as np
 
-bg = EsotericBitGenerator()
+bg = OpenEntropyBitGenerator()
 rng = np.random.Generator(bg)
 
 # Now use rng as any NumPy Generator
@@ -332,7 +332,7 @@ Each test result is a dictionary with the following keys:
 #!/usr/bin/env python3
 """Example: generate hardware-entropy-backed random data and verify its quality."""
 
-from openentropy import EntropyPool, EsotericRandom
+from openentropy import EntropyPool, OpenEntropyRandom
 
 # Create a pool with all available sources
 pool = EntropyPool.auto()
@@ -346,7 +346,7 @@ print(f"Generated {len(data)} bytes of conditioned entropy")
 pool.print_health()
 
 # Use as a NumPy Generator
-rng = EsotericRandom()
+rng = OpenEntropyRandom()
 print(f"\n10 random floats: {rng.random(10)}")
 print(f"5 random ints [0,100): {rng.integers(0, 100, size=5)}")
 print(f"Normal sample: {rng.standard_normal():.4f}")
@@ -381,7 +381,7 @@ except ImportError:
 | `run_all_tests()` | Available | Not available |
 | `calculate_quality_score()` | Available | Not available |
 | `detect_available_sources()` | Available | Use `platform.detect_available_sources()` |
-| `EsotericRandom` / `EsotericBitGenerator` | Works with either backend | Works with either backend |
+| `OpenEntropyRandom` / `OpenEntropyBitGenerator` | Works with either backend | Works with either backend |
 | Performance | ~10-100x faster collection | Baseline |
 
 The Rust backend is recommended for production use. The pure-Python fallback ensures the package always works, even without a Rust toolchain.
@@ -401,8 +401,8 @@ openentropy.__rust_backend__   # bool: True if Rust extension loaded
 # Classes
 openentropy.EntropyPool        # Main entropy pool
 openentropy.EntropySource      # Base class for sources (Python side)
-openentropy.EsotericBitGenerator  # NumPy BitGenerator (lazy import)
-openentropy.EsotericRandom     # NumPy Generator factory (lazy import)
+openentropy.OpenEntropyBitGenerator  # NumPy BitGenerator (lazy import)
+openentropy.OpenEntropyRandom     # NumPy Generator factory (lazy import)
 
 # Functions (Rust backend only)
 openentropy.detect_available_sources()  # -> list[dict]

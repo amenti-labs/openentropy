@@ -1,6 +1,6 @@
 //! # openentropy-core
 //!
-//! **Your computer is a quantum noise observatory.**
+//! **Your computer is a hardware noise observatory.**
 //!
 //! `openentropy-core` is the core entropy harvesting library that extracts randomness
 //! from 30 unconventional hardware sources — clock jitter, DRAM row buffer timing,
@@ -33,7 +33,7 @@
 //!
 //! Raw mode preserves the actual hardware noise signal for researchers studying
 //! device entropy characteristics. Most QRNG APIs (ANU, Outshift) run DRBG
-//! post-processing that destroys the raw quantum/hardware signal. We don't.
+//! post-processing that destroys the raw hardware signal. We don't.
 //!
 //! Every source implements the [`EntropySource`] trait. The [`EntropyPool`]
 //! collects from all registered sources and XOR-combines independent streams.
