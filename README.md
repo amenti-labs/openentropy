@@ -8,6 +8,7 @@
 [![docs.rs](https://img.shields.io/docsrs/openentropy-core)](https://docs.rs/openentropy-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/openentropy/actions)
+[![PyPI](https://img.shields.io/pypi/v/openentropy.svg)](https://pypi.org/project/openentropy/)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
 *Harvests entropy from 30 unconventional hardware sources hiding inside your computer -- clock jitter, kernel counters, DRAM row buffers, GPU scheduling, cache contention, and more.*
