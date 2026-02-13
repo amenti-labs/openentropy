@@ -53,6 +53,20 @@ impl PyEntropyPool {
         PyBytes::new(py, &data)
     }
 
+    /// Return n_bytes with the specified conditioning mode.
+    ///
+    /// Mode can be "raw", "vonneumann"/"vn", or "sha256" (default).
+    #[pyo3(signature = (n_bytes, conditioning="sha256"))]
+    fn get_bytes<'py>(&self, py: Python<'py>, n_bytes: usize, conditioning: &str) -> Bound<'py, PyBytes> {
+        let mode = match conditioning {
+            "raw" => openentropy_core::conditioning::ConditioningMode::Raw,
+            "vonneumann" | "vn" | "von_neumann" => openentropy_core::conditioning::ConditioningMode::VonNeumann,
+            _ => openentropy_core::conditioning::ConditioningMode::Sha256,
+        };
+        let data = self.inner.get_bytes(n_bytes, mode);
+        PyBytes::new(py, &data)
+    }
+
     /// Return n_bytes of raw, unconditioned entropy (XOR-combined only).
     ///
     /// No SHA-256, no DRBG, no whitening. Preserves the raw hardware noise
