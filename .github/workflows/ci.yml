@@ -35,7 +35,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --exclude esoteric-python -- -D warnings
+        run: cargo clippy --workspace --exclude openentropy-python -- -D warnings
 
   test:
     name: Test
@@ -57,7 +57,7 @@ jobs:
             ${{ runner.os }}-cargo-test-
 
       - name: Run tests
-        run: cargo test --workspace --exclude esoteric-python
+        run: cargo test --workspace --exclude openentropy-python
 
   build:
     name: Build Release
@@ -79,4 +79,4 @@ jobs:
             ${{ runner.os }}-cargo-build-
 
       - name: Build release
-        run: cargo build --release --workspace --exclude esoteric-python
+        run: cargo build --release --workspace --exclude openentropy-python

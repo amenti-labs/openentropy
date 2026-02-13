@@ -10,7 +10,7 @@ Standard LLM inference uses pseudorandom number generators (PRNGs) for temperatu
 - **Predictable patterns** for anyone who discovers or guesses the PRNG seed
 - **Limited diversity** in multi-turn conversations when using fixed seeds
 
-Hardware entropy from esoteric-entropy feeds genuine physical randomness into the sampling process. The randomness comes from 30 independent physical sources (clock jitter, DRAM timing, cache contention, etc.), making token selection truly non-deterministic at the physics level.
+Hardware entropy from openentropy feeds genuine physical randomness into the sampling process. The randomness comes from 30 independent physical sources (clock jitter, DRAM timing, cache contention, etc.), making token selection truly non-deterministic at the physics level.
 
 ---
 
@@ -24,7 +24,7 @@ The `device` command creates a FIFO (named pipe) that acts as a character device
 
 ```bash
 # Terminal 1: Start the entropy device (runs in foreground)
-esoteric-entropy device /tmp/esoteric-rng
+openentropy device /tmp/esoteric-rng
 
 # Terminal 2: Run Ollama with the external RNG
 OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
@@ -33,13 +33,13 @@ OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
 Or run the device in the background:
 
 ```bash
-esoteric-entropy device /tmp/esoteric-rng &
+openentropy device /tmp/esoteric-rng &
 OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
 ```
 
 ### How It Works
 
-1. `esoteric-entropy device` creates a FIFO at the given path (e.g., `/tmp/esoteric-rng`)
+1. `openentropy device` creates a FIFO at the given path (e.g., `/tmp/esoteric-rng`)
 2. The CLI continuously collects entropy from all available sources and feeds conditioned bytes into the pipe
 3. When ollama-auxrng needs random numbers for token sampling, it reads from the pipe instead of `math/rand`
 4. The LLM's temperature-based softmax sampling uses hardware entropy for token selection
@@ -48,13 +48,13 @@ OLLAMA_AUXRNG_DEV=/tmp/esoteric-rng ollama run llama3
 
 ```bash
 # Custom buffer size (default: 4096 bytes)
-esoteric-entropy device /tmp/esoteric-rng --buffer-size 8192
+openentropy device /tmp/esoteric-rng --buffer-size 8192
 
 # Filter to specific source categories for faster collection
-esoteric-entropy device /tmp/esoteric-rng --sources timing,silicon
+openentropy device /tmp/esoteric-rng --sources timing,silicon
 
 # Use only cross-platform sources (for Linux)
-esoteric-entropy device /tmp/esoteric-rng --sources timing,network,disk
+openentropy device /tmp/esoteric-rng --sources timing,network,disk
 ```
 
 ### Verifying the Device
@@ -69,7 +69,7 @@ head -c 32 /tmp/esoteric-rng | xxd
 
 # Verify entropy quality of the device output
 head -c 10000 /tmp/esoteric-rng > /tmp/test.bin
-esoteric-entropy report --source pool
+openentropy report --source pool
 ```
 
 ---
@@ -84,7 +84,7 @@ The `server` command starts an HTTP entropy server compatible with the ANU Quant
 
 ```bash
 # Terminal 1: Start the entropy server
-esoteric-entropy server --port 8042
+openentropy server --port 8042
 
 # Terminal 2: Run quantum-llama.cpp with the QRNG backend
 ./llama-cli -m model.gguf \
@@ -96,10 +96,10 @@ esoteric-entropy server --port 8042
 
 ```bash
 # Custom port and bind address
-esoteric-entropy server --port 8080 --host 0.0.0.0
+openentropy server --port 8080 --host 0.0.0.0
 
 # Filter sources
-esoteric-entropy server --port 8042 --sources silicon,timing
+openentropy server --port 8042 --sources silicon,timing
 ```
 
 ### API Endpoints
@@ -223,7 +223,7 @@ curl -s "http://localhost:8042/api/v1/random?length=1024&type=hex16" | jq -r '.d
 If you are building a custom inference pipeline in Python, you can use the entropy pool directly:
 
 ```python
-from esoteric_entropy import EntropyPool
+from openentropy import EntropyPool
 import struct
 
 pool = EntropyPool.auto()
@@ -258,19 +258,19 @@ Before using hardware entropy for inference, verify the system is working correc
 
 ```bash
 # Discover what sources are available on this machine
-esoteric-entropy scan
+openentropy scan
 
 # Benchmark all sources with quality metrics
-esoteric-entropy bench
+openentropy bench
 
 # Run the full NIST-inspired test battery
-esoteric-entropy report
+openentropy report
 
 # Check pool health interactively
-esoteric-entropy pool
+openentropy pool
 
 # Launch the live monitoring dashboard
-esoteric-entropy monitor
+openentropy monitor
 ```
 
 Expected output from a healthy system:
@@ -290,7 +290,7 @@ The device process must be running before any reader opens the pipe. Start the d
 
 ### Server returns low entropy
 
-If `sources_healthy` is low in the health check, some sources may be unavailable on your platform. This is normal -- the pool conditioning ensures output quality regardless. Run `esoteric-entropy scan` to see which sources are active.
+If `sources_healthy` is low in the health check, some sources may be unavailable on your platform. This is normal -- the pool conditioning ensures output quality regardless. Run `openentropy scan` to see which sources are active.
 
 ### Permission errors
 
@@ -302,4 +302,4 @@ DNS and TCP timing sources may be slow if the network is unavailable. Use `--sou
 
 ### Linux compatibility
 
-On Linux, macOS-specific sources (WiFi RSSI, Bluetooth, IORegistry, GPU, sensors, dispatch queue, VM page, Spotlight) are not available. The remaining 10-15 sources still provide sufficient entropy for quality output. Use `esoteric-entropy scan` to confirm available sources.
+On Linux, macOS-specific sources (WiFi RSSI, Bluetooth, IORegistry, GPU, sensors, dispatch queue, VM page, Spotlight) are not available. The remaining 10-15 sources still provide sufficient entropy for quality output. Use `openentropy scan` to confirm available sources.

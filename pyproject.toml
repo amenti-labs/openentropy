@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "esoteric-entropy"
+name = "openentropy"
 version = "0.3.0"
 description = "Your computer is a quantum noise observatory. Harvests entropy from 30 unconventional hardware sources."
 readme = "README.md"
@@ -30,13 +30,13 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/amenti-labs/esoteric-entropy"
-Repository = "https://github.com/amenti-labs/esoteric-entropy"
-Documentation = "https://github.com/amenti-labs/esoteric-entropy/tree/main/docs"
-Issues = "https://github.com/amenti-labs/esoteric-entropy/issues"
+Homepage = "https://github.com/amenti-labs/openentropy"
+Repository = "https://github.com/amenti-labs/openentropy"
+Documentation = "https://github.com/amenti-labs/openentropy/tree/main/docs"
+Issues = "https://github.com/amenti-labs/openentropy/issues"
 
 [tool.maturin]
-manifest-path = "crates/esoteric-python/Cargo.toml"
+manifest-path = "crates/openentropy-python/Cargo.toml"
 python-source = "."
-module-name = "esoteric_entropy.esoteric_entropy"
+module-name = "openentropy.openentropy"
 features = ["pyo3/extension-module"]

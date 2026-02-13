@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "crates/esoteric-core",
-    "crates/esoteric-cli",
-    "crates/esoteric-server",
-    "crates/esoteric-tests",
-    "crates/esoteric-python",
+    "crates/openentropy-core",
+    "crates/openentropy-cli",
+    "crates/openentropy-server",
+    "crates/openentropy-tests",
+    "crates/openentropy-python",
 ]
 resolver = "2"
 
@@ -13,8 +13,8 @@ version = "0.3.0"
 edition = "2024"
 license = "MIT"
 authors = ["Amenti Labs"]
-repository = "https://github.com/amenti-labs/esoteric-entropy"
-homepage = "https://github.com/amenti-labs/esoteric-entropy"
+repository = "https://github.com/amenti-labs/openentropy"
+homepage = "https://github.com/amenti-labs/openentropy"
 description = "Your computer is a quantum noise observatory — harvest entropy from 30 unconventional hardware sources"
 keywords = ["entropy", "randomness", "hardware", "TRNG", "security"]
 categories = ["cryptography", "hardware-support", "os"]
@@ -52,6 +52,6 @@ statrs = "0.18"
 rustfft = "6"
 
 # Internal
-esoteric-core = { path = "crates/esoteric-core" }
-esoteric-server = { path = "crates/esoteric-server" }
-esoteric-tests = { path = "crates/esoteric-tests" }
+openentropy-core = { path = "crates/openentropy-core" }
+openentropy-server = { path = "crates/openentropy-server" }
+openentropy-tests = { path = "crates/openentropy-tests" }

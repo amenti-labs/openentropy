@@ -1,4 +1,4 @@
-# Esoteric Entropy — Open-Source Readiness Audit
+# OpenEntropy — Open-Source Readiness Audit
 
 **Date:** 2026-02-12
 **Auditor:** Sofi (AI agent) with Sunlover (human)
@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-Esoteric Entropy is a Rust library that harvests entropy from 30 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
+OpenEntropy is a Rust library that harvests entropy from 30 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -56,10 +56,10 @@ All 18 original Python entropy sources have been ported to Rust:
 |------|--------|
 | Legacy Python source files | Moved to `_python_legacy/` |
 | `_python_legacy/` in `.gitignore` | ✅ |
-| `esoteric_entropy/__init__.py` | Rust-only PyO3 wrapper (no Python imports) |
+| `openentropy/__init__.py` | Rust-only PyO3 wrapper (no Python imports) |
 | Python infrastructure (pool, CLI, server) | All replaced by Rust crates |
 
-The only remaining Python file in the release tree is `esoteric_entropy/__init__.py`, which is a thin PyO3 wrapper that imports the compiled Rust extension.
+The only remaining Python file in the release tree is `openentropy/__init__.py`, which is a thin PyO3 wrapper that imports the compiled Rust extension.
 
 ## 3. Raw (Unconditioned) Entropy Mode
 
@@ -68,8 +68,8 @@ Raw mode provides XOR-combined source bytes with no conditioning (no Von Neumann
 | Interface | Implementation | Access |
 |-----------|---------------|--------|
 | Rust API | `pool.get_raw_bytes(n)` | Direct call |
-| CLI stream | `--unconditioned` flag | `esoteric-entropy stream --unconditioned` |
-| CLI device | `--unconditioned` flag | `esoteric-entropy device <name> --unconditioned` |
+| CLI stream | `--unconditioned` flag | `openentropy stream --unconditioned` |
+| CLI device | `--unconditioned` flag | `openentropy device <name> --unconditioned` |
 | HTTP server | `?raw=true` query param | Requires `--allow-raw` startup flag |
 | Python SDK | `pool.get_raw_bytes(n)` | PyO3 binding |
 
@@ -79,7 +79,7 @@ Raw mode provides XOR-combined source bytes with no conditioning (no Von Neumann
 
 **Before audit:** SHA-256 was called inside 12+ individual source files, making raw output impossible and causing double-conditioning in the pool.
 
-**After audit:** All conditioning is centralized in `crates/esoteric-core/src/conditioning.rs`:
+**After audit:** All conditioning is centralized in `crates/openentropy-core/src/conditioning.rs`:
 
 ```rust
 pub enum ConditioningMode {
@@ -152,29 +152,29 @@ All 26 available sources probed on M4 Mac mini (2026-02-12):
 ## 6. Test Suite
 
 ```
-cargo test --workspace --exclude esoteric-python
+cargo test --workspace --exclude openentropy-python
 
-  esoteric-core:   58 passed
+  openentropy-core:   58 passed
   integration:      8 passed
-  esoteric-tests:  12 passed
+  openentropy-tests:  12 passed
   doc-tests:        1 passed
   ─────────────────────────
   Total:           79 passed, 0 failed
 ```
 
-**Clippy:** 0 warnings (`cargo clippy --workspace --exclude esoteric-python`)
+**Clippy:** 0 warnings (`cargo clippy --workspace --exclude openentropy-python`)
 
 ## 7. Crate Structure
 
 ```
-esoteric-entropy/
+openentropy/
 ├── crates/
-│   ├── esoteric-core/      # Library: sources, pool, conditioning
-│   ├── esoteric-cli/       # CLI: scan, probe, stream, device, server
-│   ├── esoteric-server/    # Axum HTTP server with raw mode
-│   ├── esoteric-tests/     # NIST SP 800-22 test battery
-│   └── esoteric-python/    # PyO3 bindings (excluded from tests on Python 3.14)
-├── esoteric_entropy/
+│   ├── openentropy-core/      # Library: sources, pool, conditioning
+│   ├── openentropy-cli/       # CLI: scan, probe, stream, device, server
+│   ├── openentropy-server/    # Axum HTTP server with raw mode
+│   ├── openentropy-tests/     # NIST SP 800-22 test battery
+│   └── openentropy-python/    # PyO3 bindings (excluded from tests on Python 3.14)
+├── openentropy/
 │   └── __init__.py          # Thin PyO3 wrapper
 ├── docs/
 │   ├── OPEN_SOURCE_AUDIT.md # This file
@@ -189,7 +189,7 @@ esoteric-entropy/
 
 ## 8. Known Issues & Future Work
 
-1. **PyO3 compatibility:** Python 3.14 > PyO3's max supported 3.13. Requires `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` env var. Builds excluded from default test/clippy runs with `--exclude esoteric-python`.
+1. **PyO3 compatibility:** Python 3.14 > PyO3's max supported 3.13. Requires `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` env var. Builds excluded from default test/clippy runs with `--exclude openentropy-python`.
 
 2. **Low-entropy raw sources:** `mach_timing` (1.0 bits/byte) and `speculative_execution` (2.0 bits/byte) have very low raw Shannon entropy. This is expected — the useful signal is in timing deltas, and raw byte packing doesn't preserve it well. These sources still contribute useful entropy to the XOR-combined pool.
 

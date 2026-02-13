@@ -509,9 +509,9 @@ The conditioning pipeline is designed to extract the genuine entropy from biased
 
 To add a new entropy source to the Rust codebase:
 
-1. Create a struct implementing `EntropySource` in the appropriate file under `crates/esoteric-core/src/sources/`
+1. Create a struct implementing `EntropySource` in the appropriate file under `crates/openentropy-core/src/sources/`
 2. Define a static `SourceInfo` with the physics explanation, category, and platform requirements
-3. Register the source in `all_sources()` in `crates/esoteric-core/src/sources/mod.rs`
+3. Register the source in `all_sources()` in `crates/openentropy-core/src/sources/mod.rs`
 4. Add unit tests in the same file
 5. Document the physics in this file
 

@@ -1,0 +1,16 @@
+[package]
+name = "openentropy-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "HTTP entropy server — ANU QRNG API compatible"
+
+[dependencies]
+openentropy-core = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

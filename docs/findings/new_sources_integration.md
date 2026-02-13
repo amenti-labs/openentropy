@@ -67,10 +67,10 @@ These sources are designed as **raw entropy ingredients** for the EntropyPool mi
 
 ## Source Files Created
 
-- `esoteric_entropy/sources/silicon.py` — 4 classes (DRAM, cache, page fault, speculative)
-- `esoteric_entropy/sources/ioregistry.py` — 1 class (deep IORegistry mining)
-- `esoteric_entropy/sources/cross_domain.py` — 3 classes (CPU↔IO, CPU↔memory, multi-domain)
-- `esoteric_entropy/sources/compression.py` — 2 classes (zlib timing, SHA-256 timing)
-- `esoteric_entropy/sources/novel.py` — 4 classes (dispatch queue, dyld, VM page, Spotlight)
+- `openentropy/sources/silicon.py` — 4 classes (DRAM, cache, page fault, speculative)
+- `openentropy/sources/ioregistry.py` — 1 class (deep IORegistry mining)
+- `openentropy/sources/cross_domain.py` — 3 classes (CPU↔IO, CPU↔memory, multi-domain)
+- `openentropy/sources/compression.py` — 2 classes (zlib timing, SHA-256 timing)
+- `openentropy/sources/novel.py` — 4 classes (dispatch queue, dyld, VM page, Spotlight)
 
 **Total package sources: 30** (up from 16)

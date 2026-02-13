@@ -371,63 +371,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "esoteric-cli"
-version = "0.3.0"
-dependencies = [
- "clap",
- "crossterm",
- "esoteric-core",
- "esoteric-server",
- "esoteric-tests",
- "libc",
- "ratatui",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "esoteric-core"
-version = "0.3.0"
-dependencies = [
- "flate2",
- "libc",
- "libloading",
- "log",
- "rand 0.9.2",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "esoteric-python"
-version = "0.3.0"
-dependencies = [
- "esoteric-core",
- "esoteric-tests",
- "pyo3",
-]
-
-[[package]]
-name = "esoteric-server"
-version = "0.3.0"
-dependencies = [
- "axum",
- "esoteric-core",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "esoteric-tests"
-version = "0.3.0"
-dependencies = [
- "flate2",
- "rustfft",
- "statrs",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -908,6 +851,63 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "openentropy-cli"
+version = "0.3.0"
+dependencies = [
+ "clap",
+ "crossterm",
+ "libc",
+ "openentropy-core",
+ "openentropy-server",
+ "openentropy-tests",
+ "ratatui",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "openentropy-core"
+version = "0.3.0"
+dependencies = [
+ "flate2",
+ "libc",
+ "libloading",
+ "log",
+ "rand 0.9.2",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "openentropy-python"
+version = "0.3.0"
+dependencies = [
+ "openentropy-core",
+ "openentropy-tests",
+ "pyo3",
+]
+
+[[package]]
+name = "openentropy-server"
+version = "0.3.0"
+dependencies = [
+ "axum",
+ "openentropy-core",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "openentropy-tests"
+version = "0.3.0"
+dependencies = [
+ "flate2",
+ "rustfft",
+ "statrs",
+]
 
 [[package]]
 name = "parking_lot"

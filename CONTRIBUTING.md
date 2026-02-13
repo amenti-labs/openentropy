@@ -1,4 +1,4 @@
-# Contributing to esoteric-entropy
+# Contributing to openentropy
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@
 ```
 Cargo.toml                    # Workspace root
 crates/
-├── esoteric-core/            # EntropySource trait, 30 sources, pool, conditioning
+├── openentropy-core/            # EntropySource trait, 30 sources, pool, conditioning
 │   └── src/
 │       ├── source.rs         # EntropySource trait definition
 │       ├── sources/          # All 30 source implementations
@@ -21,10 +21,10 @@ crates/
 │       ├── conditioning.rs   # SHA-256 conditioning
 │       ├── platform.rs       # Platform detection
 │       └── lib.rs
-├── esoteric-cli/             # CLI binary (clap) with 9 commands
-├── esoteric-server/          # HTTP server (axum) with ANU QRNG API
-├── esoteric-tests/           # NIST SP 800-22 statistical test suite
-└── esoteric-python/          # PyO3 bindings via maturin
+├── openentropy-cli/             # CLI binary (clap) with 9 commands
+├── openentropy-server/          # HTTP server (axum) with ANU QRNG API
+├── openentropy-tests/           # NIST SP 800-22 statistical test suite
+└── openentropy-python/          # PyO3 bindings via maturin
 ```
 
 ## Building
@@ -32,31 +32,31 @@ crates/
 Build all crates except the Python bindings:
 
 ```bash
-cargo build --workspace --exclude esoteric-python
+cargo build --workspace --exclude openentropy-python
 ```
 
 Release build:
 
 ```bash
-cargo build --release --workspace --exclude esoteric-python
+cargo build --release --workspace --exclude openentropy-python
 ```
 
 ## Testing
 
 ```bash
-cargo test --workspace --exclude esoteric-python
+cargo test --workspace --exclude openentropy-python
 ```
 
 Run a specific test:
 
 ```bash
-cargo test -p esoteric-core clock_jitter
+cargo test -p openentropy-core clock_jitter
 ```
 
 ## Linting
 
 ```bash
-cargo clippy --workspace --exclude esoteric-python -- -D warnings
+cargo clippy --workspace --exclude openentropy-python -- -D warnings
 ```
 
 ## Formatting
@@ -73,23 +73,23 @@ cargo fmt --all -- --check
 
 ## Python Bindings
 
-The `esoteric-python` crate uses PyO3 and maturin. It is excluded from normal workspace builds because it requires a Python environment.
+The `openentropy-python` crate uses PyO3 and maturin. It is excluded from normal workspace builds because it requires a Python environment.
 
 ```bash
-cd crates/esoteric-python
+cd crates/openentropy-python
 maturin develop
 ```
 
 To build a release wheel:
 
 ```bash
-cd crates/esoteric-python
+cd crates/openentropy-python
 maturin build --release
 ```
 
 ## Adding a New Entropy Source
 
-1. **Create a source module** in `crates/esoteric-core/src/sources/`. If your source fits an existing category file (e.g., `timing.rs`, `silicon.rs`), add it there. Otherwise create a new file.
+1. **Create a source module** in `crates/openentropy-core/src/sources/`. If your source fits an existing category file (e.g., `timing.rs`, `silicon.rs`), add it there. Otherwise create a new file.
 
 2. **Implement the `EntropySource` trait**:
 
@@ -126,16 +126,16 @@ impl EntropySource for YourSource {
 }
 ```
 
-3. **Register the source** in `crates/esoteric-core/src/sources/mod.rs`:
+3. **Register the source** in `crates/openentropy-core/src/sources/mod.rs`:
    - Add `pub mod your_module;` to the module declarations
    - Add `Box::new(your_module::YourSource)` to the `all_sources()` vector
 
-4. **Add tests** in the appropriate test module or in `crates/esoteric-tests/`.
+4. **Add tests** in the appropriate test module or in `crates/openentropy-tests/`.
 
 5. **Verify**:
    ```bash
-   cargo clippy --workspace --exclude esoteric-python -- -D warnings
-   cargo test --workspace --exclude esoteric-python
+   cargo clippy --workspace --exclude openentropy-python -- -D warnings
+   cargo test --workspace --exclude openentropy-python
    ```
 
 ## Guidelines

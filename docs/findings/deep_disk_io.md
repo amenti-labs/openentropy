@@ -1,4 +1,4 @@
-# 🔬 Esoteric Entropy — Randomness Test Report
+# 🔬 OpenEntropy — Randomness Test Report
 
 **Generated:** 2026-02-11 19:27:23
 **Machine:** erais-Mac-mini.local (arm64, Darwin 24.6.0)

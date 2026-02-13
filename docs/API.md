@@ -1,17 +1,17 @@
 # Rust API Reference
 
-Complete API documentation for the esoteric-entropy Rust crates. For Python API, see [PYTHON_SDK.md](PYTHON_SDK.md).
+Complete API documentation for the openentropy Rust crates. For Python API, see [PYTHON_SDK.md](PYTHON_SDK.md).
 
 ---
 
-## esoteric-core
+## openentropy-core
 
 The foundational library crate. Provides entropy sources, pool management, conditioning, and platform detection.
 
-**Crate:** `esoteric-core`
-**Path:** `crates/esoteric-core/`
+**Crate:** `openentropy-core`
+**Path:** `crates/openentropy-core/`
 
-### Public Re-exports (`esoteric_core`)
+### Public Re-exports (`openentropy_core`)
 
 ```rust
 pub use conditioning::{QualityReport, quick_quality, quick_shannon};
@@ -28,7 +28,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 Thread-safe multi-source entropy pool with SHA-256 conditioning.
 
-**Module:** `esoteric_core::pool`
+**Module:** `openentropy_core::pool`
 
 ```rust
 pub struct EntropyPool {
@@ -56,7 +56,7 @@ pub fn auto() -> Self
 **Example:**
 
 ```rust
-use esoteric_core::EntropyPool;
+use openentropy_core::EntropyPool;
 
 // Auto-discover all available sources
 let pool = EntropyPool::auto();
@@ -172,7 +172,7 @@ pub struct SourceInfoSnapshot {
 
 The interface every entropy source must implement.
 
-**Module:** `esoteric_core::source`
+**Module:** `openentropy_core::source`
 
 ```rust
 /// Trait that every entropy source must implement.
@@ -254,7 +254,7 @@ impl SourceState {
 
 ### Conditioning Functions
 
-**Module:** `esoteric_core::conditioning`
+**Module:** `openentropy_core::conditioning`
 
 ```rust
 /// SHA-256 condition raw entropy into high-quality output.
@@ -307,7 +307,7 @@ score = (shannon / 8.0) * 60  +  min(compression_ratio, 1.0) * 20  +  (unique / 
 
 ### Platform Detection
 
-**Module:** `esoteric_core::platform`
+**Module:** `openentropy_core::platform`
 
 ```rust
 /// Discover all entropy sources available on this machine.
@@ -331,7 +331,7 @@ pub struct PlatformInfo {
 
 ### Source Registry
 
-**Module:** `esoteric_core::sources`
+**Module:** `openentropy_core::sources`
 
 ```rust
 /// All 30 entropy source constructors.
@@ -366,12 +366,12 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>>
 
 ---
 
-## esoteric-tests
+## openentropy-tests
 
 NIST SP 800-22 inspired randomness test battery with 31 statistical tests.
 
-**Crate:** `esoteric-tests`
-**Path:** `crates/esoteric-tests/`
+**Crate:** `openentropy-tests`
+**Path:** `crates/openentropy-tests/`
 
 ### Core Types
 
@@ -419,7 +419,7 @@ pub fn calculate_quality_score(results: &[TestResult]) -> f64
 **Example:**
 
 ```rust
-use esoteric_tests::{run_all_tests, calculate_quality_score};
+use openentropy_tests::{run_all_tests, calculate_quality_score};
 
 let data = pool.get_random_bytes(10_000);
 let results = run_all_tests(&data);
@@ -522,12 +522,12 @@ All test functions have the signature `fn(data: &[u8]) -> TestResult`. Each test
 
 ---
 
-## esoteric-server
+## openentropy-server
 
 HTTP entropy server with ANU QRNG API compatibility.
 
-**Crate:** `esoteric-server`
-**Path:** `crates/esoteric-server/`
+**Crate:** `openentropy-server`
+**Path:** `crates/openentropy-server/`
 
 ### Primary Function
 
@@ -589,13 +589,13 @@ See [OLLAMA_INTEGRATION.md](OLLAMA_INTEGRATION.md) for full endpoint documentati
 
 ---
 
-## esoteric-cli
+## openentropy-cli
 
 Command-line binary providing 9 subcommands.
 
-**Crate:** `esoteric-cli`
-**Binary name:** `esoteric-entropy`
-**Path:** `crates/esoteric-cli/`
+**Crate:** `openentropy-cli`
+**Binary name:** `openentropy`
+**Path:** `crates/openentropy-cli/`
 
 ### Subcommands
 
@@ -616,7 +616,7 @@ Command-line binary providing 9 subcommands.
 The `--sources` flag accepts comma-separated name fragments (case-insensitive substring match):
 
 ```bash
-esoteric-entropy stream --sources timing,silicon
+openentropy stream --sources timing,silicon
 # Matches: clock_jitter, mach_timing, sleep_jitter, dram_row_buffer,
 #          cache_contention, page_fault_timing, speculative_execution
 ```
@@ -637,7 +637,7 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool
 ### Minimal Rust Usage
 
 ```rust
-use esoteric_core::EntropyPool;
+use openentropy_core::EntropyPool;
 
 fn main() {
     let pool = EntropyPool::auto();
@@ -649,7 +649,7 @@ fn main() {
 ### Health Monitoring
 
 ```rust
-use esoteric_core::EntropyPool;
+use openentropy_core::EntropyPool;
 
 fn main() {
     let pool = EntropyPool::auto();
@@ -671,8 +671,8 @@ fn main() {
 ### Running NIST Tests
 
 ```rust
-use esoteric_core::EntropyPool;
-use esoteric_tests::{run_all_tests, calculate_quality_score};
+use openentropy_core::EntropyPool;
+use openentropy_tests::{run_all_tests, calculate_quality_score};
 
 fn main() {
     let pool = EntropyPool::auto();
@@ -697,8 +697,8 @@ fn main() {
 ### Starting the HTTP Server
 
 ```rust
-use esoteric_core::EntropyPool;
-use esoteric_server::run_server;
+use openentropy_core::EntropyPool;
+use openentropy_server::run_server;
 
 #[tokio::main]
 async fn main() {
@@ -711,8 +711,8 @@ async fn main() {
 ### Custom Entropy Source
 
 ```rust
-use esoteric_core::source::{EntropySource, SourceCategory, SourceInfo};
-use esoteric_core::EntropyPool;
+use openentropy_core::source::{EntropySource, SourceCategory, SourceInfo};
+use openentropy_core::EntropyPool;
 
 pub struct MySource;
 

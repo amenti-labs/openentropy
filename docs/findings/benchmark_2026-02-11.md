@@ -1,4 +1,4 @@
-# Esoteric Entropy Benchmark — 2026-02-11
+# OpenEntropy Benchmark — 2026-02-11
 
 Generated: 2026-02-11T15:31:21.938562
 

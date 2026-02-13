@@ -1,13 +1,13 @@
 # Python SDK Reference
 
-Python bindings for the esoteric-entropy Rust library. The package provides the same API whether backed by the native Rust extension (via PyO3) or the pure-Python fallback.
+Python bindings for the openentropy Rust library. The package provides the same API whether backed by the native Rust extension (via PyO3) or the pure-Python fallback.
 
 ## Installation
 
 ### From PyPI (pure Python)
 
 ```bash
-pip install esoteric-entropy
+pip install openentropy
 ```
 
 This installs the pure-Python package. All features work, but collection and conditioning run in Python.
@@ -16,19 +16,19 @@ This installs the pure-Python package. All features work, but collection and con
 
 ```bash
 # Audio source (microphone thermal noise)
-pip install esoteric-entropy[audio]
+pip install openentropy[audio]
 
 # Camera source (sensor dark current)
-pip install esoteric-entropy[camera]
+pip install openentropy[camera]
 
 # macOS-specific sources (WiFi RSSI, Bluetooth)
-pip install esoteric-entropy[macos]
+pip install openentropy[macos]
 
 # TUI monitor dependencies
-pip install esoteric-entropy[tui]
+pip install openentropy[tui]
 
 # Everything
-pip install esoteric-entropy[all]
+pip install openentropy[all]
 ```
 
 ### From source with Rust extension (recommended)
@@ -36,8 +36,8 @@ pip install esoteric-entropy[all]
 Building from source compiles the Rust extension via maturin, providing native performance:
 
 ```bash
-git clone https://github.com/amenti-labs/esoteric-entropy
-cd esoteric-entropy
+git clone https://github.com/amenti-labs/openentropy
+cd openentropy
 
 # Install Rust toolchain if not present
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -53,13 +53,13 @@ pip install -e ".[dev]"
 ### Checking the backend
 
 ```python
-import esoteric_entropy
+import openentropy
 
 # True if the Rust extension is loaded, False for pure Python
-print(esoteric_entropy.__rust_backend__)
+print(openentropy.__rust_backend__)
 
 # Version string (from Rust if available, else Python)
-print(esoteric_entropy.__version__)
+print(openentropy.__version__)
 ```
 
 ---
@@ -71,7 +71,7 @@ print(esoteric_entropy.__version__)
 The central class. Manages multiple entropy sources, collects raw entropy, applies SHA-256 conditioning, and produces high-quality random output.
 
 ```python
-from esoteric_entropy import EntropyPool
+from openentropy import EntropyPool
 ```
 
 #### Creating a pool
@@ -149,7 +149,7 @@ print(f"Source count: {pool.source_count}")
 ### Platform Detection
 
 ```python
-from esoteric_entropy import detect_available_sources
+from openentropy import detect_available_sources
 
 # Returns a list of dicts with source metadata
 sources = detect_available_sources()
@@ -165,14 +165,14 @@ This function is only available when the Rust backend is loaded.
 
 ## NumPy Integration
 
-esoteric-entropy provides a NumPy-compatible random number generator backed by hardware entropy.
+openentropy provides a NumPy-compatible random number generator backed by hardware entropy.
 
 ### EsotericRandom
 
 A factory function that returns a `numpy.random.Generator` backed by hardware entropy.
 
 ```python
-from esoteric_entropy import EsotericRandom
+from openentropy import EsotericRandom
 
 rng = EsotericRandom()
 ```
@@ -223,7 +223,7 @@ uniform = rng.uniform(low=-1.0, high=1.0, size=50)
 The underlying `numpy.random.BitGenerator` subclass. Use directly if you need lower-level control or want to construct a Generator manually.
 
 ```python
-from esoteric_entropy import EsotericBitGenerator
+from openentropy import EsotericBitGenerator
 import numpy as np
 
 bg = EsotericBitGenerator()
@@ -242,7 +242,7 @@ Run the complete 31-test statistical battery on arbitrary byte data.
 ### Running tests
 
 ```python
-from esoteric_entropy import run_all_tests, calculate_quality_score
+from openentropy import run_all_tests, calculate_quality_score
 
 # Test any bytes object
 data = pool.get_random_bytes(10000)
@@ -332,7 +332,7 @@ Each test result is a dictionary with the following keys:
 #!/usr/bin/env python3
 """Example: generate hardware-entropy-backed random data and verify its quality."""
 
-from esoteric_entropy import EntropyPool, EsotericRandom
+from openentropy import EntropyPool, EsotericRandom
 
 # Create a pool with all available sources
 pool = EntropyPool.auto()
@@ -353,7 +353,7 @@ print(f"Normal sample: {rng.standard_normal():.4f}")
 
 # Run NIST test battery (Rust backend only)
 try:
-    from esoteric_entropy import run_all_tests, calculate_quality_score
+    from openentropy import run_all_tests, calculate_quality_score
 
     results = run_all_tests(data)
     passed = sum(1 for r in results if r['passed'])
@@ -393,21 +393,21 @@ The Rust backend is recommended for production use. The pure-Python fallback ens
 ### Module-level exports
 
 ```python
-import esoteric_entropy
+import openentropy
 
-esoteric_entropy.__version__        # str: version string
-esoteric_entropy.__rust_backend__   # bool: True if Rust extension loaded
+openentropy.__version__        # str: version string
+openentropy.__rust_backend__   # bool: True if Rust extension loaded
 
 # Classes
-esoteric_entropy.EntropyPool        # Main entropy pool
-esoteric_entropy.EntropySource      # Base class for sources (Python side)
-esoteric_entropy.EsotericBitGenerator  # NumPy BitGenerator (lazy import)
-esoteric_entropy.EsotericRandom     # NumPy Generator factory (lazy import)
+openentropy.EntropyPool        # Main entropy pool
+openentropy.EntropySource      # Base class for sources (Python side)
+openentropy.EsotericBitGenerator  # NumPy BitGenerator (lazy import)
+openentropy.EsotericRandom     # NumPy Generator factory (lazy import)
 
 # Functions (Rust backend only)
-esoteric_entropy.detect_available_sources()  # -> list[dict]
-esoteric_entropy.run_all_tests(data)         # -> list[dict]
-esoteric_entropy.calculate_quality_score(results)  # -> float
+openentropy.detect_available_sources()  # -> list[dict]
+openentropy.run_all_tests(data)         # -> list[dict]
+openentropy.calculate_quality_score(results)  # -> float
 ```
 
 ### EntropyPool methods

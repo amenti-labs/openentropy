@@ -1,0 +1,16 @@
+[package]
+name = "openentropy-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Python bindings for openentropy via PyO3"
+
+[lib]
+name = "openentropy"
+crate-type = ["cdylib"]
+
+[dependencies]
+openentropy-core = { workspace = true }
+openentropy-tests = { workspace = true }
+pyo3 = { workspace = true }

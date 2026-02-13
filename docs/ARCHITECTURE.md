@@ -2,7 +2,7 @@
 
 ## Overview
 
-esoteric-entropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with five crates, each with a focused responsibility.
+openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with five crates, each with a focused responsibility.
 
 **Version:** 0.3.0 (Rust rewrite)
 **Edition:** Rust 2024
@@ -11,10 +11,10 @@ esoteric-entropy is a multi-source entropy harvesting system written in Rust. It
 ## Workspace Layout
 
 ```
-esoteric-entropy/
+openentropy/
 ├── Cargo.toml                      # Workspace root
 ├── crates/
-│   ├── esoteric-core/              # Core library
+│   ├── openentropy-core/              # Core library
 │   │   └── src/
 │   │       ├── lib.rs              # Public API re-exports
 │   │       ├── source.rs           # EntropySource trait, SourceInfo, SourceCategory
@@ -42,7 +42,7 @@ esoteric-entropy/
 │   │           ├── compression.rs  # Compression/hash timing oracles
 │   │           └── novel.rs        # GCD dispatch, dyld, VM page, Spotlight
 │   │
-│   ├── esoteric-cli/               # CLI binary
+│   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
 │   │       ├── main.rs             # clap argument parsing, 9 subcommands
 │   │       ├── commands/           # One module per subcommand
@@ -61,26 +61,26 @@ esoteric-entropy/
 │   │           ├── app.rs          # Application state, event loop
 │   │           └── ui.rs           # ratatui widget rendering
 │   │
-│   ├── esoteric-server/            # HTTP entropy server
+│   ├── openentropy-server/            # HTTP entropy server
 │   │   └── src/
 │   │       └── lib.rs              # axum router, ANU QRNG API compatible
 │   │
-│   ├── esoteric-tests/             # Statistical test battery
+│   ├── openentropy-tests/             # Statistical test battery
 │   │   └── src/
 │   │       └── lib.rs              # 31 NIST SP 800-22 inspired tests
 │   │
-│   └── esoteric-python/            # Python bindings
+│   └── openentropy-python/            # Python bindings
 │       └── src/
 │           └── lib.rs              # PyO3 module: EntropyPool, run_all_tests, etc.
 │
-├── esoteric_entropy/               # Pure Python fallback package
+├── openentropy/               # Pure Python fallback package
 ├── pyproject.toml                  # Python packaging (pip install)
 └── tests/                          # Python integration tests
 ```
 
 ## The Five Crates
 
-### 1. esoteric-core
+### 1. openentropy-core
 
 The foundational library. Contains all 30 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
@@ -93,33 +93,33 @@ The foundational library. Contains all 30 entropy source implementations, the mi
 - `detect_available_sources()` -- auto-discovery
 - `quick_shannon()`, `quick_quality()` -- quality assessment functions
 
-### 2. esoteric-cli
+### 2. openentropy-cli
 
-The command-line binary (`esoteric-entropy`). Provides nine subcommands for interacting with the entropy system, plus an interactive TUI monitor built with ratatui and crossterm.
+The command-line binary (`openentropy`). Provides nine subcommands for interacting with the entropy system, plus an interactive TUI monitor built with ratatui and crossterm.
 
-**Key dependencies:** `esoteric-core`, `esoteric-server`, `esoteric-tests`, `clap`, `ratatui`, `crossterm`, `tokio`
+**Key dependencies:** `openentropy-core`, `openentropy-server`, `openentropy-tests`, `clap`, `ratatui`, `crossterm`, `tokio`
 
 **Subcommands:** `scan`, `probe`, `bench`, `stream`, `device`, `server`, `monitor`, `report`, `pool`
 
-### 3. esoteric-server
+### 3. openentropy-server
 
 An HTTP entropy server built on axum. Implements an API compatible with the ANU Quantum Random Number Generator format, allowing any QRNG client to consume hardware entropy over HTTP.
 
-**Key dependencies:** `esoteric-core`, `axum`, `tokio`, `serde`, `serde_json`
+**Key dependencies:** `openentropy-core`, `axum`, `tokio`, `serde`, `serde_json`
 
 **Endpoints:** `/api/v1/random`, `/health`, `/sources`, `/pool/status`
 
-### 4. esoteric-tests
+### 4. openentropy-tests
 
 A self-contained crate implementing 31 statistical tests inspired by the NIST SP 800-22 randomness test suite. Tests are organized into ten categories: frequency, runs, serial, spectral, entropy, correlation, distribution, pattern, advanced, and practical.
 
 **Key dependencies:** `statrs` (chi-squared, normal, Poisson CDFs), `rustfft` (FFT for spectral tests), `flate2` (compression ratio tests)
 
-### 5. esoteric-python
+### 5. openentropy-python
 
 PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` that can be loaded as a native Python extension module. The Python package falls back to a pure-Python implementation if the Rust extension is not available.
 
-**Key dependencies:** `esoteric-core`, `esoteric-tests`, `pyo3`
+**Key dependencies:** `openentropy-core`, `openentropy-tests`, `pyo3`
 
 ## Data Flow
 
@@ -337,14 +337,14 @@ The workspace uses Rust edition 2024. Key version constraints:
 
 ## Python Interop
 
-The Python package (`esoteric_entropy`) uses a dual-backend architecture:
+The Python package (`openentropy`) uses a dual-backend architecture:
 
 ```python
 try:
-    from esoteric_entropy.esoteric_entropy import EntropyPool  # Rust (PyO3)
+    from openentropy.openentropy import EntropyPool  # Rust (PyO3)
     __rust_backend__ = True
 except ImportError:
-    from esoteric_entropy.pool import EntropyPool              # Pure Python
+    from openentropy.pool import EntropyPool              # Pure Python
     __rust_backend__ = False
 ```
 

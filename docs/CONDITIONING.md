@@ -1,4 +1,4 @@
-# Esoteric Entropy — Conditioning Architecture
+# OpenEntropy — Conditioning Architecture
 
 How raw hardware entropy becomes cryptographically uniform random bytes.
 
@@ -58,8 +58,8 @@ Raw mode returns XOR-combined source bytes with **no conditioning at all** — n
 | Interface | How to access |
 |-----------|---------------|
 | Rust API | `pool.get_raw_bytes(n)` |
-| CLI | `esoteric-entropy stream --unconditioned` |
-| CLI | `esoteric-entropy device <name> --unconditioned` |
+| CLI | `openentropy stream --unconditioned` |
+| CLI | `openentropy device <name> --unconditioned` |
 | HTTP API | `GET /entropy?bytes=N&raw=true` (requires `--allow-raw` flag) |
 | Python SDK | `pool.get_raw_bytes(n)` |
 
@@ -77,7 +77,7 @@ pub enum ConditioningMode {
 pub fn condition(data: &[u8], output_len: usize, mode: ConditioningMode) -> Vec<u8>
 ```
 
-All conditioning is centralized in `crates/esoteric-core/src/conditioning.rs`. Individual entropy sources **never** perform their own conditioning — they return raw hardware samples only.
+All conditioning is centralized in `crates/openentropy-core/src/conditioning.rs`. Individual entropy sources **never** perform their own conditioning — they return raw hardware samples only.
 
 ### Why Centralized Conditioning?
 
@@ -92,7 +92,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 
 ## Comparison to QRNG/DRBG APIs
 
-| Feature | Esoteric Entropy | ANU QRNG | Outshift QRNG | Linux `/dev/urandom` |
+| Feature | OpenEntropy | ANU QRNG | Outshift QRNG | Linux `/dev/urandom` |
 |---------|-----------------|----------|---------------|---------------------|
 | Raw output available | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Source diversity | 30 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
@@ -105,7 +105,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 
 Most "quantum random number" APIs don't actually give you quantum randomness. They give you the output of a DRBG (Deterministic Random Bit Generator) that was *seeded* with quantum entropy. The DRBG's output is computationally indistinguishable from the quantum input — but it's not the quantum signal itself.
 
-Esoteric Entropy's raw mode is the equivalent of tapping the wire *before* the DRBG. You get the actual hardware signal with all its imperfections, correlations, and physical characteristics intact.
+OpenEntropy's raw mode is the equivalent of tapping the wire *before* the DRBG. You get the actual hardware signal with all its imperfections, correlations, and physical characteristics intact.
 
 ### When to Use Each Mode
 
@@ -122,5 +122,5 @@ Esoteric Entropy's raw mode is the equivalent of tapping the wire *before* the D
 ## Security Considerations
 
 - **Raw output is NOT suitable for cryptographic use.** Raw bytes have lower Shannon entropy (often 2-6 bits/byte vs 8.0) and may contain statistical patterns.
-- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. However, esoteric-entropy is not a CSPRNG — it does not maintain state or provide forward secrecy.
+- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. However, openentropy is not a CSPRNG — it does not maintain state or provide forward secrecy.
 - **The HTTP server's `--allow-raw` flag** exists specifically to prevent accidental deployment of raw endpoints. Production deployments should not enable it unless raw access is explicitly needed.

@@ -1,4 +1,4 @@
-# Esoteric Entropy — Source Catalog
+# OpenEntropy — Source Catalog
 
 All 30 entropy sources, their physics, quality, and operational characteristics.
 

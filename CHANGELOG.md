@@ -5,7 +5,7 @@
 ### Complete Rust Rewrite
 
 The entire project has been rewritten in Rust as a Cargo workspace with 5 crates:
-`esoteric-core`, `esoteric-cli`, `esoteric-server`, `esoteric-tests`, and `esoteric-python`.
+`openentropy-core`, `openentropy-cli`, `openentropy-server`, `openentropy-tests`, and `openentropy-python`.
 
 ### Highlights
 - **30 entropy sources** across 7 categories (timing, system, network, hardware, silicon, cross-domain, novel), all with SHA-256 conditioning
@@ -20,11 +20,11 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 ### Crate Breakdown
 | Crate | Description |
 |-------|-------------|
-| `esoteric-core` | EntropySource trait, 30 sources, pool, SHA-256 conditioning, platform detection |
-| `esoteric-cli` | clap-based CLI with 9 commands including interactive TUI monitor |
-| `esoteric-server` | axum HTTP server with ANU QRNG-compatible `/api/v1/entropy` endpoint |
-| `esoteric-tests` | 31 NIST SP 800-22 statistical tests (frequency, runs, spectral, matrix rank, etc.) |
-| `esoteric-python` | PyO3 bindings exposing sources, pool, and test suite to Python |
+| `openentropy-core` | EntropySource trait, 30 sources, pool, SHA-256 conditioning, platform detection |
+| `openentropy-cli` | clap-based CLI with 9 commands including interactive TUI monitor |
+| `openentropy-server` | axum HTTP server with ANU QRNG-compatible `/api/v1/entropy` endpoint |
+| `openentropy-tests` | 31 NIST SP 800-22 statistical tests (frequency, runs, spectral, matrix rank, etc.) |
+| `openentropy-python` | PyO3 bindings exposing sources, pool, and test suite to Python |
 
 ### Meta
 - Edition: Rust 2024
