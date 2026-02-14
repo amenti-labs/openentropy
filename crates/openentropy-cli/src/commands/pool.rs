@@ -28,17 +28,7 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
     println!("  {}", "-".repeat(55));
     for src in &health.sources {
         let min_h = src.min_entropy.max(0.0);
-        let grade = if min_h >= 6.0 {
-            "A"
-        } else if min_h >= 4.0 {
-            "B"
-        } else if min_h >= 2.0 {
-            "C"
-        } else if min_h >= 1.0 {
-            "D"
-        } else {
-            "F"
-        };
+        let grade = openentropy_core::grade_min_entropy(min_h);
         let status = if src.healthy { "✓" } else { "✗" };
         println!(
             "  {} {} {:<25} {:>5.3} {:>5.3} {:>6.2}s",

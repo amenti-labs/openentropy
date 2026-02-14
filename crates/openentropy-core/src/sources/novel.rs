@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
+use super::helpers::extract_timing_entropy;
+
 // ---------------------------------------------------------------------------
 // DispatchQueueSource
 // ---------------------------------------------------------------------------
@@ -80,16 +82,7 @@ impl EntropySource for DispatchQueueSource {
         // Drop senders to signal workers to exit.
         drop(senders);
 
-        // Compute deltas between consecutive scheduling latencies.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -166,16 +159,7 @@ impl EntropySource for DyldTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -218,7 +202,8 @@ impl EntropySource for VMPageTimingSource {
         for _ in 0..raw_count {
             let t0 = Instant::now();
 
-            // Allocate a 4KB anonymous private page.
+            // SAFETY: mmap with MAP_ANONYMOUS|MAP_PRIVATE creates a private anonymous
+            // mapping. We check for MAP_FAILED before using the returned address.
             let addr = unsafe {
                 libc::mmap(
                     ptr::null_mut(),
@@ -234,7 +219,8 @@ impl EntropySource for VMPageTimingSource {
                 continue;
             }
 
-            // Write to the region to trigger a page fault.
+            // SAFETY: addr is a valid mmap'd region of PAGE_SIZE bytes (checked
+            // != MAP_FAILED). Writes are within bounds of the mapping.
             unsafe {
                 ptr::write_volatile(addr as *mut u8, 0xBE);
                 ptr::write_volatile((addr as *mut u8).add(PAGE_SIZE - 1), 0xEF);
@@ -243,7 +229,7 @@ impl EntropySource for VMPageTimingSource {
                 let _v = ptr::read_volatile(addr as *const u8);
             }
 
-            // Deallocate the page.
+            // SAFETY: addr was returned by mmap (checked != MAP_FAILED) with size PAGE_SIZE.
             unsafe {
                 libc::munmap(addr, PAGE_SIZE);
             }
@@ -252,23 +238,7 @@ impl EntropySource for VMPageTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // XOR consecutive deltas.
-        let xor_deltas: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas.clone()
-        };
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -360,16 +330,7 @@ impl EntropySource for SpotlightTimingSource {
             timings.push(elapsed_ns);
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = deltas.iter().map(|&d| d as u8).collect();
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 

@@ -82,8 +82,11 @@ pub fn run(
     let report = generate_report(&all_results);
 
     if let Some(path) = output_path {
-        std::fs::write(path, &report).unwrap();
-        println!("\n📄 Report saved to: {path}");
+        if let Err(e) = std::fs::write(path, &report) {
+            eprintln!("Failed to write report to {path}: {e}");
+        } else {
+            println!("\n📄 Report saved to: {path}");
+        }
     }
 
     // Summary table
@@ -98,7 +101,7 @@ pub fn run(
     sorted_indices.sort_by(|&a, &b| {
         let sa = openentropy_tests::calculate_quality_score(&all_results[a].2);
         let sb = openentropy_tests::calculate_quality_score(&all_results[b].2);
-        sb.partial_cmp(&sa).unwrap()
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
     });
 
     for &idx in &sorted_indices {

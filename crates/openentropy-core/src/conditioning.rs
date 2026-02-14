@@ -568,6 +568,33 @@ pub fn quick_shannon(data: &[u8]) -> f64 {
     h
 }
 
+/// Grade a source based on its min-entropy (H∞) value.
+///
+/// This is the **single source of truth** for entropy grading. All CLI commands,
+/// server endpoints, and reports should use this function instead of duplicating
+/// threshold logic.
+///
+/// | Grade | Min-Entropy (H∞) |
+/// |-------|-------------------|
+/// | A     | ≥ 6.0             |
+/// | B     | ≥ 4.0             |
+/// | C     | ≥ 2.0             |
+/// | D     | ≥ 1.0             |
+/// | F     | < 1.0             |
+pub fn grade_min_entropy(min_entropy: f64) -> char {
+    if min_entropy >= 6.0 {
+        'A'
+    } else if min_entropy >= 4.0 {
+        'B'
+    } else if min_entropy >= 2.0 {
+        'C'
+    } else if min_entropy >= 1.0 {
+        'D'
+    } else {
+        'F'
+    }
+}
+
 /// Quick quality assessment.
 pub fn quick_quality(data: &[u8]) -> QualityReport {
     if data.len() < 16 {
@@ -1180,5 +1207,28 @@ mod tests {
         );
         assert_eq!(q.unique_values, 256);
         assert!(q.shannon_entropy > 7.9);
+    }
+
+    // -----------------------------------------------------------------------
+    // grade_min_entropy tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_grade_boundaries() {
+        assert_eq!(grade_min_entropy(8.0), 'A');
+        assert_eq!(grade_min_entropy(6.0), 'A');
+        assert_eq!(grade_min_entropy(5.99), 'B');
+        assert_eq!(grade_min_entropy(4.0), 'B');
+        assert_eq!(grade_min_entropy(3.99), 'C');
+        assert_eq!(grade_min_entropy(2.0), 'C');
+        assert_eq!(grade_min_entropy(1.99), 'D');
+        assert_eq!(grade_min_entropy(1.0), 'D');
+        assert_eq!(grade_min_entropy(0.99), 'F');
+        assert_eq!(grade_min_entropy(0.0), 'F');
+    }
+
+    #[test]
+    fn test_grade_negative() {
+        assert_eq!(grade_min_entropy(-1.0), 'F');
     }
 }

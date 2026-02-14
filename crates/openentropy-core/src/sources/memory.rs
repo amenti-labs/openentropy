@@ -47,7 +47,8 @@ impl EntropySource for MemoryTimingSource {
         for i in 0..iterations {
             let t0 = Instant::now();
 
-            // Allocate a page-sized anonymous private mapping.
+            // SAFETY: mmap with MAP_ANONYMOUS|MAP_PRIVATE creates a private anonymous
+            // mapping. We check for MAP_FAILED before using the returned address.
             let addr = unsafe {
                 libc::mmap(
                     ptr::null_mut(),
@@ -63,9 +64,9 @@ impl EntropySource for MemoryTimingSource {
                 continue;
             }
 
-            // Touch the page — trigger the page fault and force DRAM access.
-            // Write a pattern and read it back to ensure the compiler doesn't
-            // optimize away the access.
+            // SAFETY: addr is a valid mmap'd region of PAGE_SIZE bytes (checked
+            // != MAP_FAILED above). page.add(PAGE_SIZE - 1) is within the mapping.
+            // munmap at the end deallocates the region.
             unsafe {
                 let page = addr as *mut u8;
                 // Write to first and last byte of the page to touch both ends.

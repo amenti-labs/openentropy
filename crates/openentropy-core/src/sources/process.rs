@@ -50,6 +50,7 @@ fn collect_getpid_jitter(n_bytes: usize) -> Vec<u8> {
 
     for _ in 0..rounds {
         let start = Instant::now();
+        // SAFETY: getpid() is always safe — it's a simple read-only syscall.
         unsafe {
             libc::getpid();
         }

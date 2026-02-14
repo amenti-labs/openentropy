@@ -20,6 +20,7 @@ pub fn run(path: &str, buffer_size: usize, source_filter: Option<&str>, conditio
         {
             use std::ffi::CString;
             let c_path = CString::new(path).unwrap();
+            // SAFETY: c_path is a valid NUL-terminated CString.
             let ret = unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) };
             if ret != 0 {
                 eprintln!("Error creating FIFO: {}", std::io::Error::last_os_error());
@@ -69,6 +70,8 @@ fn ctrlc_handler(path: &str) {
 
 mod ctrlc {
     pub fn set_handler<F: Fn() + Send + 'static>(handler: F) -> Result<(), ()> {
+        // SAFETY: signal() registers a C-linkage handler for SIGINT/SIGTERM.
+        // signal_handler is a valid extern "C" fn with correct signature.
         unsafe {
             libc::signal(
                 libc::SIGINT,

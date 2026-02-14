@@ -17,19 +17,9 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
     let health = pool.health_report();
 
     for src in &health.sources {
-        let grade = if src.min_entropy >= 7.5 {
-            "A"
-        } else if src.min_entropy >= 6.0 {
-            "B"
-        } else if src.min_entropy >= 4.0 {
-            "C"
-        } else if src.min_entropy >= 2.0 {
-            "D"
-        } else {
-            "F"
-        };
-
         let min_h = src.min_entropy.max(0.0);
+        let grade = openentropy_core::grade_min_entropy(min_h);
+
         println!(
             "  {} {:<25} H={:.3}  H∞={:.3}  {:.2}s  {}B",
             grade, src.name, src.entropy, min_h, src.time, src.bytes
@@ -44,7 +34,7 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
         ));
     }
 
-    results.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
+    results.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
 
     println!("\n{}", "=".repeat(68));
     println!(

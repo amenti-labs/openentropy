@@ -49,7 +49,7 @@ static AMX_TIMING_INFO: SourceInfo = SourceInfo {
               a dedicated execution unit with its own pipeline, register file, and memory \
               paths. Timing depends on: AMX pipeline occupancy from ALL system AMX users, \
               memory bandwidth contention, AMX power state transitions, and SLC cache state.",
-    category: SourceCategory::Silicon,
+    category: SourceCategory::Frontier,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 2500.0,
 };
@@ -175,7 +175,7 @@ static THREAD_LIFECYCLE_INFO: SourceInfo = SourceInfo {
               CPU core selection (P-core vs E-core), stack page allocation, TLS setup, and \
               context switch on join. The scheduler\u{2019}s core selection depends on thermal \
               state, load from ALL processes, and QoS priorities.",
-    category: SourceCategory::Silicon,
+    category: SourceCategory::Frontier,
     platform_requirements: &[],
     entropy_rate_estimate: 3000.0,
 };
@@ -254,7 +254,7 @@ static MACH_IPC_INFO: SourceInfo = SourceInfo {
               ipc_mqueue insertion, receiver thread wakeup (scheduler decision affected by \
               ALL runnable threads), and kernel memory copy. The timing captures IPC queue \
               contention and cross-core scheduling nondeterminism.",
-    category: SourceCategory::Novel,
+    category: SourceCategory::Frontier,
     platform_requirements: &[],
     entropy_rate_estimate: 2000.0,
 };
@@ -291,14 +291,15 @@ impl EntropySource for MachIPCSource {
         });
 
         // Also create Mach ports for real kernel IPC timing.
+        // SAFETY: mach_task_self() returns the current task port (always valid).
         let task = unsafe { mach_task_self() };
         let mut port: u32 = 0;
 
         for _ in 0..raw_count {
             let t0 = mach_time();
 
-            // Allocate and deallocate a Mach port — this exercises the kernel
-            // IPC port name space, zone allocator, and port rights management.
+            // SAFETY: mach_port_allocate/deallocate/mod_refs are standard Mach kernel
+            // APIs. We only deallocate ports we successfully allocated (kr == 0).
             let kr = unsafe {
                 mach_port_allocate(task, 1 /* MACH_PORT_RIGHT_RECEIVE */, &mut port)
             };
@@ -370,7 +371,7 @@ static TLB_SHOOTDOWN_INFO: SourceInfo = SourceInfo {
               stale TLB entries. IPI latency depends on: what each core is executing \
               (pipeline depth at interrupt), P-core vs E-core cluster interconnect latency, \
               core power states, and concurrent IPI traffic from other processes.",
-    category: SourceCategory::Silicon,
+    category: SourceCategory::Frontier,
     platform_requirements: &[],
     entropy_rate_estimate: 2000.0,
 };
@@ -385,11 +386,13 @@ impl EntropySource for TLBShootdownSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
+        // SAFETY: sysconf(_SC_PAGESIZE) is always safe and returns the page size.
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
         let num_pages = 64; // 64 pages = 256KB — enough to stress TLB
         let region_size = page_size * num_pages;
 
-        // Allocate and fault in all pages.
+        // SAFETY: mmap with MAP_ANONYMOUS|MAP_PRIVATE creates a private anonymous
+        // mapping. We check for MAP_FAILED before using the returned address.
         let addr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -407,6 +410,8 @@ impl EntropySource for TLBShootdownSource {
 
         // Touch every page to establish TLB entries on this core.
         for p in 0..num_pages {
+            // SAFETY: addr is a valid mmap'd region. p * page_size < region_size
+            // since p < num_pages and region_size = num_pages * page_size.
             unsafe {
                 std::ptr::write_volatile((addr as *mut u8).add(p * page_size), 0xAA);
             }
@@ -418,8 +423,8 @@ impl EntropySource for TLBShootdownSource {
         for _ in 0..raw_count {
             let t0 = mach_time();
 
-            // Toggle protection: RW → RO → RW.
-            // Each mprotect triggers a TLB shootdown IPI to all cores.
+            // SAFETY: addr is a valid mmap'd region of region_size bytes.
+            // mprotect toggles protection to trigger TLB shootdowns.
             unsafe {
                 libc::mprotect(addr, region_size, libc::PROT_READ);
                 libc::mprotect(addr, region_size, libc::PROT_READ | libc::PROT_WRITE);
@@ -429,7 +434,7 @@ impl EntropySource for TLBShootdownSource {
             timings.push(t1.wrapping_sub(t0));
         }
 
-        // Clean up.
+        // SAFETY: addr was returned by mmap (checked != MAP_FAILED) with size region_size.
         unsafe {
             libc::munmap(addr, region_size);
         }
@@ -473,7 +478,7 @@ static PIPE_BUFFER_INFO: SourceInfo = SourceInfo {
               mbuf allocation for data buffering, file descriptor table operations, and \
               potential wakeup coalescing. Zone allocator timing depends on zone fragmentation, \
               magazine layer state, and cross-CPU magazine transfers.",
-    category: SourceCategory::Novel,
+    category: SourceCategory::Frontier,
     platform_requirements: &[],
     entropy_rate_estimate: 1500.0,
 };
@@ -503,12 +508,14 @@ impl EntropySource for PipeBufferSource {
 
             let t0 = mach_time();
 
+            // SAFETY: fds is a 2-element array, matching pipe()'s expected output.
             let ret = unsafe { libc::pipe(fds.as_mut_ptr()) };
             if ret != 0 {
                 continue;
             }
 
-            // Write then read — exercises mbuf allocation and data copy paths.
+            // SAFETY: fds[0]/fds[1] are valid file descriptors from pipe().
+            // write_data and read_buf have at least write_size bytes.
             unsafe {
                 libc::write(fds[1], write_data.as_ptr() as *const _, write_size);
                 libc::read(fds[0], read_buf.as_mut_ptr() as *mut _, write_size);
@@ -538,7 +545,7 @@ mod tests {
     fn amx_timing_info() {
         let src = AMXTimingSource;
         assert_eq!(src.name(), "amx_timing");
-        assert_eq!(src.info().category, SourceCategory::Silicon);
+        assert_eq!(src.info().category, SourceCategory::Frontier);
     }
 
     #[test]
@@ -557,7 +564,7 @@ mod tests {
     fn thread_lifecycle_info() {
         let src = ThreadLifecycleSource;
         assert_eq!(src.name(), "thread_lifecycle");
-        assert_eq!(src.info().category, SourceCategory::Silicon);
+        assert_eq!(src.info().category, SourceCategory::Frontier);
     }
 
     #[test]
@@ -580,7 +587,7 @@ mod tests {
     fn mach_ipc_info() {
         let src = MachIPCSource;
         assert_eq!(src.name(), "mach_ipc");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Frontier);
     }
 
     #[test]
@@ -598,7 +605,7 @@ mod tests {
     fn tlb_shootdown_info() {
         let src = TLBShootdownSource;
         assert_eq!(src.name(), "tlb_shootdown");
-        assert_eq!(src.info().category, SourceCategory::Silicon);
+        assert_eq!(src.info().category, SourceCategory::Frontier);
     }
 
     #[test]
@@ -617,7 +624,7 @@ mod tests {
     fn pipe_buffer_info() {
         let src = PipeBufferSource;
         assert_eq!(src.name(), "pipe_buffer");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Frontier);
     }
 
     #[test]

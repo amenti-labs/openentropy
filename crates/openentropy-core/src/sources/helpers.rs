@@ -17,6 +17,8 @@ pub fn mach_time() -> u64 {
     unsafe extern "C" {
         fn mach_absolute_time() -> u64;
     }
+    // SAFETY: mach_absolute_time() is a stable macOS API that returns the
+    // current value of the system absolute time counter. Always safe to call.
     unsafe { mach_absolute_time() }
 }
 

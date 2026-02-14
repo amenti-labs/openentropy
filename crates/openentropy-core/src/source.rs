@@ -15,6 +15,7 @@ pub enum SourceCategory {
     Silicon,
     CrossDomain,
     Novel,
+    Frontier,
 }
 
 impl std::fmt::Display for SourceCategory {
@@ -27,6 +28,7 @@ impl std::fmt::Display for SourceCategory {
             Self::Silicon => write!(f, "silicon"),
             Self::CrossDomain => write!(f, "cross_domain"),
             Self::Novel => write!(f, "novel"),
+            Self::Frontier => write!(f, "frontier"),
         }
     }
 }

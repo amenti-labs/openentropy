@@ -65,7 +65,8 @@ impl EntropySource for DRAMRowBufferSource {
             let idx2 = rng.random_range(0..BUF_SIZE);
 
             let t0 = mach_time();
-            // Volatile reads to prevent compiler from eliding the accesses.
+            // SAFETY: idx1 and idx2 are bounded by BUF_SIZE via random_range.
+            // read_volatile prevents the compiler from eliding the accesses.
             let _v1 = unsafe { std::ptr::read_volatile(&buffer[idx1]) };
             let _v2 = unsafe { std::ptr::read_volatile(&buffer[idx2]) };
             let t1 = mach_time();
@@ -138,6 +139,7 @@ impl EntropySource for CacheContentionSource {
                     let start = rng.random_range(0..BUF_SIZE.saturating_sub(512));
                     let mut sink: u8 = 0;
                     for offset in 0..512 {
+                        // SAFETY: start + offset < BUF_SIZE due to saturating_sub(512) bound.
                         sink ^= unsafe { std::ptr::read_volatile(&buffer[start + offset]) };
                     }
                     std::hint::black_box(sink);
@@ -147,6 +149,7 @@ impl EntropySource for CacheContentionSource {
                     let mut sink: u8 = 0;
                     for _ in 0..512 {
                         let idx = rng.random_range(0..BUF_SIZE);
+                        // SAFETY: idx is bounded by BUF_SIZE via random_range.
                         sink ^= unsafe { std::ptr::read_volatile(&buffer[idx]) };
                     }
                     std::hint::black_box(sink);
@@ -156,6 +159,7 @@ impl EntropySource for CacheContentionSource {
                     let start = rng.random_range(0..BUF_SIZE.saturating_sub(512 * 64));
                     let mut sink: u8 = 0;
                     for i in 0..512 {
+                        // SAFETY: start + i*64 < BUF_SIZE due to saturating_sub(512*64) bound.
                         sink ^= unsafe { std::ptr::read_volatile(&buffer[start + i * 64]) };
                     }
                     std::hint::black_box(sink);
@@ -204,6 +208,7 @@ impl EntropySource for PageFaultTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
+        // SAFETY: sysconf(_SC_PAGESIZE) is always safe and returns the page size.
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
         let num_pages: usize = 8;
         let map_size = page_size * num_pages;
@@ -214,7 +219,8 @@ impl EntropySource for PageFaultTimingSource {
         let mut timings = Vec::with_capacity(num_cycles * num_pages);
 
         for _ in 0..num_cycles {
-            // Allocate anonymous pages via mmap.
+            // SAFETY: mmap with MAP_ANONYMOUS|MAP_PRIVATE creates a private anonymous
+            // mapping. We check for MAP_FAILED before using the returned address.
             let addr = unsafe {
                 libc::mmap(
                     std::ptr::null_mut(),
@@ -233,12 +239,14 @@ impl EntropySource for PageFaultTimingSource {
             // Touch each page to trigger a minor fault and time it with
             // high-resolution mach_time instead of Instant.
             for p in 0..num_pages {
+                // SAFETY: addr points to a valid mmap region of map_size bytes.
+                // p * page_size < map_size since p < num_pages and map_size = num_pages * page_size.
                 let page_ptr = unsafe { (addr as *mut u8).add(p * page_size) };
 
                 let t0 = mach_time();
+                // SAFETY: page_ptr points within a valid mmap'd region. We write then
+                // read to trigger a page fault and install a TLB entry.
                 unsafe {
-                    // Write to the page to force a fault, then read back
-                    // to ensure the TLB entry is fully installed.
                     std::ptr::write_volatile(page_ptr, 0xAA);
                     let _v = std::ptr::read_volatile(page_ptr);
                 }
@@ -247,7 +255,7 @@ impl EntropySource for PageFaultTimingSource {
                 timings.push(t1.wrapping_sub(t0));
             }
 
-            // Unmap so the next cycle gets fresh pages.
+            // SAFETY: addr was returned by mmap (checked != MAP_FAILED) with size map_size.
             unsafe {
                 libc::munmap(addr, map_size);
             }

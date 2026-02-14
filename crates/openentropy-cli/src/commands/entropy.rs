@@ -23,7 +23,11 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
 
     let health = pool.health_report();
     let mut sources: Vec<_> = health.sources.iter().collect();
-    sources.sort_by(|a, b| b.min_entropy.partial_cmp(&a.min_entropy).unwrap());
+    sources.sort_by(|a, b| {
+        b.min_entropy
+            .partial_cmp(&a.min_entropy)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     println!("  {:<25} {:>8} {:>8}", "Source", "Shannon", "Min-H∞");
     println!("  {}", "-".repeat(45));

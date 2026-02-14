@@ -10,7 +10,7 @@ use tempfile::NamedTempFile;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 
-use super::helpers::mach_time;
+use super::helpers::{extract_timing_entropy, mach_time};
 
 // ---------------------------------------------------------------------------
 // CPUIOBeatSource
@@ -78,24 +78,7 @@ impl EntropySource for CPUIOBeatSource {
             timings.push(t2.wrapping_sub(t1)); // I/O domain
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // XOR consecutive deltas.
-        let xor_deltas: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas.clone()
-        };
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
-
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -164,6 +147,7 @@ impl EntropySource for CPUMemoryBeatSource {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let idx = (lcg as usize) % MEM_BUFFER_SIZE;
+            // SAFETY: idx is bounded by MEM_BUFFER_SIZE via modulo.
             let val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
             std::hint::black_box(val);
 
@@ -173,24 +157,7 @@ impl EntropySource for CPUMemoryBeatSource {
             timings.push(t2.wrapping_sub(t1)); // Memory domain
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // XOR consecutive deltas.
-        let xor_deltas: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas.clone()
-        };
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
-
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
@@ -253,11 +220,12 @@ impl EntropySource for MultiDomainBeatSource {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let idx = (lcg as usize) % MULTI_BUFFER_SIZE;
+            // SAFETY: idx is bounded by MULTI_BUFFER_SIZE via modulo.
             let val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
             std::hint::black_box(val);
             let t2 = mach_time();
 
-            // Domain 3: Kernel syscall (getpid)
+            // SAFETY: getpid() is always safe — it's a simple read-only syscall.
             unsafe { libc::getpid() };
             let t3 = mach_time();
 
@@ -267,24 +235,7 @@ impl EntropySource for MultiDomainBeatSource {
             timings.push(t3.wrapping_sub(t2)); // Syscall
         }
 
-        // Compute deltas between consecutive timings.
-        let deltas: Vec<u64> = timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        // XOR consecutive deltas.
-        let xor_deltas: Vec<u64> = if deltas.len() >= 2 {
-            deltas.windows(2).map(|w| w[0] ^ w[1]).collect()
-        } else {
-            deltas.clone()
-        };
-
-        // Extract LSBs.
-        let mut entropy: Vec<u8> = xor_deltas.iter().map(|&d| d as u8).collect();
-
-        entropy.truncate(n_samples);
-        entropy
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 
