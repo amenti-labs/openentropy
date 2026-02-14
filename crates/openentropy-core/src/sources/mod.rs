@@ -1,4 +1,4 @@
-//! All 40 entropy source implementations.
+//! All 39 entropy source implementations.
 
 pub mod helpers;
 
@@ -75,7 +75,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::KqueueEventsSource::default()),
         Box::new(frontier::DVFSRaceSource),
         Box::new(frontier::CASContentionSource::default()),
-        Box::new(frontier::DMPConfusionSource::default()),
         Box::new(frontier::KeychainTimingSource::default()),
     ]
 }
