@@ -54,6 +54,6 @@ statrs = "0.18"
 rustfft = "6"
 
 # Internal
-openentropy-core = { path = "crates/openentropy-core" }
-openentropy-server = { path = "crates/openentropy-server" }
-openentropy-tests = { path = "crates/openentropy-tests" }
+openentropy-core = { path = "crates/openentropy-core", version = "0.4.0" }
+openentropy-server = { path = "crates/openentropy-server", version = "0.4.0" }
+openentropy-tests = { path = "crates/openentropy-tests", version = "0.4.0" }
