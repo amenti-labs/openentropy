@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-39 sources across 8 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+36 sources across 8 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -20,8 +20,7 @@
 | 12 | `gpu_timing` | Hardware | GPU compute dispatch jitter | ~600 b/s | macOS (Metal) |
 | 13 | `audio_noise` | Hardware | Microphone thermal noise floor | ~1000 b/s | Requires mic |
 | 14 | `camera_noise` | Hardware | Camera sensor dark current | ~2000 b/s | Requires camera |
-| 15 | `sensor_noise` | Hardware | SMC sensor ADC jitter | ~400 b/s | macOS |
-| 16 | `bluetooth_noise` | Hardware | BLE ambient RF environment | ~200 b/s | macOS |
+| 15 | `bluetooth_noise` | Hardware | BLE ambient RF environment | ~200 b/s | macOS |
 | 17 | `ioregistry` | Hardware | IOKit registry value mining | ~500 b/s | macOS |
 | 18 | `dram_row_buffer` | Silicon | DRAM row buffer hit/miss timing | ~3000 b/s | All |
 | 19 | `cache_contention` | Silicon | L1/L2 cache contention timing | ~2500 b/s | All |
@@ -29,12 +28,10 @@
 | 21 | `speculative_execution` | Silicon | Branch predictor state timing | ~2000 b/s | All |
 | 22 | `cpu_io_beat` | Cross-Domain | CPU vs I/O clock beat frequency | ~300 b/s | All |
 | 23 | `cpu_memory_beat` | Cross-Domain | CPU vs memory controller beat | ~400 b/s | All |
-| 24 | `multi_domain_beat` | Cross-Domain | Multi-subsystem interference | ~500 b/s | All |
-| 25 | `compression_timing` | Novel | zlib compression timing oracle | ~300 b/s | All |
+| 24 | `compression_timing` | Novel | zlib compression timing oracle | ~300 b/s | All |
 | 26 | `hash_timing` | Novel | SHA-256 timing data-dependency | ~400 b/s | All |
 | 27 | `dispatch_queue` | Novel | Thread pool scheduling jitter | ~500 b/s | macOS |
-| 28 | `dyld_timing` | Novel | Dynamic linker dlsym() timing | ~300 b/s | macOS, Linux |
-| 29 | `vm_page_timing` | Novel | Mach VM page allocation timing | ~400 b/s | macOS |
+| 28 | `vm_page_timing` | Novel | Mach VM page allocation timing | ~400 b/s | macOS |
 | 30 | `spotlight_timing` | Novel | Spotlight metadata query timing | ~200 b/s | macOS |
 
 ---
@@ -244,20 +241,7 @@
 
 ---
 
-### 15. `sensor_noise`
-
-**Category:** Hardware
-**Struct:** `SensorNoiseSource`
-**Platform:** macOS
-**Estimated Rate:** ~400 b/s
-
-**Physics:** Apple SMC (System Management Controller) sensor readout jitter. Every ADC (analog-to-digital converter) reading contains quantization noise plus thermal noise from the sensor element itself. With dozens of independent sensors (voltage rails, current sense, thermal diodes) sampled rapidly, you get parallel independent entropy streams.
-
-**Implementation:** Reads sensor values via `ioreg` and extracts ADC quantization noise from the LSBs.
-
----
-
-### 16. `bluetooth_noise`
+### 15. `bluetooth_noise`
 
 **Category:** Hardware
 **Struct:** `BluetoothNoiseSource`
@@ -391,19 +375,6 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ---
 
-### 24. `multi_domain_beat`
-
-**Category:** Cross-Domain
-**Struct:** `MultiDomainBeatSource`
-**Platform:** All
-**Estimated Rate:** ~500 b/s
-
-**Physics:** Interference pattern from 3+ independent subsystems (CPU, memory, I/O, and syscall). Multi-source beats have higher entropy density than pairwise interactions because they combine noise from more independent oscillators.
-
-**Implementation:** Interleaves CPU work, memory accesses, file I/O, and system calls in rapid succession, capturing the composite timing.
-
----
-
 ## Novel Sources
 
 ### 25. `compression_timing`
@@ -445,20 +416,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ---
 
-### 28. `dyld_timing`
-
-**Category:** Novel
-**Struct:** `DyldTimingSource`
-**Platform:** macOS, Linux
-**Estimated Rate:** ~300 b/s
-
-**Physics:** Dynamic linker `dlsym()` lookup timing varies with symbol table size, hash table collisions, shared library cache state, and address space layout. ASLR (Address Space Layout Randomization) adds per-process variation.
-
-**Implementation:** Times `libloading::Library::new()` operations for dynamic library loading.
-
----
-
-### 29. `vm_page_timing`
+### 28. `vm_page_timing`
 
 **Category:** Novel
 **Struct:** `VMPageTimingSource`
@@ -488,10 +446,10 @@ These sources exploit the interference patterns that arise when independent cloc
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **39/39** | Full suite -- WiFi, BLE, camera, mic, all sensors |
-| **Mac Mini/Studio/Pro** | 35-36/39 | Most sources -- no built-in camera or mic on some models |
-| **Intel Mac** | ~20/39 | Timing, system, network, disk sources work; some silicon sources are ARM-specific |
-| **Linux** | 10-15/39 | Timing, network, disk, process, silicon sources work; no macOS-specific sources |
+| **MacBook (M-series)** | **36/36** | Full suite -- WiFi, BLE, camera, mic, all sensors |
+| **Mac Mini/Studio/Pro** | 31-33/36 | Most sources -- no built-in camera or mic on some models |
+| **Intel Mac** | ~18/36 | Timing, system, network, disk sources work; some silicon sources are ARM-specific |
+| **Linux** | 10-15/36 | Timing, network, disk, process, silicon sources work; no macOS-specific sources |
 
 The package gracefully detects available hardware via `detect_available_sources()` and only activates sources that pass `is_available()`. MacBooks provide the richest entropy because they pack the most sensors into one device.
 

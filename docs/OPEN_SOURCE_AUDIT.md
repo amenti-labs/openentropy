@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-OpenEntropy is a Rust library that harvests entropy from 39 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
+OpenEntropy is a Rust library that harvests entropy from 36 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -38,17 +38,16 @@ All 18 original Python entropy sources have been ported to Rust:
 | `audio_noise.py` | `audio.rs::AudioNoiseSource` | ✅ |
 | `camera_noise.py` | `camera.rs::CameraNoiseSource` | ✅ |
 | `wifi_signal.py` | `wifi.rs::WifiNoiseSource` | ✅ |
-| `sensor_noise.py` | `sensor.rs::SensorNoiseSource` | ✅ |
 | `compression_timing.py` | `compression.rs::CompressionTimingSource` | ✅ |
 | `hash_timing.py` | `compression.rs::HashTimingSource` | ✅ |
 
 **Additionally, 12 new sources were created in Rust with no Python equivalent:**
 - Silicon: `dram_row_buffer`, `cache_contention`, `page_fault_timing`, `speculative_execution`
-- Cross-domain: `cpu_io_beat`, `cpu_memory_beat`, `multi_domain_beat`
-- Novel: `dispatch_queue`, `dyld_timing`, `vm_page_timing`, `spotlight_timing`
+- Cross-domain: `cpu_io_beat`, `cpu_memory_beat`
+- Novel: `dispatch_queue`, `vm_page_timing`, `spotlight_timing`
 - System: `ioregistry`
 
-**Total: 39 Rust sources (18 ported + 21 new)**
+**Total: 36 Rust sources (17 ported + 19 new)**
 
 ## 2. Legacy Python Cleanup
 
@@ -121,7 +120,6 @@ All 26 available sources probed on M4 Mac mini (2026-02-12):
 | gpu_timing | A | 7.96 | 37.0s |
 | vm_page_timing | A | 7.85 | 0.11s |
 | page_fault_timing | A | 7.80 | 0.02s |
-| dyld_timing | A | 7.33 | 1.2s |
 | spotlight_timing | A | 7.00 | 12.7s |
 | memory_timing | A | 6.73 | 0.02s |
 | clock_jitter | B | 6.28 | <0.001s |
@@ -137,7 +135,6 @@ All 26 available sources probed on M4 Mac mini (2026-02-12):
 | hash_timing | D | 3.13 | 0.02s |
 | cpu_memory_beat | D | 2.77 | 0.01s |
 | sleep_jitter | D* | 2.62 | 0.001s |
-| multi_domain_beat | D | 2.60 | 0.007s |
 | sysctl_deltas | D | 2.49 | 0.19s |
 | vmstat_deltas | D | 2.11 | 0.48s |
 | speculative_execution | F | 2.00 | 0.001s |
@@ -145,7 +142,7 @@ All 26 available sources probed on M4 Mac mini (2026-02-12):
 
 *Sleep_jitter oscillates between D and F across runs.
 
-**4 sources unavailable on test machine:** audio_noise (ffmpeg), camera_noise (ffmpeg), wifi_noise (WiFi), sensor_noise (CoreMotion)
+**3 sources unavailable on test machine:** audio_noise (ffmpeg), camera_noise (ffmpeg), wifi_noise (WiFi)
 
 **Grade distribution:** 8A, 4B, 6C, 6D, 2F, 4 N/A
 
@@ -178,7 +175,7 @@ openentropy/
 │   └── __init__.py          # Thin PyO3 wrapper
 ├── docs/
 │   ├── OPEN_SOURCE_AUDIT.md # This file
-│   ├── SOURCE_CATALOG.md    # All 39 sources with physics & grades
+│   ├── SOURCE_CATALOG.md    # All 36 sources with physics & grades
 │   ├── CONDITIONING.md      # Conditioning architecture
 │   ├── ARCHITECTURE.md      # System architecture
 │   ├── API.md               # API reference
@@ -195,7 +192,7 @@ openentropy/
 
 3. **Slow sources:** `gpu_timing` (37s), `tcp_connect_timing` (39s), `dns_timing` (19s), and `spotlight_timing` (13s) are slow due to process spawning or network round-trips. The pool handles this gracefully — fast sources provide bulk entropy while slow sources contribute high-quality samples.
 
-4. **Platform coverage:** 15 of 39 sources are macOS-only. Linux portability would require alternative implementations for: sysctl, vmstat, ioregistry, bluetooth, audio, camera, wifi, sensor, dispatch_queue, spotlight, and gpu sources.
+4. **Platform coverage:** 14 of 36 sources are macOS-only. Linux portability would require alternative implementations for: sysctl, vmstat, ioregistry, bluetooth, audio, camera, wifi, dispatch_queue, spotlight, and gpu sources.
 
 ## 9. Conclusion
 

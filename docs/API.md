@@ -220,10 +220,10 @@ pub enum SourceCategory {
     Timing,       // Clock phase noise, scheduler jitter
     System,       // Kernel counters, process tables
     Network,      // DNS latency, TCP timing, WiFi RSSI
-    Hardware,     // Disk I/O, memory, GPU, audio, camera, sensors
+    Hardware,     // Disk I/O, memory, GPU, audio, camera
     Silicon,      // DRAM row buffer, cache, page faults, speculative exec
     CrossDomain,  // Beat frequencies between clock domains
-    Novel,        // GCD dispatch, dyld timing, VM pages, Spotlight
+    Novel,        // GCD dispatch, VM pages, Spotlight
 }
 
 // Implements Display: formats as lowercase string
@@ -311,7 +311,7 @@ score = (shannon / 8.0) * 60  +  min(compression_ratio, 1.0) * 20  +  (unique / 
 
 ```rust
 /// Discover all entropy sources available on this machine.
-/// Creates all 39 source instances, calls is_available() on each,
+/// Creates all 36 source instances, calls is_available() on each,
 /// and returns only those that pass.
 pub fn detect_available_sources() -> Vec<Box<dyn EntropySource>>
 
@@ -334,7 +334,7 @@ pub struct PlatformInfo {
 **Module:** `openentropy_core::sources`
 
 ```rust
-/// All 39 entropy source constructors.
+/// All 36 entropy source constructors.
 /// Returns a Vec of boxed sources in category order:
 ///   Timing (3) -> System (3) -> Network (3) -> Hardware (5+3) ->
 ///   Silicon (4) -> Cross-Domain (3) -> Compression/Hash (2) -> Novel (4)
@@ -356,13 +356,12 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>>
 | `sources::gpu` | `GPUTimingSource` |
 | `sources::audio` | `AudioNoiseSource` |
 | `sources::camera` | `CameraNoiseSource` |
-| `sources::sensor` | `SensorNoiseSource` |
 | `sources::bluetooth` | `BluetoothNoiseSource` |
 | `sources::ioregistry` | `IORegistryEntropySource` |
 | `sources::silicon` | `DRAMRowBufferSource`, `CacheContentionSource`, `PageFaultTimingSource`, `SpeculativeExecutionSource` |
-| `sources::cross_domain` | `CPUIOBeatSource`, `CPUMemoryBeatSource`, `MultiDomainBeatSource` |
+| `sources::cross_domain` | `CPUIOBeatSource`, `CPUMemoryBeatSource` |
 | `sources::compression` | `CompressionTimingSource`, `HashTimingSource` |
-| `sources::novel` | `DispatchQueueSource`, `DyldTimingSource`, `VMPageTimingSource`, `SpotlightTimingSource` |
+| `sources::novel` | `DispatchQueueSource`, `VMPageTimingSource`, `SpotlightTimingSource` |
 
 ---
 

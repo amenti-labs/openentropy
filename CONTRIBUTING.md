@@ -12,10 +12,10 @@
 ```
 Cargo.toml                    # Workspace root
 crates/
-├── openentropy-core/            # EntropySource trait, 39 sources, pool, conditioning
+├── openentropy-core/            # EntropySource trait, 36 sources, pool, conditioning
 │   └── src/
 │       ├── source.rs         # EntropySource trait definition
-│       ├── sources/          # All 39 source implementations
+│       ├── sources/          # All 36 source implementations
 │       │   └── mod.rs        # Source registry (all_sources())
 │       ├── pool.rs           # Multi-source entropy pool
 │       ├── conditioning.rs   # SHA-256 conditioning

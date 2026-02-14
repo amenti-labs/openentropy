@@ -27,7 +27,6 @@ const FAST_SOURCES: &[&str] = &[
     "speculative_execution",
     "cpu_io_beat",
     "cpu_memory_beat",
-    "multi_domain_beat",
     "hash_timing",
     "compression_timing",
     "dispatch_queue",

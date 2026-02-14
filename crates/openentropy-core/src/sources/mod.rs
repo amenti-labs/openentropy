@@ -1,4 +1,4 @@
-//! All 39 entropy source implementations.
+//! All 36 entropy source implementations.
 
 pub mod helpers;
 
@@ -15,7 +15,7 @@ pub mod memory;
 pub mod network;
 pub mod novel;
 pub mod process;
-pub mod sensor;
+
 pub mod silicon;
 pub mod sysctl;
 pub mod timing;
@@ -45,7 +45,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(gpu::GPUTimingSource),
         Box::new(audio::AudioNoiseSource),
         Box::new(camera::CameraNoiseSource),
-        Box::new(sensor::SensorNoiseSource),
         Box::new(bluetooth::BluetoothNoiseSource),
         // Silicon
         Box::new(silicon::DRAMRowBufferSource),
@@ -57,13 +56,11 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Cross-domain beat
         Box::new(cross_domain::CPUIOBeatSource),
         Box::new(cross_domain::CPUMemoryBeatSource),
-        Box::new(cross_domain::MultiDomainBeatSource),
         // Compression/hash timing
         Box::new(compression::CompressionTimingSource),
         Box::new(compression::HashTimingSource),
         // Novel
         Box::new(novel::DispatchQueueSource),
-        Box::new(novel::DyldTimingSource),
         Box::new(novel::VMPageTimingSource),
         Box::new(novel::SpotlightTimingSource),
         // Frontier (novel unexplored sources)

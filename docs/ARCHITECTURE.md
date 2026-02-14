@@ -21,7 +21,7 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       └── sources/            # 39 source implementations
+│   │       └── sources/            # 36 source implementations
 │   │           ├── mod.rs          # all_sources() registry
 │   │           ├── timing.rs       # ClockJitter, MachTiming, SleepJitter
 │   │           ├── sysctl.rs       # Kernel counter mining
@@ -34,13 +34,12 @@ openentropy/
 │   │           ├── gpu.rs          # GPU scheduling jitter
 │   │           ├── audio.rs        # Microphone thermal noise
 │   │           ├── camera.rs       # Sensor dark current
-│   │           ├── sensor.rs       # SMC sensor readouts
 │   │           ├── bluetooth.rs    # BLE RF noise
 │   │           ├── ioregistry.rs   # IOKit deep mining
 │   │           ├── silicon.rs      # DRAM row buffer, cache, page fault, speculative
 │   │           ├── cross_domain.rs # Beat frequency sources
 │   │           ├── compression.rs  # Compression/hash timing oracles
-│   │           └── novel.rs        # GCD dispatch, dyld, VM page, Spotlight
+│   │           └── novel.rs        # GCD dispatch, VM page, Spotlight
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
@@ -82,7 +81,7 @@ openentropy/
 
 ### 1. openentropy-core
 
-The foundational library. Contains all 39 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
+The foundational library. Contains all 36 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
 **Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `libloading`, `log`
 
@@ -125,7 +124,7 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
 
 ```
                          ┌─────────────────────────────────────────────┐
-                         │          39 ENTROPY SOURCES                 │
+                         │          36 ENTROPY SOURCES                 │
                          │                                             │
                          │  Timing      System      Network   Hardware │
                          │  Silicon     CrossDomain  Novel             │
@@ -233,10 +232,10 @@ pub enum SourceCategory {
     Timing,       // Clock phase noise, scheduler jitter
     System,       // Kernel counters, process tables
     Network,      // DNS latency, TCP timing, WiFi RSSI
-    Hardware,     // Disk I/O, memory, GPU, audio, camera, sensors
+    Hardware,     // Disk I/O, memory, GPU, audio, camera
     Silicon,      // DRAM row buffer, cache, page faults, speculative exec
     CrossDomain,  // Beat frequencies between clock domains
-    Novel,        // GCD dispatch, dyld timing, VM pages, Spotlight
+    Novel,        // GCD dispatch, VM pages, Spotlight
 }
 ```
 
@@ -312,7 +311,7 @@ Sources that panic during collection are caught via `catch_unwind` and marked un
 
 - **Not a CSPRNG replacement.** This provides entropy *input*, not a complete cryptographic random number generator.
 - SHA-256 conditioning ensures output is computationally indistinguishable from random, even if individual sources are weak or compromised.
-- Every output block mixes 8 bytes from `/dev/urandom` as a safety net. Even if all 39 hardware sources fail simultaneously, the output remains at least as strong as the OS entropy source.
+- Every output block mixes 8 bytes from `/dev/urandom` as a safety net. Even if all 36 hardware sources fail simultaneously, the output remains at least as strong as the OS entropy source.
 - Health monitoring detects degraded sources and flags them, but never stops producing output.
 - The internal state is chained (each output updates the state), providing forward secrecy: compromising a past state does not reveal future output.
 

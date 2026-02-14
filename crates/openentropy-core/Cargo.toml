@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Core entropy harvesting library — 38 unconventional sources from your computer's physics"
+description = "Core entropy harvesting library — 36 unconventional sources from your computer's physics"
 
 [[example]]
 name = "basic"
@@ -28,6 +28,6 @@ flate2 = { workspace = true }
 libc = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
-libloading = { workspace = true }
+
 log = { workspace = true }
 getrandom = { workspace = true }

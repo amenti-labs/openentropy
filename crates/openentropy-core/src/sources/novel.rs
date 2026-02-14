@@ -1,5 +1,5 @@
-//! Novel entropy sources: dispatch queue scheduling, dynamic linker timing,
-//! VM page fault timing, and Spotlight metadata query timing.
+//! Novel entropy sources: dispatch queue scheduling, VM page fault timing,
+//! and Spotlight metadata query timing.
 
 use std::process::Command;
 use std::ptr;
@@ -82,84 +82,6 @@ impl EntropySource for DispatchQueueSource {
 
         // Drop senders to signal workers to exit.
         drop(senders);
-
-        extract_timing_entropy(&timings, n_samples)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// DyldTimingSource
-// ---------------------------------------------------------------------------
-
-/// Libraries to cycle through on macOS.
-#[cfg(target_os = "macos")]
-const DYLD_LIBRARIES: &[&str] = &[
-    "libz.dylib",
-    "libc++.dylib",
-    "libobjc.dylib",
-    "libSystem.B.dylib",
-];
-
-/// Libraries to cycle through on Linux.
-#[cfg(target_os = "linux")]
-const DYLD_LIBRARIES: &[&str] = &["libc.so.6", "libm.so.6"];
-
-/// Fallback for other platforms.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-const DYLD_LIBRARIES: &[&str] = &[];
-
-static DYLD_TIMING_INFO: SourceInfo = SourceInfo {
-    name: "dyld_timing",
-    description: "Dynamic library loading (dlopen/dlsym) timing jitter",
-    physics: "Times dynamic library loading (dlopen/dlsym) which requires: searching the \
-              dyld shared cache, resolving symbol tables, rebasing pointers, and running \
-              initializers. The timing varies with: shared cache page residency (depends on \
-              what other apps have loaded), ASLR randomization, and filesystem metadata \
-              cache state.",
-    category: SourceCategory::Novel,
-    platform_requirements: &[],
-    entropy_rate_estimate: 1200.0,
-    composite: false,
-};
-
-/// Entropy source that harvests timing jitter from dynamic library loading.
-pub struct DyldTimingSource;
-
-impl EntropySource for DyldTimingSource {
-    fn info(&self) -> &SourceInfo {
-        &DYLD_TIMING_INFO
-    }
-
-    fn is_available(&self) -> bool {
-        !DYLD_LIBRARIES.is_empty()
-    }
-
-    fn collect(&self, n_samples: usize) -> Vec<u8> {
-        if DYLD_LIBRARIES.is_empty() {
-            return Vec::new();
-        }
-
-        let raw_count = n_samples * 10 + 64;
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
-        let lib_count = DYLD_LIBRARIES.len();
-
-        for i in 0..raw_count {
-            let lib_name = DYLD_LIBRARIES[i % lib_count];
-
-            // Measure the time to load and immediately unload a system library.
-            let t0 = Instant::now();
-
-            // SAFETY: We are loading well-known system libraries.
-            let result = unsafe { libloading::Library::new(lib_name) };
-            if let Ok(lib) = result {
-                // The library is dropped (unloaded) at end of this scope.
-                std::hint::black_box(&lib);
-                drop(lib);
-            }
-
-            let elapsed_ns = t0.elapsed().as_nanos() as u64;
-            timings.push(elapsed_ns);
-        }
 
         extract_timing_entropy(&timings, n_samples)
     }
@@ -359,14 +281,6 @@ mod tests {
         let data = src.collect(64);
         assert!(!data.is_empty());
         assert!(data.len() <= 64);
-    }
-
-    #[test]
-    fn dyld_timing_info() {
-        let src = DyldTimingSource;
-        assert_eq!(src.name(), "dyld_timing");
-        assert_eq!(src.info().category, SourceCategory::Novel);
-        assert!((src.info().entropy_rate_estimate - 1200.0).abs() < f64::EPSILON);
     }
 
     #[test]

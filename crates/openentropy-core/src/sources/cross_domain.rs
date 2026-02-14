@@ -163,85 +163,6 @@ impl EntropySource for CPUMemoryBeatSource {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MultiDomainBeatSource
-// ---------------------------------------------------------------------------
-
-/// Size of the memory buffer for multi-domain source: 4 MB.
-const MULTI_BUFFER_SIZE: usize = 4 * 1024 * 1024;
-
-static MULTI_DOMAIN_BEAT_INFO: SourceInfo = SourceInfo {
-    name: "multi_domain_beat",
-    description: "Composite beat frequency across CPU, memory, disk I/O, and kernel syscall clock domains",
-    physics: "Rapidly interleaves operations across 4 clock domains: CPU computation, memory \
-              access, disk I/O, and kernel syscalls. Each domain has its own PLL and \
-              arbitration logic. The composite timing captures interference patterns \
-              between all domains simultaneously.",
-    category: SourceCategory::CrossDomain,
-    platform_requirements: &[],
-    entropy_rate_estimate: 3000.0,
-    composite: false,
-};
-
-/// Entropy source that captures beat frequency across CPU, memory, I/O, and
-/// kernel syscall clock domains simultaneously.
-pub struct MultiDomainBeatSource;
-
-impl EntropySource for MultiDomainBeatSource {
-    fn info(&self) -> &SourceInfo {
-        &MULTI_DOMAIN_BEAT_INFO
-    }
-
-    fn is_available(&self) -> bool {
-        true
-    }
-
-    fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // Allocate a 4 MB buffer for memory accesses.
-        let mut buffer = vec![0u8; MULTI_BUFFER_SIZE];
-        for (i, byte) in buffer.iter_mut().enumerate() {
-            *byte = i as u8;
-        }
-
-        let raw_count = n_samples * 10 + 64;
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count * 4);
-
-        let mut lcg: u64 = mach_time() | 1;
-
-        for _ in 0..raw_count {
-            // Domain 1: CPU computation (XOR operations)
-            let t0 = mach_time();
-            let mut x: u64 = t0;
-            for _ in 0..50 {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
-            }
-            std::hint::black_box(x);
-            let t1 = mach_time();
-
-            // Domain 2: Random memory access
-            lcg = lcg
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            let idx = (lcg as usize) % MULTI_BUFFER_SIZE;
-            // SAFETY: idx is bounded by MULTI_BUFFER_SIZE via modulo.
-            let val = unsafe { std::ptr::read_volatile(&buffer[idx]) };
-            std::hint::black_box(val);
-            let t2 = mach_time();
-
-            // SAFETY: getpid() is always safe — it's a simple read-only syscall.
-            unsafe { libc::getpid() };
-            let t3 = mach_time();
-
-            // Record all domain crossing timings.
-            timings.push(t1.wrapping_sub(t0)); // CPU
-            timings.push(t2.wrapping_sub(t1)); // Memory
-            timings.push(t3.wrapping_sub(t2)); // Syscall
-        }
-
-        extract_timing_entropy(&timings, n_samples)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::helpers::extract_lsbs_u64;
@@ -277,24 +198,6 @@ mod tests {
     #[ignore] // Run with: cargo test -- --ignored
     fn cpu_memory_beat_collects_bytes() {
         let src = CPUMemoryBeatSource;
-        assert!(src.is_available());
-        let data = src.collect(64);
-        assert!(!data.is_empty());
-        assert!(data.len() <= 64);
-    }
-
-    #[test]
-    fn multi_domain_beat_info() {
-        let src = MultiDomainBeatSource;
-        assert_eq!(src.name(), "multi_domain_beat");
-        assert_eq!(src.info().category, SourceCategory::CrossDomain);
-        assert!((src.info().entropy_rate_estimate - 3000.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    #[ignore] // Run with: cargo test -- --ignored
-    fn multi_domain_beat_collects_bytes() {
-        let src = MultiDomainBeatSource;
         assert!(src.is_available());
         let data = src.collect(64);
         assert!(!data.is_empty());

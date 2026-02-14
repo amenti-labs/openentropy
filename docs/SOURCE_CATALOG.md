@@ -24,19 +24,16 @@ All 38 entropy sources, their physics, quality, and operational characteristics.
 | 14 | `audio_noise` | Hardware | — | — | — | macOS (ffmpeg) |
 | 15 | `camera_noise` | Hardware | — | — | — | macOS (ffmpeg) |
 | 16 | `wifi_noise` | Hardware | — | — | — | macOS (WiFi) |
-| 17 | `sensor_noise` | Hardware | — | — | — | macOS (CoreMotion) |
-| 18 | `dram_row_buffer` | Silicon | C | 3.09 | 0.006s | All |
+| 17 | `dram_row_buffer` | Silicon | C | 3.09 | 0.006s | All |
 | 19 | `cache_contention` | Silicon | B | 3.96 | 0.03s | All |
 | 20 | `page_fault_timing` | Silicon | A | 7.80 | 0.02s | All |
 | 21 | `speculative_execution` | Silicon | F | 2.00 | 0.001s | All |
 | 22 | `cpu_io_beat` | Cross-Domain | C | 4.41 | 0.08s | All |
 | 23 | `cpu_memory_beat` | Cross-Domain | D | 2.77 | 0.01s | All |
-| 24 | `multi_domain_beat` | Cross-Domain | D | 2.60 | 0.007s | All |
-| 25 | `compression_timing` | Novel | B | 5.31 | 0.13s | All |
+| 24 | `compression_timing` | Novel | B | 5.31 | 0.13s | All |
 | 26 | `hash_timing` | Novel | D | 3.13 | 0.02s | All |
 | 27 | `dispatch_queue` | Novel | B | 6.05 | 0.13s | macOS |
-| 28 | `dyld_timing` | Novel | A | 7.33 | 1.2s | macOS/Linux |
-| 29 | `vm_page_timing` | Novel | A | 7.85 | 0.11s | macOS/Linux |
+| 28 | `vm_page_timing` | Novel | A | 7.85 | 0.11s | macOS/Linux |
 | 30 | `spotlight_timing` | Novel | A | 7.00 | 12.7s | macOS |
 | 31 | `amx_timing` | Frontier | B | 5.19 | 0.05s | macOS (Apple Silicon) |
 | 32 | `thread_lifecycle` | Frontier | A | 6.79 | 0.08s | All |
@@ -137,10 +134,10 @@ All 38 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 10.2s
 - **Platform:** macOS (Bluetooth hardware)
 
-#### 14-17. `audio_noise`, `camera_noise`, `wifi_noise`, `sensor_noise`
+#### 14-16. `audio_noise`, `camera_noise`, `wifi_noise`
 - **Status:** Implemented but unavailable on test machine
-- **Requirements:** `audio_noise` and `camera_noise` need ffmpeg; `wifi_noise` needs active WiFi; `sensor_noise` needs CoreMotion data
-- **Physics:** Audio noise captures ADC thermal noise; camera captures CCD/CMOS sensor noise (photon shot noise, dark current); WiFi captures RSSI via CoreWLAN; sensor captures MEMS accelerometer/gyroscope Brownian motion
+- **Requirements:** `audio_noise` and `camera_noise` need ffmpeg; `wifi_noise` needs active WiFi
+- **Physics:** Audio noise captures ADC thermal noise; camera captures CCD/CMOS sensor noise (photon shot noise, dark current); WiFi captures RSSI via CoreWLAN
 
 ### Silicon Sources
 
@@ -182,12 +179,6 @@ All 38 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 10ms
 - **Platform:** All
 
-#### 24. `multi_domain_beat` — 4-domain composite beat
-- **Physics:** Rapidly interleaves operations across 4 clock domains: CPU computation, memory access, disk I/O, and kernel syscalls. Each domain has its own PLL and arbitration logic. The composite timing captures interference patterns between all domains simultaneously.
-- **Raw entropy:** D (2.60 bits/byte)
-- **Speed:** 7ms
-- **Platform:** All
-
 ### Novel Sources
 
 #### 25. `compression_timing` — Compression algorithm timing
@@ -208,13 +199,7 @@ All 38 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 130ms
 - **Platform:** macOS
 
-#### 28. `dyld_timing` — Dynamic linker timing
-- **Physics:** Times dynamic library loading (dlopen/dlsym): searching the dyld shared cache, resolving symbol tables, rebasing pointers, running initializers. Timing varies with: shared cache page residency, ASLR randomization, and filesystem metadata state.
-- **Raw entropy:** A (7.33 bits/byte)
-- **Speed:** 1.2s
-- **Platform:** macOS/Linux
-
-#### 29. `vm_page_timing` — Mach VM page fault timing
+#### 28. `vm_page_timing` — Mach VM page fault timing
 - **Physics:** Times Mach VM operations (mmap/munmap cycles). Each operation requires: VM map entry allocation, page table updates, TLB shootdown across cores (IPI interrupt), and physical page management. Timing depends on: VM map fragmentation, physical memory pressure, and cross-core synchronization.
 - **Raw entropy:** A (7.85 bits/byte)
 - **Speed:** 110ms
@@ -293,12 +278,12 @@ All 38 entropy sources, their physics, quality, and operational characteristics.
 
 | Grade | Count | Sources |
 |-------|-------|---------|
-| A | 11+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **dvfs_race** |
+| A | 10+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **dvfs_race** |
 | B | 6 | clock_jitter, cache_contention, compression_timing, dispatch_queue, **amx_timing**, **mach_ipc** |
 | C | 7 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat, **pipe_buffer** |
-| D | 7 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter*, **cas_contention** |
+| D | 6 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, hash_timing, sleep_jitter*, **cas_contention** |
 | F | 2 | mach_timing, speculative_execution |
-| N/A | 4 | audio_noise, camera_noise, wifi_noise, sensor_noise |
+| N/A | 3 | audio_noise, camera_noise, wifi_noise |
 
 \*Estimated grade — requires benchmarking. Sleep_jitter oscillates between D and F across runs.
 

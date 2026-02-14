@@ -95,7 +95,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 | Feature | OpenEntropy | ANU QRNG | Outshift QRNG | Linux `/dev/urandom` |
 |---------|-----------------|----------|---------------|---------------------|
 | Raw output available | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Source diversity | 39 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
+| Source diversity | 36 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
 | Conditioning visible | ✅ Optional, documented | ❌ Opaque | ❌ DRBG post-processing | ❌ ChaCha20 CSPRNG |
 | Self-hosted | ✅ Local binary | ❌ Cloud API | ❌ Cloud API | ✅ Kernel |
 | Statistical tests | ✅ Built-in NIST SP 800-22 | ❌ | ❌ | ❌ |

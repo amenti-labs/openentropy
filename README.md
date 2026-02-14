@@ -89,7 +89,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCE_CATALOG.md) | All 39 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCE_CATALOG.md) | All 36 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -128,14 +128,13 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
 | `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
 
-### Hardware (6)
+### Hardware (5)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
 | `memory_timing` | 5.056 | 0.01s | DRAM access timing variations |
 | `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
-| `sensor_noise` | 7.997 | 0.97s | SMC sensor readout jitter |
 | `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
 | `ioregistry` | 7.964 | 2.15s | IOKit registry value mining |
 
@@ -150,22 +149,20 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `page_fault_timing` | 7.967 | 0.01s | Virtual memory page fault latency |
 | `speculative_execution` | 7.967 | 0.00s | Branch prediction / speculative execution jitter |
 
-### Cross-Domain Beat Frequencies (3)
+### Cross-Domain Beat Frequencies (2)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `cpu_io_beat` | 6.707 | 0.04s | CPU and I/O subsystem beat frequency |
 | `cpu_memory_beat` | 6.256 | 0.00s | CPU and memory controller beat pattern |
-| `multi_domain_beat` | 3.867 | 0.00s | Multi-subsystem interference pattern |
 
-### Novel (6)
+### Novel (5)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `compression_timing` | 7.966 | 1.02s | zlib compression timing oracle |
 | `hash_timing` | 7.122 | 0.04s | SHA-256 hash timing data-dependency |
 | `dispatch_queue` | 6.688 | 0.09s | GCD dispatch queue scheduling jitter |
-| `dyld_timing` | 7.967 | 1.35s | Dynamic linker dlsym() timing |
 | `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
 | `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
 
@@ -296,7 +293,7 @@ Cargo workspace with 5 crates:
 | `openentropy-python` | Python bindings via PyO3/maturin |
 
 ```
-Sources (39) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (36) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -311,9 +308,9 @@ Sources (39) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **39/39** | Full suite — WiFi, BLE, camera, mic, sensors |
-| **Mac Mini / Studio / Pro** | 35–36 | No built-in camera, mic, or motion sensors |
-| **Intel Mac** | ~20 | Some silicon sources are ARM-specific |
+| **MacBook (M-series)** | **36/36** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 31–33 | No built-in camera, mic on some models |
+| **Intel Mac** | ~18 | Some silicon sources are ARM-specific |
 | **Linux** | 10–15 | Timing, network, disk, process sources |
 
 The library detects available hardware at runtime and only activates working sources.
