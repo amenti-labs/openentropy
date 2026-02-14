@@ -16,7 +16,9 @@
 //! ├── pipe_buffer.rs      ← multi-pipe kernel zone allocator contention
 //! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
 //! ├── dvfs_race.rs        ← cross-core DVFS frequency race
-//! └── cas_contention.rs   ← CAS atomic contention timing
+//! ├── cas_contention.rs   ← CAS atomic contention timing
+//! ├── dmp_confusion.rs    ← Apple DMP prefetcher prediction failure timing
+//! └── keychain_timing.rs  ← Keychain/securityd/SEP round-trip timing
 //! ```
 //!
 //! Each source measures a single, independent physical entropy domain.
@@ -34,7 +36,9 @@
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
 mod cas_contention;
+mod dmp_confusion;
 mod dvfs_race;
+mod keychain_timing;
 mod kqueue_events;
 mod mach_ipc;
 mod pipe_buffer;
@@ -44,7 +48,9 @@ mod tlb_shootdown;
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
+pub use dmp_confusion::{DMPConfusionConfig, DMPConfusionSource};
 pub use dvfs_race::DVFSRaceSource;
+pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
@@ -182,6 +188,8 @@ mod tests {
             Box::new(KqueueEventsSource::default()),
             Box::new(DVFSRaceSource),
             Box::new(CASContentionSource::default()),
+            Box::new(DMPConfusionSource::default()),
+            Box::new(KeychainTimingSource::default()),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
