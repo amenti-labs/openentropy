@@ -1,7 +1,7 @@
 //! Mach IPC timing — entropy from complex Mach messages with OOL descriptors.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
@@ -138,7 +138,9 @@ impl EntropySource for MachIPCSource {
                 if kr2 == 0 {
                     ports.push(port);
                 } else {
-                    unsafe { mach_port_mod_refs(task, port, 1, -1); }
+                    unsafe {
+                        mach_port_mod_refs(task, port, 1, -1);
+                    }
                 }
             }
         }
@@ -221,7 +223,9 @@ impl EntropySource for MachIPCSource {
         }
 
         for &port in &ports {
-            unsafe { mach_port_mod_refs(task, port, 1, -1); }
+            unsafe {
+                mach_port_mod_refs(task, port, 1, -1);
+            }
         }
 
         extract_timing_entropy(&timings, n_samples)
@@ -303,8 +307,13 @@ unsafe extern "C" {
     fn mach_port_insert_right(task: u32, name: u32, poly: u32, poly_poly: u32) -> i32;
     fn mach_port_type(task: u32, name: u32, ptype: *mut u32) -> i32;
     fn mach_msg(
-        msg: *mut MachMsgHeader, option: i32, send_size: u32,
-        rcv_size: u32, rcv_name: u32, timeout: u32, notify: u32,
+        msg: *mut MachMsgHeader,
+        option: i32,
+        send_size: u32,
+        rcv_size: u32,
+        rcv_name: u32,
+        timeout: u32,
+        notify: u32,
     ) -> i32;
 }
 

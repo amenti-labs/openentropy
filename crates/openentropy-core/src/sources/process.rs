@@ -31,7 +31,7 @@ impl ProcessSource {
                 category: SourceCategory::System,
                 platform_requirements: &[],
                 entropy_rate_estimate: 400.0,
-    composite: false,
+                composite: false,
             },
         }
     }

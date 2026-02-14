@@ -136,10 +136,7 @@ pub(crate) fn extract_timing_entropy_variance(timings: &[u64], n_samples: usize)
         .map(|w| w[1].wrapping_sub(w[0]))
         .collect();
 
-    let variance: Vec<u64> = deltas
-        .windows(2)
-        .map(|w| w[1].wrapping_sub(w[0]))
-        .collect();
+    let variance: Vec<u64> = deltas.windows(2).map(|w| w[1].wrapping_sub(w[0])).collect();
 
     let xored: Vec<u64> = variance.windows(2).map(|w| w[0] ^ w[1]).collect();
 

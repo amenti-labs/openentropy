@@ -27,9 +27,9 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 ## Key Design Decisions
 - **Sources never self-condition.** All conditioning goes through `crates/openentropy-core/src/conditioning.rs`.
 - **Three conditioning modes:** Raw (passthrough), VonNeumann (debias only), Sha256 (full, default).
-- **Fast sources by default.** CLI commands use 25 fast sources (<2s). `--sources all` for everything.
+- **Fast sources by default.** CLI commands use 27 fast sources (<2s). `--sources all` for everything.
 - **Min-entropy (H∞) over Shannon.** Grading based on NIST SP 800-90B min-entropy, not Shannon which overestimates.
-- **211 tests, 0 clippy warnings.** Keep it that way.
+- **212 tests, 0 clippy warnings.** Keep it that way.
 
 ## Source Categories
 - **Timing** (3): clock_jitter, mach_timing, sleep_jitter
@@ -58,5 +58,5 @@ cargo test -- --ignored                 # hardware-dependent tests (may hang)
 29 tests are `#[ignore]` because they require specific hardware (camera, BLE, WiFi, etc.).
 
 ## Platform
-Primary: macOS Apple Silicon (M1-M4). 31/35 sources available on Mac Mini, 35/35 on MacBook.
+Primary: macOS Apple Silicon (M1-M4). 35/39 sources available on Mac Mini, 39/39 on MacBook.
 Linux: 10-15 sources (timing, network, disk, process). No macOS-specific sources.

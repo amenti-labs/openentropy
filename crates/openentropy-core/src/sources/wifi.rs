@@ -45,7 +45,7 @@ impl WiFiRSSISource {
                 category: SourceCategory::Hardware,
                 platform_requirements: &["macos", "wifi"],
                 entropy_rate_estimate: 30.0,
-    composite: false,
+                composite: false,
             },
         }
     }

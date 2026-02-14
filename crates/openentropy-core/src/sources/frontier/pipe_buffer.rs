@@ -172,11 +172,7 @@ impl EntropySource for PipeBufferSource {
 
             // SAFETY: fds are valid file descriptors from pipe().
             unsafe {
-                let written = libc::write(
-                    fds[1],
-                    write_data.as_ptr() as *const _,
-                    write_size,
-                );
+                let written = libc::write(fds[1], write_data.as_ptr() as *const _, write_size);
 
                 if written > 0 {
                     libc::read(fds[0], read_buf.as_mut_ptr() as *mut _, written as usize);

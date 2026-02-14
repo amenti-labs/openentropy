@@ -1,7 +1,7 @@
 //! Kqueue event timing — entropy from BSD kernel event notification multiplexing.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
@@ -127,10 +127,20 @@ impl EntropySource for KqueueEventsSource {
     }
 
     fn is_available(&self) -> bool {
-        cfg!(any(target_os = "macos", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))
+        cfg!(any(
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))
     }
 
-    #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         let raw_count = n_samples * 4 + 64;
         let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
@@ -160,9 +170,8 @@ impl EntropySource for KqueueEventsSource {
         // Register socket pair events.
         for _i in 0..self.config.num_sockets {
             let mut sv: [i32; 2] = [0; 2];
-            let ret = unsafe {
-                libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, sv.as_mut_ptr())
-            };
+            let ret =
+                unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, sv.as_mut_ptr()) };
             if ret == 0 {
                 cleanup_fds.push(sv[0]);
                 cleanup_fds.push(sv[1]);
@@ -225,13 +234,9 @@ impl EntropySource for KqueueEventsSource {
         // Spawn a thread to periodically poke watched files and sockets.
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
-        let socket_write_fds: Vec<i32> = cleanup_fds
-            .iter()
-            .skip(1)
-            .step_by(2)
-            .copied()
-            .collect();
-        let file_paths: Vec<std::path::PathBuf> = temp_files.iter().map(|(_, p)| p.clone()).collect();
+        let socket_write_fds: Vec<i32> = cleanup_fds.iter().skip(1).step_by(2).copied().collect();
+        let file_paths: Vec<std::path::PathBuf> =
+            temp_files.iter().map(|(_, p)| p.clone()).collect();
 
         let poker = thread::spawn(move || {
             let byte = [0xBBu8];
@@ -256,11 +261,7 @@ impl EntropySource for KqueueEventsSource {
         let mut events: Vec<libc::kevent> =
             vec![unsafe { std::mem::zeroed() }; changes.len().max(16)];
 
-        let socket_read_fds: Vec<i32> = cleanup_fds
-            .iter()
-            .step_by(2)
-            .copied()
-            .collect();
+        let socket_read_fds: Vec<i32> = cleanup_fds.iter().step_by(2).copied().collect();
 
         for _ in 0..raw_count {
             let t0 = mach_time();
@@ -297,18 +298,29 @@ impl EntropySource for KqueueEventsSource {
 
         // Cleanup.
         for (fd, path) in &temp_files {
-            unsafe { libc::close(*fd); }
+            unsafe {
+                libc::close(*fd);
+            }
             let _ = std::fs::remove_file(path);
         }
         for &fd in &cleanup_fds {
-            unsafe { libc::close(fd); }
+            unsafe {
+                libc::close(fd);
+            }
         }
-        unsafe { libc::close(kq); }
+        unsafe {
+            libc::close(kq);
+        }
 
         extract_timing_entropy(&timings, n_samples)
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     fn collect(&self, _n_samples: usize) -> Vec<u8> {
         Vec::new()
     }

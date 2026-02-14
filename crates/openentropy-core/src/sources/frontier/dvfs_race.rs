@@ -10,8 +10,8 @@
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 
 /// Cross-core DVFS race entropy source.

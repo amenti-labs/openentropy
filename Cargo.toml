@@ -10,13 +10,13 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 authors = ["Amenti Labs"]
 repository = "https://github.com/amenti-labs/openentropy"
 homepage = "https://github.com/amenti-labs/openentropy"
-description = "Your computer is a quantum noise observatory — harvest entropy from 30 unconventional hardware sources"
+description = "Your computer is a quantum noise observatory — harvest entropy from 39 unconventional hardware sources"
 keywords = ["entropy", "randomness", "hardware", "TRNG", "security"]
 categories = ["cryptography", "hardware-support", "os"]
 readme = "README.md"

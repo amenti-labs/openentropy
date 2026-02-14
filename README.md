@@ -8,7 +8,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*Harvest real entropy from 35 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
+*Harvest real entropy from 39 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -89,7 +89,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCE_CATALOG.md) | All 35 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCE_CATALOG.md) | All 39 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -103,7 +103,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 ## Entropy Sources
 
-35 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
+39 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
 
 ### Timing (3)
 
@@ -169,7 +169,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
 | `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
 
-### Frontier (5)
+### Frontier (9)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
@@ -178,6 +178,10 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
 | `tlb_shootdown` | 6.456 | 0.03s | mprotect() TLB invalidation IPI latency |
 | `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
+| `kqueue_events` | — | 0.05s | BSD kqueue event multiplexing timer/file/socket jitter |
+| `dvfs_race` | 7.804 | 0.13s | Cross-core DVFS frequency race (H∞=7.288) |
+| `cas_contention` | 2.352 | <0.01s | Multi-thread atomic CAS arbitration contention |
+| `interleaved_frontier` | — | 0.20s | **[COMPOSITE]** Cross-source interference entropy |
 
 Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
 
@@ -293,7 +297,7 @@ Cargo workspace with 5 crates:
 | `openentropy-python` | Python bindings via PyO3/maturin |
 
 ```
-Sources (30) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (39) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -308,8 +312,8 @@ Sources (30) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **30/30** | Full suite — WiFi, BLE, camera, mic, sensors |
-| **Mac Mini / Studio / Pro** | 27–28 | No built-in camera, mic, or motion sensors |
+| **MacBook (M-series)** | **39/39** | Full suite — WiFi, BLE, camera, mic, sensors |
+| **Mac Mini / Studio / Pro** | 35–36 | No built-in camera, mic, or motion sensors |
 | **Intel Mac** | ~20 | Some silicon sources are ARM-specific |
 | **Linux** | 10–15 | Timing, network, disk, process sources |
 

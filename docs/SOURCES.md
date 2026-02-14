@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-30 sources across 7 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+39 sources across 8 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -488,10 +488,10 @@ These sources exploit the interference patterns that arise when independent cloc
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **30/30** | Full suite -- WiFi, BLE, camera, mic, all sensors |
-| **Mac Mini/Studio/Pro** | 27-28/30 | Most sources -- no built-in camera or mic on some models |
-| **Intel Mac** | ~20/30 | Timing, system, network, disk sources work; some silicon sources are ARM-specific |
-| **Linux** | 10-15/30 | Timing, network, disk, process, silicon sources work; no macOS-specific sources |
+| **MacBook (M-series)** | **39/39** | Full suite -- WiFi, BLE, camera, mic, all sensors |
+| **Mac Mini/Studio/Pro** | 35-36/39 | Most sources -- no built-in camera or mic on some models |
+| **Intel Mac** | ~20/39 | Timing, system, network, disk sources work; some silicon sources are ARM-specific |
+| **Linux** | 10-15/39 | Timing, network, disk, process, silicon sources work; no macOS-specific sources |
 
 The package gracefully detects available hardware via `detect_available_sources()` and only activates sources that pass `is_available()`. MacBooks provide the richest entropy because they pack the most sensors into one device.
 

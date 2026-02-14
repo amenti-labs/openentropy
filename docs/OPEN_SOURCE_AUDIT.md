@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-OpenEntropy is a Rust library that harvests entropy from 30 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
+OpenEntropy is a Rust library that harvests entropy from 39 unconventional hardware sources on macOS (with Linux portability for ~15 sources). This audit verified open-source readiness across five dimensions:
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -48,7 +48,7 @@ All 18 original Python entropy sources have been ported to Rust:
 - Novel: `dispatch_queue`, `dyld_timing`, `vm_page_timing`, `spotlight_timing`
 - System: `ioregistry`
 
-**Total: 30 Rust sources (18 ported + 12 new)**
+**Total: 39 Rust sources (18 ported + 21 new)**
 
 ## 2. Legacy Python Cleanup
 
@@ -178,7 +178,7 @@ openentropy/
 │   └── __init__.py          # Thin PyO3 wrapper
 ├── docs/
 │   ├── OPEN_SOURCE_AUDIT.md # This file
-│   ├── SOURCE_CATALOG.md    # All 30 sources with physics & grades
+│   ├── SOURCE_CATALOG.md    # All 39 sources with physics & grades
 │   ├── CONDITIONING.md      # Conditioning architecture
 │   ├── ARCHITECTURE.md      # System architecture
 │   ├── API.md               # API reference
@@ -195,7 +195,7 @@ openentropy/
 
 3. **Slow sources:** `gpu_timing` (37s), `tcp_connect_timing` (39s), `dns_timing` (19s), and `spotlight_timing` (13s) are slow due to process spawning or network round-trips. The pool handles this gracefully — fast sources provide bulk entropy while slow sources contribute high-quality samples.
 
-4. **Platform coverage:** 15 of 30 sources are macOS-only. Linux portability would require alternative implementations for: sysctl, vmstat, ioregistry, bluetooth, audio, camera, wifi, sensor, dispatch_queue, spotlight, and gpu sources.
+4. **Platform coverage:** 15 of 39 sources are macOS-only. Linux portability would require alternative implementations for: sysctl, vmstat, ioregistry, bluetooth, audio, camera, wifi, sensor, dispatch_queue, spotlight, and gpu sources.
 
 ## 9. Conclusion
 

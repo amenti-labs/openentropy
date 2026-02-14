@@ -62,5 +62,7 @@ pub fn run(source_filter: Option<&str>, conditioning: &str) {
         );
     }
     println!("\nGrade is based on min-entropy (H\u{221E}), not Shannon.");
-    println!("H\u{221E} is the conservative estimate \u{2014} reflects worst-case guessing probability.");
+    println!(
+        "H\u{221E} is the conservative estimate \u{2014} reflects worst-case guessing probability."
+    );
 }

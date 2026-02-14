@@ -44,9 +44,9 @@ All 39 entropy sources, their physics, quality, and operational characteristics.
 | 34 | `tlb_shootdown` | Frontier | A | 6.46 | 0.03s | All |
 | 35 | `pipe_buffer` | Frontier | C | 3.22 | 0.01s | All |
 | 36 | `kqueue_events` | Frontier | A* | — | 0.05s | macOS/BSD |
-| 38 | `dvfs_race` | Frontier | A | 7.96 | <0.1s | All |
-| 39 | `cas_contention` | Frontier | D | 3.02 | <0.1s | All |
-| 40 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
+| 37 | `dvfs_race` | Frontier | A | 7.96 | <0.1s | All |
+| 38 | `cas_contention` | Frontier | D | 3.02 | <0.1s | All |
+| 39 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -277,13 +277,13 @@ All 39 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** ~50ms
 - **Platform:** macOS/BSD (uses kqueue)
 
-#### 38. `dvfs_race` — Cross-core DVFS frequency race (new)
+#### 37. `dvfs_race` — Cross-core DVFS frequency race (new)
 - **Physics:** Spawns two threads running tight counting loops on different CPU cores. After a ~2μs race window, the absolute difference in iteration counts captures physical frequency jitter from independent DVFS (Dynamic Voltage and Frequency Scaling) controllers. Apple Silicon P-core and E-core clusters have separate voltage/frequency domains that adjust asynchronously based on thermal state, power budget, and workload. The scheduler's core placement, cache coherence latency for the stop signal, and per-core frequency transitions all contribute independent nondeterminism.
 - **Raw entropy:** A (7.96 Shannon, H∞ = 7.288 bits/byte from PoC — highest of any discovered source)
 - **Speed:** <100ms — very fast
 - **Platform:** All (uses std::thread)
 
-#### 39. `cas_contention` — Multi-thread atomic CAS arbitration contention (new)
+#### 38. `cas_contention` — Multi-thread atomic CAS arbitration contention (new)
 - **Physics:** Spawns 4 threads performing atomic compare-and-swap operations on shared targets spread across 128-byte-aligned cache lines. The hardware coherence engine (MOESI protocol on Apple Silicon) must arbitrate concurrent exclusive-access requests. This arbitration is physically nondeterministic due to interconnect fabric latency variations, thermal state, and traffic from other cores/devices. XOR-combining timing measurements from all threads amplifies the arbitration entropy.
 - **Config:** `CASContentionConfig { num_threads }`
 - **Raw entropy:** D (3.02 Shannon, H∞ = 2.619 bits/byte from PoC with 4-thread XOR combine)
@@ -296,7 +296,7 @@ All 39 entropy sources, their physics, quality, and operational characteristics.
 > They combine multiple standalone sources for higher-quality output.
 > In CLI output, composite sources are marked with `[COMPOSITE]`.
 
-#### 40. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
+#### 39. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
 - **Physics:** Rapidly alternates between all 8 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
 - **Raw entropy:** Estimated A (cross-source interference is independent entropy)
 - **Speed:** ~200ms (sum of individual source costs)

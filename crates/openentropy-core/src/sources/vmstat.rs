@@ -32,7 +32,7 @@ impl VmstatSource {
                 category: SourceCategory::System,
                 platform_requirements: &["macos"],
                 entropy_rate_estimate: 1000.0,
-    composite: false,
+                composite: false,
             },
         }
     }

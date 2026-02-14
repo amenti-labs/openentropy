@@ -8,8 +8,8 @@
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 const NUM_THREADS: usize = 4;
@@ -100,11 +100,8 @@ impl EntropySource for CASContentionSource {
 
         // Allocate contention targets (each on its own cache line).
         let total_atomics = NUM_TARGETS * TARGET_SPACING;
-        let targets: Arc<Vec<AtomicU64>> = Arc::new(
-            (0..total_atomics)
-                .map(|_| AtomicU64::new(0))
-                .collect(),
-        );
+        let targets: Arc<Vec<AtomicU64>> =
+            Arc::new((0..total_atomics).map(|_| AtomicU64::new(0)).collect());
 
         let go = Arc::new(AtomicU64::new(0));
         let stop = Arc::new(AtomicU64::new(0));

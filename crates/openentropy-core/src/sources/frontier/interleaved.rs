@@ -68,10 +68,8 @@ impl EntropySource for InterleavedFrontierSource {
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         let sources = standalone_frontier_sources();
-        let available: Vec<Box<dyn EntropySource>> = sources
-            .into_iter()
-            .filter(|s| s.is_available())
-            .collect();
+        let available: Vec<Box<dyn EntropySource>> =
+            sources.into_iter().filter(|s| s.is_available()).collect();
 
         if available.is_empty() {
             return Vec::new();

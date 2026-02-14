@@ -311,7 +311,7 @@ score = (shannon / 8.0) * 60  +  min(compression_ratio, 1.0) * 20  +  (unique / 
 
 ```rust
 /// Discover all entropy sources available on this machine.
-/// Creates all 30 source instances, calls is_available() on each,
+/// Creates all 39 source instances, calls is_available() on each,
 /// and returns only those that pass.
 pub fn detect_available_sources() -> Vec<Box<dyn EntropySource>>
 
@@ -334,7 +334,7 @@ pub struct PlatformInfo {
 **Module:** `openentropy_core::sources`
 
 ```rust
-/// All 30 entropy source constructors.
+/// All 39 entropy source constructors.
 /// Returns a Vec of boxed sources in category order:
 ///   Timing (3) -> System (3) -> Network (3) -> Hardware (5+3) ->
 ///   Silicon (4) -> Cross-Domain (3) -> Compression/Hash (2) -> Novel (4)

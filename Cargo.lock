@@ -870,7 +870,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openentropy-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "openentropy-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
@@ -899,7 +899,7 @@ dependencies = [
 
 [[package]]
 name = "openentropy-python"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "openentropy-core",
  "openentropy-tests",
@@ -908,7 +908,7 @@ dependencies = [
 
 [[package]]
 name = "openentropy-server"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "openentropy-core",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "openentropy-tests"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "rustfft",
@@ -928,7 +928,7 @@ dependencies = [
 
 [[package]]
 name = "openentropy-wasm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "js-sys",
  "sha2",

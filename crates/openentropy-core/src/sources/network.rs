@@ -41,7 +41,7 @@ impl DNSTimingSource {
                 category: SourceCategory::Network,
                 platform_requirements: &[],
                 entropy_rate_estimate: 100.0,
-    composite: false,
+                composite: false,
             },
             index: AtomicUsize::new(0),
         }
@@ -197,7 +197,7 @@ impl TCPConnectSource {
                 category: SourceCategory::Network,
                 platform_requirements: &[],
                 entropy_rate_estimate: 50.0,
-    composite: false,
+                composite: false,
             },
             index: AtomicUsize::new(0),
         }
