@@ -1,4 +1,4 @@
-//! All 35 entropy source implementations.
+//! All 37 entropy source implementations.
 
 pub mod helpers;
 
@@ -67,10 +67,12 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(novel::VMPageTimingSource),
         Box::new(novel::SpotlightTimingSource),
         // Frontier (novel unexplored sources)
-        Box::new(frontier::AMXTimingSource),
+        Box::new(frontier::AMXTimingSource::default()),
         Box::new(frontier::ThreadLifecycleSource),
-        Box::new(frontier::MachIPCSource),
-        Box::new(frontier::TLBShootdownSource),
-        Box::new(frontier::PipeBufferSource),
+        Box::new(frontier::MachIPCSource::default()),
+        Box::new(frontier::TLBShootdownSource::default()),
+        Box::new(frontier::PipeBufferSource::default()),
+        Box::new(frontier::KqueueEventsSource::default()),
+        Box::new(frontier::InterleavedFrontierSource),
     ]
 }

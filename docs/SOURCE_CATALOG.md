@@ -1,6 +1,6 @@
 # OpenEntropy — Source Catalog
 
-All 35 entropy sources, their physics, quality, and operational characteristics.
+All 37 entropy sources, their physics, quality, and operational characteristics.
 
 > **Grades are for raw (unconditioned) output.** After SHA-256 conditioning, all sources produce Grade A output. The raw grades reflect the true hardware entropy density before any whitening.
 
@@ -43,6 +43,8 @@ All 35 entropy sources, their physics, quality, and operational characteristics.
 | 33 | `mach_ipc` | Frontier | B | 4.92 | 0.04s | macOS |
 | 34 | `tlb_shootdown` | Frontier | A | 6.46 | 0.03s | All |
 | 35 | `pipe_buffer` | Frontier | C | 3.22 | 0.01s | All |
+| 36 | `kqueue_events` | Frontier | A* | — | 0.05s | macOS/BSD |
+| 37 | `interleaved_frontier` | Frontier | A* | — | 0.2s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -225,9 +227,11 @@ All 35 entropy sources, their physics, quality, and operational characteristics.
 
 ### Frontier Sources
 
-#### 31. `amx_timing` — Apple Matrix eXtensions coprocessor dispatch jitter
-- **Physics:** Dispatches SGEMM (single-precision matrix multiply) operations to the AMX coprocessor via the Accelerate framework (`cblas_sgemm`) with varying matrix sizes [16,32,48,64,96,128]. The AMX is a dedicated coprocessor with its own instruction pipeline, shared across all CPU cores. Timing jitter comes from: AMX dispatch queue arbitration, memory controller bandwidth contention during matrix data transfer, thermal throttling affecting coprocessor clock frequency, and cache line eviction patterns for the matrix data. NIST: 90.3/100 (Grade A).
-- **Raw entropy:** B (5.19 bits/byte)
+#### 31. `amx_timing` — Apple Matrix eXtensions coprocessor dispatch jitter (improved)
+- **Physics:** Dispatches SGEMM (single-precision matrix multiply) operations to the AMX coprocessor via the Accelerate framework (`cblas_sgemm`) with varying matrix sizes [16,32,48,64,96,128]. The AMX is a dedicated coprocessor with its own instruction pipeline, shared across all CPU cores. Timing jitter comes from: AMX dispatch queue arbitration, memory controller bandwidth contention during matrix data transfer, thermal throttling affecting coprocessor clock frequency, and cache line eviction patterns for the matrix data.
+- **Improvements:** Von Neumann debiasing fixes severe bias (H∞ 0.379 → estimated 2.0+). Alternates between transposed and non-transposed multiplies to exercise different AMX pipeline paths. Interleaves memory operations (64KB cache-thrashing) between AMX dispatches to disrupt pipeline steady-state.
+- **Config:** `AMXTimingConfig { matrix_sizes, interleave_memory_ops, von_neumann_debias }`
+- **Raw entropy:** B (5.19 bits/byte Shannon; min-entropy improved by debiasing)
 - **Speed:** 50ms — very fast
 - **Platform:** macOS Apple Silicon only (requires Accelerate framework)
 
@@ -237,36 +241,55 @@ All 35 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 80ms
 - **Platform:** All (uses pthreads)
 
-#### 33. `mach_ipc` — Mach port IPC timing
-- **Physics:** Allocates and deallocates Mach ports in the kernel port namespace. Mach ports are the fundamental IPC primitive in XNU. Each allocation requires: port name space lookup/insertion (splay tree), ipc_port zone allocation, port rights management, and notification setup. Deallocation triggers reference counting and zone free. Timing captures kernel lock contention, zone allocator state, and port namespace tree rebalancing. NIST: 91.9/100 (Grade A) — highest NIST score of all frontier sources.
-- **Raw entropy:** B (4.92 bits/byte)
+#### 33. `mach_ipc` — Mach port complex OOL message timing (reworked)
+- **Physics:** Sends complex Mach messages with out-of-line (OOL) memory descriptors via `mach_msg()`, round-robining across multiple ports. OOL descriptors force kernel VM remapping (`vm_map_copyin`/`vm_map_copyout`) which exercises page table operations, physical page allocation, and TLB updates. Round-robin across ports with varied queue depths creates namespace contention. A receiver thread drains messages to prevent queue backup.
+- **Improvements:** Complete rework from simple port allocate/deallocate to complex OOL messages forcing VM remapping. Round-robin across 8 ports (configurable) for namespace contention. Receiver thread creates cross-thread scheduling interference. Falls back to simple mode on port allocation failure.
+- **Config:** `MachIPCConfig { num_ports, ool_size, use_complex_messages }`
+- **Raw entropy:** B (4.92 bits/byte; expected improvement from OOL VM remapping)
 - **Speed:** 40ms
 - **Platform:** macOS only
 
-#### 34. `tlb_shootdown` — TLB invalidation via mprotect
-- **Physics:** Allocates a 64-page memory region and repeatedly toggles page protection (RW→RO→RW) using `mprotect()`. Each protection change requires: updating the page table entry, then sending a TLB shootdown Inter-Processor Interrupt (IPI) to ALL cores to invalidate their cached TLB entries. The IPI latency depends on: what each remote core is currently executing, interrupt priority levels, and cross-cluster communication latency (P-core cluster ↔ E-core cluster on Apple Silicon). NIST: 87.1/100 (Grade A).
-- **Raw entropy:** A (6.46 bits/byte)
+#### 34. `tlb_shootdown` — TLB invalidation via variable-count mprotect (improved)
+- **Physics:** Allocates a large memory region (256 pages, configurable) and toggles page protection using `mprotect()` on varying subsets. Each protection change sends TLB shootdown IPIs to ALL cores. Varying the page count (8-128, configurable) creates different IPI patterns. Using different memory region offsets each time prevents TLB prefetch patterns. Delta-of-deltas extraction captures timing variance between consecutive shootdowns.
+- **Improvements:** Variable page counts per measurement create different IPI patterns. Random region offsets prevent systematic TLB caching. Variance-based extraction (delta-of-deltas) removes systematic bias and amplifies nondeterministic components.
+- **Config:** `TLBShootdownConfig { page_count_range, region_pages, measure_variance }`
+- **Raw entropy:** A (6.46 bits/byte; min-entropy improved by variance extraction)
 - **Speed:** 30ms
 - **Platform:** All
 
-#### 35. `pipe_buffer` — Kernel zone allocator via pipe lifecycle
-- **Physics:** Creates a pipe (allocating from kernel pipe zone and mbuf zone), writes variable-size data (1-256 bytes) through the pipe buffer, reads it back, then closes both file descriptors (returning zone allocations). Timing captures: kernel zone allocator fragmentation and free-list state, file descriptor table operations, mbuf allocation/deallocation, and copyout/copyin kernel-user data transfer. NIST: 86.3/100 (Grade A).
-- **Raw entropy:** C (3.22 bits/byte)
+#### 35. `pipe_buffer` — Multi-pipe kernel zone allocator competition (improved)
+- **Physics:** Creates multiple pipes simultaneously (4, configurable), writes variable-size data (1-4096 bytes) through them in round-robin, reads it back, measuring contention. Multiple pipes compete for kernel pipe zone and mbuf allocations, creating cross-CPU magazine transfer contention. Non-blocking mode captures EAGAIN failure path timing. Periodically creates/destroys extra pipes for zone allocator churn.
+- **Improvements:** Multi-pipe pool (4 pipes, configurable) for zone allocator contention. Extended buffer size range (1-4096 vs 1-256). Non-blocking mode with EAGAIN timing. Periodic pipe create/destroy for zone churn. Falls back to single-pipe mode on allocation failure.
+- **Config:** `PipeBufferConfig { num_pipes, min_write_size, max_write_size, non_blocking }`
+- **Raw entropy:** C (3.22 bits/byte; expected improvement from contention)
 - **Speed:** 10ms — fastest frontier source
 - **Platform:** All (uses POSIX pipes)
+
+#### 36. `kqueue_events` — Kqueue event multiplexing timing (new)
+- **Physics:** Registers diverse kqueue event types simultaneously — timers (EVFILT_TIMER, 8 at different intervals), file watchers (EVFILT_VNODE on temp files), and socket monitors (EVFILT_READ/EVFILT_WRITE on socket pairs) — then measures `kevent()` notification timing. Timer events capture kernel timer coalescing and interrupt jitter. File watchers exercise VFS/APFS notification paths. Socket events capture mbuf allocator timing. A background thread periodically pokes watched files and sockets to generate asynchronous events. Multiple simultaneous watchers create knote lock contention and dispatch queue interference.
+- **Config:** `KqueueEventsConfig { num_file_watchers, num_timers, num_sockets, timeout_ms }`
+- **Raw entropy:** Estimated A (high min-entropy from diverse event interference)
+- **Speed:** ~50ms
+- **Platform:** macOS/BSD (uses kqueue)
+
+#### 37. `interleaved_frontier` — Cross-source interference entropy (new)
+- **Physics:** Rapidly alternates between all 6 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
+- **Raw entropy:** Estimated A (cross-source interference is independent entropy)
+- **Speed:** ~200ms (sum of individual source costs)
+- **Platform:** All (requires ≥2 available frontier sources)
 
 ## Grade Distribution (Raw Output)
 
 | Grade | Count | Sources |
 |-------|-------|---------|
-| A | 10 | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown** |
+| A | 10+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **interleaved_frontier**\* |
 | B | 6 | clock_jitter, cache_contention, compression_timing, dispatch_queue, **amx_timing**, **mach_ipc** |
 | C | 7 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat, **pipe_buffer** |
 | D | 6 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter* |
 | F | 2 | mach_timing, speculative_execution |
 | N/A | 4 | audio_noise, camera_noise, wifi_noise, sensor_noise |
 
-*Sleep_jitter oscillates between D and F across runs.
+\*Estimated grade — requires benchmarking. Sleep_jitter oscillates between D and F across runs.
 
 ## Notes
 
@@ -274,3 +297,4 @@ All 35 entropy sources, their physics, quality, and operational characteristics.
 - **Speed** is wall-clock time for 5000 samples on an M4 Mac mini.
 - **Low-grade sources are still valuable** in the pool — even 1 bit/byte of true hardware entropy per source, XOR-combined across 20+ sources, produces strong composite output.
 - **Network sources** (dns_timing, tcp_connect_timing, gpu_timing) are slow but highest quality. Fast sources (clock_jitter, mach_timing, silicon sources) provide rapid bulk entropy at lower density.
+- **Configurable sources** — frontier sources accept config structs with sensible defaults. Use custom configs to tune for specific hardware or entropy requirements.

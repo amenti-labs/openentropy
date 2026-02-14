@@ -38,6 +38,8 @@ const FAST_SOURCES: &[&str] = &[
     "mach_ipc",
     "tlb_shootdown",
     "pipe_buffer",
+    "kqueue_events",
+    "interleaved_frontier",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.
