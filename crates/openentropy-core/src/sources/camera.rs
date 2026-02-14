@@ -77,5 +77,18 @@ mod tests {
         assert_eq!(src.name(), "camera_noise");
         assert_eq!(src.info().category, SourceCategory::Hardware);
         assert_eq!(src.info().entropy_rate_estimate, 50000.0);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires camera and ffmpeg
+    fn camera_noise_collects_bytes() {
+        let src = CameraNoiseSource;
+        if src.is_available() {
+            let data = src.collect(64);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 64);
+        }
     }
 }

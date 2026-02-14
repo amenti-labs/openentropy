@@ -169,4 +169,22 @@ mod tests {
         let values = parse_rssi_values(sample);
         assert!(values.is_empty());
     }
+
+    #[test]
+    fn bluetooth_composite_flag() {
+        let src = BluetoothNoiseSource;
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires Bluetooth hardware
+    fn bluetooth_noise_collects_bytes() {
+        let src = BluetoothNoiseSource;
+        if src.is_available() {
+            let data = src.collect(32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
+        }
+    }
 }

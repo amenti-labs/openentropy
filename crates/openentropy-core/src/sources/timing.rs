@@ -234,4 +234,14 @@ mod tests {
         assert_eq!(MachTimingSource.name(), "mach_timing");
         assert_eq!(SleepJitterSource.name(), "sleep_jitter");
     }
+
+    #[test]
+    fn source_info_categories() {
+        assert_eq!(ClockJitterSource.info().category, SourceCategory::Timing);
+        assert_eq!(MachTimingSource.info().category, SourceCategory::Timing);
+        assert_eq!(SleepJitterSource.info().category, SourceCategory::Timing);
+        assert!(!ClockJitterSource.info().composite);
+        assert!(!MachTimingSource.info().composite);
+        assert!(!SleepJitterSource.info().composite);
+    }
 }

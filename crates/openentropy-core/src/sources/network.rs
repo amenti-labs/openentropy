@@ -20,29 +20,32 @@ const DNS_PORT: u16 = 53;
 const DNS_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Entropy source that measures the round-trip time of DNS A-record queries
-/// sent to public resolvers.  Timing jitter in the nanosecond range is
+/// sent to public resolvers. Timing jitter in the nanosecond range is
 /// harvested as raw entropy.
+///
+/// No tunable parameters — cycles through a fixed set of public DNS servers
+/// and hostnames automatically.
 pub struct DNSTimingSource {
-    info: SourceInfo,
     /// Monotonically increasing index used to cycle through servers/hostnames.
     index: AtomicUsize,
 }
 
+static DNS_TIMING_INFO: SourceInfo = SourceInfo {
+    name: "dns_timing",
+    description: "Round-trip timing of DNS A-record queries to public resolvers",
+    physics: "Measures round-trip time of DNS queries to public resolvers. \
+              Jitter comes from: network switch queuing, router buffer state, \
+              ISP congestion, DNS server load, TCP/IP stack scheduling, NIC \
+              interrupt coalescing, and electromagnetic propagation variations.",
+    category: SourceCategory::Network,
+    platform_requirements: &[],
+    entropy_rate_estimate: 100.0,
+    composite: false,
+};
+
 impl DNSTimingSource {
     pub fn new() -> Self {
         Self {
-            info: SourceInfo {
-                name: "dns_timing",
-                description: "Round-trip timing of DNS A-record queries to public resolvers",
-                physics: "Measures round-trip time of DNS queries to public resolvers. \
-                          Jitter comes from: network switch queuing, router buffer state, \
-                          ISP congestion, DNS server load, TCP/IP stack scheduling, NIC \
-                          interrupt coalescing, and electromagnetic propagation variations.",
-                category: SourceCategory::Network,
-                platform_requirements: &[],
-                entropy_rate_estimate: 100.0,
-                composite: false,
-            },
             index: AtomicUsize::new(0),
         }
     }
@@ -106,7 +109,7 @@ fn dns_query_rtt(server: &str, hostname: &str, timeout: Duration) -> Option<u128
 
 impl EntropySource for DNSTimingSource {
     fn info(&self) -> &SourceInfo {
-        &self.info
+        &DNS_TIMING_INFO
     }
 
     fn is_available(&self) -> bool {
@@ -178,27 +181,30 @@ const TCP_TIMEOUT: Duration = Duration::from_secs(2);
 /// Entropy source that times TCP three-way handshakes to remote hosts.
 /// The nanosecond-resolution timing captures NIC DMA jitter, kernel buffer
 /// allocation, remote server load, and network path congestion.
+///
+/// No tunable parameters — cycles through a fixed set of TCP targets
+/// automatically.
 pub struct TCPConnectSource {
-    info: SourceInfo,
     /// Monotonically increasing index used to cycle through targets.
     index: AtomicUsize,
 }
 
+static TCP_CONNECT_INFO: SourceInfo = SourceInfo {
+    name: "tcp_connect_timing",
+    description: "Nanosecond timing of TCP three-way handshakes to remote hosts",
+    physics: "Times the TCP three-way handshake (SYN -> SYN-ACK -> ACK). \
+              The timing captures: NIC DMA transfer jitter, kernel socket \
+              buffer allocation, remote server load, network path congestion, \
+              and router queuing delays.",
+    category: SourceCategory::Network,
+    platform_requirements: &[],
+    entropy_rate_estimate: 50.0,
+    composite: false,
+};
+
 impl TCPConnectSource {
     pub fn new() -> Self {
         Self {
-            info: SourceInfo {
-                name: "tcp_connect_timing",
-                description: "Nanosecond timing of TCP three-way handshakes to remote hosts",
-                physics: "Times the TCP three-way handshake (SYN -> SYN-ACK -> ACK). \
-                          The timing captures: NIC DMA transfer jitter, kernel socket \
-                          buffer allocation, remote server load, network path congestion, \
-                          and router queuing delays.",
-                category: SourceCategory::Network,
-                platform_requirements: &[],
-                entropy_rate_estimate: 50.0,
-                composite: false,
-            },
             index: AtomicUsize::new(0),
         }
     }
@@ -220,7 +226,7 @@ fn tcp_connect_rtt(target: &str, timeout: Duration) -> Option<u128> {
 
 impl EntropySource for TCPConnectSource {
     fn info(&self) -> &SourceInfo {
-        &self.info
+        &TCP_CONNECT_INFO
     }
 
     fn is_available(&self) -> bool {
@@ -320,5 +326,27 @@ mod tests {
         assert_eq!(src.info().name, "tcp_connect_timing");
         assert_eq!(src.info().category, SourceCategory::Network);
         assert!((src.info().entropy_rate_estimate - 50.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    #[ignore] // Requires network connectivity
+    fn dns_timing_collects_bytes() {
+        let src = DNSTimingSource::new();
+        if src.is_available() {
+            let data = src.collect(32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires network connectivity
+    fn tcp_connect_collects_bytes() {
+        let src = TCPConnectSource::new();
+        if src.is_available() {
+            let data = src.collect(32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
+        }
     }
 }

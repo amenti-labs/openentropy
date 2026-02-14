@@ -14,26 +14,29 @@ use super::helpers::run_command_raw;
 /// Number of getpid() calls to measure for timing jitter.
 const JITTER_ROUNDS: usize = 256;
 
-pub struct ProcessSource {
-    info: SourceInfo,
-}
+/// Entropy source that snapshots the process table via `ps` and combines it
+/// with `getpid()` timing jitter.
+///
+/// No tunable parameters — the source reads the full process table and
+/// automatically extracts entropy from byte-level changes.
+pub struct ProcessSource;
+
+static PROCESS_INFO: SourceInfo = SourceInfo {
+    name: "process_table",
+    description: "Process table snapshots combined with getpid() timing jitter",
+    physics: "Snapshots the process table (PIDs, CPU usage, memory) and extracts \
+              entropy from the constantly-changing state. New PIDs are allocated \
+              semi-randomly, CPU percentages fluctuate with scheduling decisions, and \
+              resident memory sizes shift with page reclamation.",
+    category: SourceCategory::System,
+    platform_requirements: &[],
+    entropy_rate_estimate: 400.0,
+    composite: false,
+};
 
 impl ProcessSource {
     pub fn new() -> Self {
-        Self {
-            info: SourceInfo {
-                name: "process_table",
-                description: "Process table snapshots combined with getpid() timing jitter",
-                physics: "Snapshots the process table (PIDs, CPU usage, memory) and extracts \
-                    entropy from the constantly-changing state. New PIDs are allocated \
-                    semi-randomly, CPU percentages fluctuate with scheduling decisions, and \
-                    resident memory sizes shift with page reclamation.",
-                category: SourceCategory::System,
-                platform_requirements: &[],
-                entropy_rate_estimate: 400.0,
-                composite: false,
-            },
-        }
+        Self
     }
 }
 
@@ -78,7 +81,7 @@ fn snapshot_process_table() -> Option<Vec<u8>> {
 
 impl EntropySource for ProcessSource {
     fn info(&self) -> &SourceInfo {
-        &self.info
+        &PROCESS_INFO
     }
 
     fn is_available(&self) -> bool {
@@ -109,5 +112,29 @@ impl EntropySource for ProcessSource {
 
         entropy.truncate(n_samples);
         entropy
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_info() {
+        let src = ProcessSource::new();
+        assert_eq!(src.name(), "process_table");
+        assert_eq!(src.info().category, SourceCategory::System);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[ignore] // Requires ps command
+    fn process_collects_bytes() {
+        let src = ProcessSource::new();
+        if src.is_available() {
+            let data = src.collect(64);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 64);
+        }
     }
 }

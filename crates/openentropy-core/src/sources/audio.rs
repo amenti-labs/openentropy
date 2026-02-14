@@ -90,5 +90,18 @@ mod tests {
         assert_eq!(src.name(), "audio_noise");
         assert_eq!(src.info().category, SourceCategory::Hardware);
         assert_eq!(src.info().entropy_rate_estimate, 10000.0);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires microphone and ffmpeg
+    fn audio_noise_collects_bytes() {
+        let src = AudioNoiseSource;
+        if src.is_available() {
+            let data = src.collect(64);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 64);
+        }
     }
 }

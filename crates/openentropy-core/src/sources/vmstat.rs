@@ -15,26 +15,29 @@ const SNAPSHOT_DELAY: Duration = Duration::from_millis(50);
 /// Number of snapshot rounds to collect.
 const NUM_ROUNDS: usize = 4;
 
-pub struct VmstatSource {
-    info: SourceInfo,
-}
+/// Entropy source that samples macOS `vm_stat` counters and extracts entropy
+/// from memory management deltas (page faults, pageins, compressions, etc.).
+///
+/// No tunable parameters — the source reads all vm_stat counters and
+/// automatically extracts deltas from those that change between snapshots.
+pub struct VmstatSource;
+
+static VMSTAT_INFO: SourceInfo = SourceInfo {
+    name: "vmstat_deltas",
+    description: "Samples macOS vm_stat counters and extracts entropy from memory management deltas",
+    physics: "Samples macOS vm_stat counters (page faults, pageins, pageouts, \
+              compressions, decompressions, swap activity). These track physical memory \
+              management \u{2014} each counter changes when hardware page table walks, TLB \
+              misses, or memory pressure triggers compressor/swap.",
+    category: SourceCategory::System,
+    platform_requirements: &["macos"],
+    entropy_rate_estimate: 1000.0,
+    composite: false,
+};
 
 impl VmstatSource {
     pub fn new() -> Self {
-        Self {
-            info: SourceInfo {
-                name: "vmstat_deltas",
-                description: "Samples macOS vm_stat counters and extracts entropy from memory management deltas",
-                physics: "Samples macOS vm_stat counters (page faults, pageins, pageouts, \
-                    compressions, decompressions, swap activity). These track physical memory \
-                    management \u{2014} each counter changes when hardware page table walks, TLB \
-                    misses, or memory pressure triggers compressor/swap.",
-                category: SourceCategory::System,
-                platform_requirements: &["macos"],
-                entropy_rate_estimate: 1000.0,
-                composite: false,
-            },
-        }
+        Self
     }
 }
 
@@ -97,7 +100,7 @@ fn snapshot_vmstat(path: &str) -> Option<HashMap<String, i64>> {
 
 impl EntropySource for VmstatSource {
     fn info(&self) -> &SourceInfo {
-        &self.info
+        &VMSTAT_INFO
     }
 
     fn is_available(&self) -> bool {
@@ -141,5 +144,30 @@ impl EntropySource for VmstatSource {
         }
 
         extract_delta_bytes_i64(&all_deltas, n_samples)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vmstat_info() {
+        let src = VmstatSource::new();
+        assert_eq!(src.name(), "vmstat_deltas");
+        assert_eq!(src.info().category, SourceCategory::System);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires vm_stat binary
+    fn vmstat_collects_bytes() {
+        let src = VmstatSource::new();
+        if src.is_available() {
+            let data = src.collect(64);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 64);
+        }
     }
 }

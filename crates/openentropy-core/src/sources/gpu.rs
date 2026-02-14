@@ -187,4 +187,16 @@ mod tests {
         // On macOS, sips should always be present.
         assert!(src.is_available());
     }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires sips binary and GPU
+    fn gpu_timing_collects_bytes() {
+        let src = GPUTimingSource;
+        if src.is_available() {
+            let data = src.collect(32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
+        }
+    }
 }

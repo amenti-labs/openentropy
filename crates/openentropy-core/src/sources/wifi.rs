@@ -27,27 +27,28 @@ const WIFI_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// The raw entropy is a combination of RSSI LSBs, successive RSSI deltas,
 /// noise floor LSBs, and measurement timing jitter.
-pub struct WiFiRSSISource {
-    info: SourceInfo,
-}
+///
+/// No tunable parameters — automatically discovers the Wi-Fi device and
+/// selects the best available measurement method.
+pub struct WiFiRSSISource;
+
+static WIFI_RSSI_INFO: SourceInfo = SourceInfo {
+    name: "wifi_rssi",
+    description: "WiFi signal strength (RSSI) and noise floor fluctuations",
+    physics: "Reads WiFi signal strength (RSSI) and noise floor via CoreWLAN \
+              framework. RSSI fluctuates due to: multipath fading (reflections \
+              off walls/objects), constructive/destructive interference at \
+              2.4/5/6 GHz, Rayleigh fading from moving objects, atmospheric \
+              absorption, and thermal noise in the radio receiver's LNA.",
+    category: SourceCategory::Hardware,
+    platform_requirements: &["macos", "wifi"],
+    entropy_rate_estimate: 30.0,
+    composite: false,
+};
 
 impl WiFiRSSISource {
     pub fn new() -> Self {
-        Self {
-            info: SourceInfo {
-                name: "wifi_rssi",
-                description: "WiFi signal strength (RSSI) and noise floor fluctuations",
-                physics: "Reads WiFi signal strength (RSSI) and noise floor via CoreWLAN \
-                          framework. RSSI fluctuates due to: multipath fading (reflections \
-                          off walls/objects), constructive/destructive interference at \
-                          2.4/5/6 GHz, Rayleigh fading from moving objects, atmospheric \
-                          absorption, and thermal noise in the radio receiver's LNA.",
-                category: SourceCategory::Hardware,
-                platform_requirements: &["macos", "wifi"],
-                entropy_rate_estimate: 30.0,
-                composite: false,
-            },
-        }
+        Self
     }
 }
 
@@ -238,7 +239,7 @@ fn measure_once(device: &Option<String>) -> WifiMeasurement {
 
 impl EntropySource for WiFiRSSISource {
     fn info(&self) -> &SourceInfo {
-        &self.info
+        &WIFI_RSSI_INFO
     }
 
     fn is_available(&self) -> bool {
@@ -339,5 +340,18 @@ mod tests {
         assert_eq!(src.info().category, SourceCategory::Hardware);
         assert!((src.info().entropy_rate_estimate - 30.0).abs() < f64::EPSILON);
         assert_eq!(src.info().platform_requirements, &["macos", "wifi"]);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore] // Requires WiFi hardware
+    fn wifi_rssi_collects_bytes() {
+        let src = WiFiRSSISource::new();
+        if src.is_available() {
+            let data = src.collect(32);
+            assert!(!data.is_empty());
+            assert!(data.len() <= 32);
+        }
     }
 }

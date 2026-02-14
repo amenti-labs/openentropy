@@ -171,6 +171,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn compression_timing_info() {
+        let src = CompressionTimingSource;
+        assert_eq!(src.name(), "compression_timing");
+        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
+    fn hash_timing_info() {
+        let src = HashTimingSource;
+        assert_eq!(src.name(), "hash_timing");
+        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert!(!src.info().composite);
+    }
+
+    #[test]
     #[ignore] // Run with: cargo test -- --ignored
     fn compression_timing_collects_bytes() {
         let src = CompressionTimingSource;

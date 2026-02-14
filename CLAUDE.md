@@ -41,7 +41,7 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 - **Three conditioning modes:** Raw (passthrough), VonNeumann (debias only), Sha256 (full, default).
 - **Fast sources by default.** CLI commands use 26 fast sources (<2s). `--sources all` for everything.
 - **Min-entropy (H∞) over Shannon.** Grading based on NIST SP 800-90B min-entropy, not Shannon which overestimates.
-- **250 tests, 0 clippy warnings.** Keep it that way.
+- **257 tests, 0 clippy warnings.** Keep it that way.
 
 ## Source Categories
 - **Timing** (3): clock_jitter, mach_timing, sleep_jitter
@@ -67,7 +67,7 @@ cargo test                              # unit tests (fast, no hardware)
 cargo test -- --ignored                 # hardware-dependent tests (may hang)
 ```
 
-29 tests are `#[ignore]` because they require specific hardware (camera, BLE, WiFi, etc.).
+41 tests are `#[ignore]` because they require specific hardware (camera, BLE, WiFi, etc.).
 
 ## Platform
 Primary: macOS Apple Silicon (M1-M4). 31/36 sources available on Mac Mini, 36/36 on MacBook.
