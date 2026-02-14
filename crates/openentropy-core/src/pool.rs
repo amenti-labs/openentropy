@@ -354,6 +354,7 @@ impl EntropyPool {
                     physics: info.physics.to_string(),
                     category: info.category.to_string(),
                     entropy_rate_estimate: info.entropy_rate_estimate,
+                    composite: info.composite,
                 }
             })
             .collect()
@@ -418,6 +419,8 @@ pub struct SourceInfoSnapshot {
     pub category: String,
     /// Estimated entropy rate.
     pub entropy_rate_estimate: f64,
+    /// Whether this is a composite source.
+    pub composite: bool,
 }
 
 #[cfg(test)]
@@ -445,6 +448,7 @@ mod tests {
                     category: SourceCategory::System,
                     platform_requirements: &[],
                     entropy_rate_estimate: 1.0,
+                    composite: false,
                 },
                 data,
             }
@@ -478,6 +482,7 @@ mod tests {
                     category: SourceCategory::System,
                     platform_requirements: &[],
                     entropy_rate_estimate: 0.0,
+                    composite: false,
                 },
             }
         }

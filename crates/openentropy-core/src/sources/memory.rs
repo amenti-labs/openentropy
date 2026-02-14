@@ -21,6 +21,7 @@ static MEMORY_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Hardware,
     platform_requirements: &[],
     entropy_rate_estimate: 1500.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from memory allocation and access.

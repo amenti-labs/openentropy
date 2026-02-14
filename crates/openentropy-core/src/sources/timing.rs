@@ -31,6 +31,7 @@ static CLOCK_JITTER_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Timing,
     platform_requirements: &[],
     entropy_rate_estimate: 0.5,
+    composite: false,
 };
 
 impl EntropySource for ClockJitterSource {
@@ -85,6 +86,7 @@ static MACH_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Timing,
     platform_requirements: &["macOS"],
     entropy_rate_estimate: 0.3,
+    composite: false,
 };
 
 impl EntropySource for MachTimingSource {
@@ -147,6 +149,7 @@ static SLEEP_JITTER_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Timing,
     platform_requirements: &[],
     entropy_rate_estimate: 0.4,
+    composite: false,
 };
 
 impl EntropySource for SleepJitterSource {

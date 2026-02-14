@@ -30,6 +30,7 @@ static DISK_IO_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Hardware,
     platform_requirements: &[],
     entropy_rate_estimate: 800.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from NVMe/SSD random reads.

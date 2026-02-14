@@ -26,6 +26,7 @@ static GPU_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Hardware,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 300.0,
+    composite: false,
 };
 
 /// Minimal valid TIFF file (8x8 grayscale, uncompressed).

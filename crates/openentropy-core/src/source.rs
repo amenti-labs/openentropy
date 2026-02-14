@@ -52,6 +52,12 @@ pub struct SourceInfo {
     pub platform_requirements: &'static [&'static str],
     /// Estimated entropy rate in bits per sample.
     pub entropy_rate_estimate: f64,
+    /// Whether this is a composite source (combines multiple standalone sources).
+    ///
+    /// Composite sources don't measure a single independent entropy domain.
+    /// They combine or interleave other sources. The CLI displays them
+    /// separately from standalone sources.
+    pub composite: bool,
 }
 
 /// Trait that every entropy source must implement.

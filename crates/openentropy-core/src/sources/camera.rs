@@ -19,6 +19,7 @@ static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Hardware,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 50000.0,
+    composite: false,
 };
 
 /// Entropy source that harvests sensor noise from camera dark frames.

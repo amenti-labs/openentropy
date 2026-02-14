@@ -25,6 +25,7 @@ static AUDIO_NOISE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Hardware,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 10000.0,
+    composite: false,
 };
 
 /// Entropy source that harvests thermal noise from the microphone ADC.

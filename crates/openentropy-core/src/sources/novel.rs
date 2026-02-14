@@ -26,6 +26,7 @@ static DISPATCH_QUEUE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &[],
     entropy_rate_estimate: 1500.0,
+    composite: false,
 };
 
 /// Entropy source that harvests scheduling latency jitter from worker thread
@@ -118,6 +119,7 @@ static DYLD_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &[],
     entropy_rate_estimate: 1200.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from dynamic library loading.
@@ -181,6 +183,7 @@ static VM_PAGE_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &[],
     entropy_rate_estimate: 1300.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from VM page allocation/deallocation.
@@ -271,6 +274,7 @@ static SPOTLIGHT_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 800.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from Spotlight metadata queries.

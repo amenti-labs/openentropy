@@ -31,6 +31,7 @@ static IOREGISTRY_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform_requirements: &["macos"],
     entropy_rate_estimate: 1000.0,
+    composite: false,
 };
 
 /// Entropy source that mines the macOS IORegistry for hardware counter deltas.

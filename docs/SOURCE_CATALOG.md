@@ -44,7 +44,7 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 | 34 | `tlb_shootdown` | Frontier | A | 6.46 | 0.03s | All |
 | 35 | `pipe_buffer` | Frontier | C | 3.22 | 0.01s | All |
 | 36 | `kqueue_events` | Frontier | A* | — | 0.05s | macOS/BSD |
-| 37 | `interleaved_frontier` | Frontier | A* | — | 0.2s | All |
+| 37 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -225,7 +225,10 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** 12.7s (spawns mdls process per query)
 - **Platform:** macOS
 
-### Frontier Sources
+### Frontier Sources (Standalone)
+
+> **Standalone** sources each harvest one independent physical entropy domain.
+> **Composite** sources combine multiple standalone sources — see the Composite section below.
 
 #### 31. `amx_timing` — Apple Matrix eXtensions coprocessor dispatch jitter (improved)
 - **Physics:** Dispatches SGEMM (single-precision matrix multiply) operations to the AMX coprocessor via the Accelerate framework (`cblas_sgemm`) with varying matrix sizes [16,32,48,64,96,128]. The AMX is a dedicated coprocessor with its own instruction pipeline, shared across all CPU cores. Timing jitter comes from: AMX dispatch queue arbitration, memory controller bandwidth contention during matrix data transfer, thermal throttling affecting coprocessor clock frequency, and cache line eviction patterns for the matrix data.
@@ -272,11 +275,18 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** ~50ms
 - **Platform:** macOS/BSD (uses kqueue)
 
-#### 37. `interleaved_frontier` — Cross-source interference entropy (new)
+### Composite Sources
+
+> Composite sources do not measure a single independent entropy domain.
+> They combine multiple standalone sources for higher-quality output.
+> In CLI output, composite sources are marked with `[COMPOSITE]`.
+
+#### 37. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
 - **Physics:** Rapidly alternates between all 6 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
 - **Raw entropy:** Estimated A (cross-source interference is independent entropy)
 - **Speed:** ~200ms (sum of individual source costs)
 - **Platform:** All (requires ≥2 available frontier sources)
+- **Note:** This is a composite source — it combines all standalone frontier sources.
 
 ## Grade Distribution (Raw Output)
 

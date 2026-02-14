@@ -38,6 +38,7 @@ static COMPRESSION_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &[],
     entropy_rate_estimate: 1800.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from zlib compression.
@@ -110,6 +111,7 @@ static HASH_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Novel,
     platform_requirements: &[],
     entropy_rate_estimate: 2000.0,
+    composite: false,
 };
 
 /// Entropy source that harvests timing jitter from SHA-256 hashing.

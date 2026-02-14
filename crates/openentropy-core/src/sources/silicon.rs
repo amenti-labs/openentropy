@@ -31,6 +31,7 @@ static DRAM_ROW_BUFFER_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Silicon,
     platform_requirements: &[],
     entropy_rate_estimate: 3000.0,
+    composite: false,
 };
 
 impl EntropySource for DRAMRowBufferSource {
@@ -103,6 +104,7 @@ static CACHE_CONTENTION_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Silicon,
     platform_requirements: &[],
     entropy_rate_estimate: 2500.0,
+    composite: false,
 };
 
 impl EntropySource for CacheContentionSource {
@@ -196,6 +198,7 @@ static PAGE_FAULT_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Silicon,
     platform_requirements: &[],
     entropy_rate_estimate: 1500.0,
+    composite: false,
 };
 
 impl EntropySource for PageFaultTimingSource {
@@ -288,6 +291,7 @@ static SPECULATIVE_EXECUTION_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Silicon,
     platform_requirements: &[],
     entropy_rate_estimate: 2000.0,
+    composite: false,
 };
 
 impl EntropySource for SpeculativeExecutionSource {
