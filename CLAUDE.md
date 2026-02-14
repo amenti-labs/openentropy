@@ -1,7 +1,7 @@
 # CLAUDE.md — OpenEntropy Developer Guide
 
 ## What This Is
-OpenEntropy harvests hardware entropy from 36 unconventional sources on consumer devices. Rust workspace with Python bindings.
+OpenEntropy harvests hardware entropy from 40 unconventional sources on consumer devices. Rust workspace with Python bindings.
 
 ## Architecture
 ```
@@ -23,6 +23,8 @@ OpenEntropy serves dual purposes:
 Key research artifacts:
 - `research/poc/quality_audit.md` — Independent validation of all frontier/novel/silicon/cross-domain sources
 - `research/poc/validate_*.c` — 23 standalone C programs for reproducible entropy measurement
+- `research/poc/thermal_*.c` — 7 thermal noise PoC programs (audio ADC, SMC, DRAM, denormal, PLL, USB, instruction)
+- `docs/findings/thermal_noise_research_2026-02-14.md` — Thermal noise research findings
 - `docs/SOURCE_CATALOG.md` — Physics explanations and grading for every source
 
 ## Build
@@ -39,9 +41,9 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 ## Key Design Decisions
 - **Sources never self-condition.** All conditioning goes through `crates/openentropy-core/src/conditioning.rs`.
 - **Three conditioning modes:** Raw (passthrough), VonNeumann (debias only), Sha256 (full, default).
-- **Fast sources by default.** CLI commands use 26 fast sources (<2s). `--sources all` for everything.
+- **Fast sources by default.** CLI commands use 30 fast sources (<2s). `--sources all` for everything.
 - **Min-entropy (H∞) over Shannon.** Grading based on NIST SP 800-90B min-entropy, not Shannon which overestimates.
-- **257 tests, 0 clippy warnings.** Keep it that way.
+- **262 tests, 0 clippy warnings.** Keep it that way.
 
 ## Source Categories
 - **Timing** (3): clock_jitter, mach_timing, sleep_jitter
@@ -51,7 +53,7 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 - **Silicon** (4): dram_row_buffer, cache_contention, page_fault_timing, speculative_execution
 - **Cross-Domain** (2): cpu_io_beat, cpu_memory_beat
 - **Novel** (5): compression_timing, hash_timing, dispatch_queue, vm_page_timing, spotlight_timing
-- **Frontier** (9): amx_timing, thread_lifecycle, mach_ipc, tlb_shootdown, pipe_buffer, kqueue_events, dvfs_race, cas_contention, keychain_timing
+- **Frontier** (13): amx_timing, thread_lifecycle, mach_ipc, tlb_shootdown, pipe_buffer, kqueue_events, dvfs_race, cas_contention, keychain_timing, denormal_timing, audio_pll_timing, usb_timing, counter_beat
 
 ## Adding a New Source
 1. Create `crates/openentropy-core/src/sources/your_source.rs`
@@ -67,8 +69,8 @@ cargo test                              # unit tests (fast, no hardware)
 cargo test -- --ignored                 # hardware-dependent tests (may hang)
 ```
 
-41 tests are `#[ignore]` because they require specific hardware (camera, BLE, WiFi, etc.).
+49 tests are `#[ignore]` because they require specific hardware (camera, BLE, WiFi, etc.).
 
 ## Platform
-Primary: macOS Apple Silicon (M1-M4). 31/36 sources available on Mac Mini, 36/36 on MacBook.
+Primary: macOS Apple Silicon (M1-M4). 35/40 sources available on Mac Mini, 40/40 on MacBook.
 Linux: 10-15 sources (timing, network, disk, process). No macOS-specific sources.

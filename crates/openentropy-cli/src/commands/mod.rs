@@ -40,6 +40,10 @@ const FAST_SOURCES: &[&str] = &[
     "kqueue_events",
     "dvfs_race",
     "cas_contention",
+    "denormal_timing",
+    "counter_beat",
+    "audio_pll_timing",
+    "usb_timing",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.

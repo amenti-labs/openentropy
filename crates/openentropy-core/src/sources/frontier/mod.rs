@@ -34,7 +34,10 @@
 
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
+mod audio_pll_timing;
 mod cas_contention;
+mod counter_beat;
+mod denormal_timing;
 mod dvfs_race;
 mod keychain_timing;
 mod kqueue_events;
@@ -42,10 +45,14 @@ mod mach_ipc;
 mod pipe_buffer;
 mod thread_lifecycle;
 mod tlb_shootdown;
+mod usb_timing;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
+pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
+pub use counter_beat::CounterBeatSource;
+pub use denormal_timing::DenormalTimingSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
@@ -53,6 +60,7 @@ pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
+pub use usb_timing::USBTimingSource;
 
 // ---------------------------------------------------------------------------
 // Shared extraction helpers (used by multiple frontier sources)
@@ -186,6 +194,10 @@ mod tests {
             Box::new(DVFSRaceSource),
             Box::new(CASContentionSource::default()),
             Box::new(KeychainTimingSource::default()),
+            Box::new(DenormalTimingSource),
+            Box::new(AudioPLLTimingSource),
+            Box::new(USBTimingSource),
+            Box::new(CounterBeatSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
