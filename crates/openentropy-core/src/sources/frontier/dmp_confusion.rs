@@ -1,5 +1,5 @@
-//! DMP (Data Memory-dependent Prefetcher) confusion timing — entropy from
-//! Apple Silicon's unique prefetcher prediction failures.
+//! Pointer-chase random walk timing — entropy from multi-hop random memory
+//! access latency across Apple Silicon's cache hierarchy.
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
 use crate::sources::helpers::mach_time;
@@ -60,34 +60,32 @@ impl Default for DMPConfusionConfig {
     }
 }
 
-/// Harvests timing jitter from Apple Silicon's Data Memory-dependent Prefetcher (DMP).
+/// Harvests timing jitter from multi-hop random pointer chases across a large array.
 ///
 /// # What it measures
-/// Nanosecond timing of memory access sequences designed to confuse the DMP —
-/// a prefetcher unique to Apple Silicon that reads memory *values* (not just
-/// addresses) to predict future accesses.
+/// Nanosecond timing of pointer-chase sequences through a 16MB array filled with
+/// pseudo-random intra-array "pointer" values.
 ///
 /// # Why it's entropic
-/// The DMP examines loaded values and, if they resemble pointers, speculatively
-/// prefetches the target address. By filling an array with valid-looking pointer
-/// values and chasing them in unpredictable patterns with direction reversals,
-/// we create a situation where:
-/// - The DMP prefetches the "next hop" based on the loaded value
-/// - We immediately access a completely different location (reversal)
-/// - The DMP's prediction was wrong → the actual load suffers a cache miss
-/// - Whether the DMP activated at all depends on its internal state machine
-/// - The DMP's activation threshold varies with recent access patterns
+/// Multi-hop pointer chases through a large random array produce cache misses
+/// at unpredictable cache levels (L1/L2/SLC/DRAM). The timing depends on:
+/// - Which cache level satisfies each load (determined by recent access history
+///   of ALL processes, not just ours)
+/// - DRAM bank conflicts and row buffer state
+/// - Memory controller queue depth and reordering
+/// - Whether the DMP (Data Memory-dependent Prefetcher) activates on our
+///   pointer-like values — this adds some additional nondeterminism but
+///   validation showed the primary entropy driver is cache/DRAM timing, not
+///   DMP prediction failures specifically
 ///
-/// # What makes it unique
-/// The DMP was only publicly documented in 2023 (GoFetch, CVE-2024-XXXXX).
-/// No prior work has used DMP prediction failures as an entropy source.
-/// The DMP operates in a completely separate microarchitectural domain from
-/// CPU timing, cache hierarchy, or branch prediction, providing entropy
-/// uncorrelated with all existing sources.
+/// # Independence from cache_contention
+/// Validation showed Pearson r = 0.17 with cache_contention — weak but nonzero
+/// correlation. The sources share some cache-level entropy but differ in access
+/// pattern (pointer-chase vs random stride) and working set size (16MB vs 4MB).
 ///
-/// # Measured entropy
-/// - XOR-adjacent fold: H∞ = 3.6 bits/byte (50K samples, M4)
-/// - Delta XOR-fold: H∞ = 3.1 bits/byte
+/// # Measured entropy (validated at 100K samples)
+/// - XOR-fold: H∞ ≈ 2.0 bits/byte
+/// - Stability across 10 trials: H∞ = 1.5–1.9, mean 1.7
 /// - ~7μs per sample (fast)
 ///
 /// # Configuration
@@ -100,18 +98,17 @@ pub struct DMPConfusionSource {
 
 static DMP_CONFUSION_INFO: SourceInfo = SourceInfo {
     name: "dmp_confusion",
-    description: "Apple DMP (Data Memory-dependent Prefetcher) prediction failure timing",
-    physics: "Fills a large array with values resembling valid pointers and performs \
-              multi-hop pointer chases with direction reversals. Apple Silicon's DMP \
-              reads loaded values and speculatively prefetches targets. The reversal \
-              causes DMP mispredictions whose latency depends on: DMP internal state \
-              machine activation, SLC/DRAM access pattern history, concurrent DMP \
-              activity from all processes, memory controller queue depth, and whether \
-              the DMP crossed a page boundary. Second-order delta extraction captures \
-              the nondeterministic component.",
+    description: "Multi-hop random pointer-chase timing across cache hierarchy",
+    physics: "Performs multi-hop pointer chases through a 16MB array filled with \
+              pseudo-random intra-array pointer values. Each hop causes a cache miss \
+              at an unpredictable level (L1/L2/SLC/DRAM). Timing depends on: cache \
+              occupancy from all processes, DRAM bank conflicts and row buffer state, \
+              memory controller queue depth, and DMP (Data Memory-dependent Prefetcher) \
+              activation. Validated H∞ ≈ 1.7 at 10K samples. Pearson r = 0.17 with \
+              cache_contention indicates weak but nonzero shared entropy domain.",
     category: SourceCategory::Frontier,
     platform_requirements: &["macos", "aarch64"],
-    entropy_rate_estimate: 3000.0,
+    entropy_rate_estimate: 1700.0,
     composite: false,
 };
 

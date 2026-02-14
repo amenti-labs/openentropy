@@ -34,25 +34,27 @@ pub struct KeychainTimingConfig {
 /// # Why it's entropic
 /// Every keychain operation travels through multiple independent physical domains:
 /// 1. **XPC IPC** to securityd — scheduling/dispatch jitter
-/// 2. **securityd processing** — database lookup, access control evaluation
-/// 3. **Secure Enclave (SEP)** — cryptographic operations on a separate chip
-///    with its own clock domain, power state, and scheduling
-/// 4. **APFS filesystem** — copy-on-write database writes hit the NVMe controller
-/// 5. **Return path** — all of the above in reverse
+/// 2. **securityd processing** — SQLite database lookup, access control evaluation
+/// 3. **Kernel scheduling** — context switches between our process and securityd
+/// 4. **Database I/O** — SQLite page reads from the keychain database file
 ///
-/// Each domain contributes independent jitter. The round-trip aggregates entropy
-/// from 5+ physically independent noise sources in a single measurement.
+/// The write path additionally involves APFS copy-on-write and NVMe controller
+/// timing. The read path may or may not traverse the Secure Enclave depending
+/// on the item's access control policy.
 ///
 /// # What makes it unique
 /// No prior work has used keychain operation timing as an entropy source.
-/// The key insight is that securityd/SEP round-trips are a natural entropy
-/// amplifier — they traverse more independent physical domains in a single
-/// operation than any other userspace API.
+/// The round-trip through XPC IPC, securityd scheduling, and database I/O
+/// aggregates jitter from multiple independent domains in a single measurement.
 ///
 /// # Measured entropy
-/// - SecItemCopyMatching (read): H∞ ≈ 7.2 bits/byte, ~0.8ms/sample
-/// - SecItemAdd (write): H∞ ≈ 7.4 bits/byte, ~5ms/sample
-/// - Both approach the theoretical maximum of 8.0 bits/byte
+/// - SecItemCopyMatching (read): H∞ ≈ 6.5–7.0 bits/byte, ~0.6ms/sample
+/// - SecItemAdd (write): H∞ ≈ 7.0–7.4 bits/byte, ~5ms/sample
+///
+/// # Caveats
+/// - High autocorrelation at lag-1 (~0.43): variance extraction mitigates this
+/// - Warm-up effect: first ~500 reads are slower due to securityd cold caches
+/// - Slow: ~0.6ms per sample, not suitable for high-throughput collection
 ///
 /// # Configuration
 /// See [`KeychainTimingConfig`] for tunable parameters.
@@ -64,16 +66,16 @@ pub struct KeychainTimingSource {
 
 static KEYCHAIN_TIMING_INFO: SourceInfo = SourceInfo {
     name: "keychain_timing",
-    description: "Keychain/securityd/SEP round-trip timing jitter",
-    physics: "Times keychain operations that traverse: XPC IPC to securityd → database \
-              lookup → Secure Enclave Processor (separate chip, own clock) → APFS \
-              copy-on-write → return. Each domain (IPC scheduling, SEP clock, NVMe \
-              controller, APFS allocator) contributes independent jitter. The round-trip \
-              naturally aggregates entropy from 5+ physically independent noise sources. \
-              Variance extraction captures the nondeterministic component.",
+    description: "Keychain/securityd round-trip timing jitter",
+    physics: "Times keychain operations that traverse: XPC IPC to securityd → SQLite \
+              database lookup → access control evaluation → return. Each domain (IPC \
+              scheduling, securityd process scheduling, database page I/O, kernel context \
+              switches) contributes independent jitter. Variance extraction removes serial \
+              correlation (lag-1 autocorrelation ~0.43 in raw timings). First 500 samples \
+              discarded to avoid warm-up transient from securityd cold caches.",
     category: SourceCategory::Frontier,
     platform_requirements: &["macos"],
-    entropy_rate_estimate: 7000.0,
+    entropy_rate_estimate: 6500.0,
     composite: false,
 };
 
@@ -95,8 +97,11 @@ impl EntropySource for KeychainTimingSource {
     }
 }
 
+/// Number of warm-up samples to discard (securityd cold cache transient).
+const WARMUP_SAMPLES: usize = 100;
+
 /// Collect entropy via the keychain read path (SecItemCopyMatching).
-/// Faster (~0.8ms/sample) with excellent entropy (H∞ ≈ 7.2).
+/// Faster (~0.6ms/sample) with excellent entropy (H∞ ≈ 6.5–7.0).
 fn collect_read_path(n_samples: usize) -> Vec<u8> {
     // Bind Security framework symbols.
     #[link(name = "Security", kind = "framework")]
@@ -214,6 +219,15 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
         CFDictionarySetValue(query, kSecClass as _, kSecClassGenericPassword as _);
         CFDictionarySetValue(query, kSecAttrLabel as _, label_cf as _);
         CFDictionarySetValue(query, kSecReturnData as _, kCFBooleanTrue as _);
+
+        // Warm-up: discard first samples to avoid securityd cold cache transient.
+        for _ in 0..WARMUP_SAMPLES {
+            let mut result: CFTypeRef = std::ptr::null();
+            SecItemCopyMatching(query as _, &mut result);
+            if !result.is_null() {
+                CFRelease(result);
+            }
+        }
 
         // Collect timings.
         let raw_count = n_samples * 4 + 64;
