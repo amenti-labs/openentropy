@@ -333,7 +333,7 @@ Requires Rust 1.85+ and macOS or Linux.
 git clone https://github.com/amenti-labs/openentropy.git
 cd openentropy
 cargo build --release
-cargo test --workspace
+cargo test --workspace --exclude openentropy-python
 cargo install --path crates/openentropy-cli
 ```
 

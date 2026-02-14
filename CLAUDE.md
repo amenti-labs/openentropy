@@ -47,7 +47,7 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 - **Timing** (3): clock_jitter, mach_timing, sleep_jitter
 - **System** (4): sysctl_deltas, vmstat_deltas, process_table, ioregistry
 - **Network** (2): dns_timing, tcp_connect_timing
-- **Hardware** (6): disk_io, memory_timing, gpu_timing, bluetooth_noise, audio_noise, camera_noise
+- **Hardware** (7): disk_io, memory_timing, gpu_timing, bluetooth_noise, audio_noise, camera_noise, wifi_rssi
 - **Silicon** (4): dram_row_buffer, cache_contention, page_fault_timing, speculative_execution
 - **Cross-Domain** (2): cpu_io_beat, cpu_memory_beat
 - **Novel** (5): compression_timing, hash_timing, dispatch_queue, vm_page_timing, spotlight_timing

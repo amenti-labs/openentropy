@@ -122,5 +122,5 @@ OpenEntropy's raw mode is the equivalent of tapping the wire *before* the DRBG. 
 ## Security Considerations
 
 - **Raw output is NOT suitable for cryptographic use.** Raw bytes have lower Shannon entropy (often 2-6 bits/byte vs 8.0) and may contain statistical patterns.
-- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. However, openentropy is not a CSPRNG — it does not maintain state or provide forward secrecy.
+- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. The pool chains internal state (each output block updates the state), providing forward secrecy. However, openentropy is not a full CSPRNG — it is an entropy source, not a complete cryptographic random number generator.
 - **The HTTP server's `--allow-raw` flag** exists specifically to prevent accidental deployment of raw endpoints. Production deployments should not enable it unless raw access is explicitly needed.
