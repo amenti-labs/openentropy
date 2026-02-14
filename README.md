@@ -5,7 +5,7 @@
 **Your computer is a hardware noise observatory.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/openentropy/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
 *Harvest real entropy from 36 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
@@ -27,7 +27,7 @@ cargo install --git https://github.com/amenti-labs/openentropy openentropy-cli
 # Discover entropy sources on your machine
 openentropy scan
 
-# Benchmark all fast sources (~1s)
+# Benchmark all fast sources
 openentropy bench
 
 # Output 64 random hex bytes
@@ -128,7 +128,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
 | `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
 
-### Hardware (5)
+### Hardware (6)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
@@ -253,6 +253,13 @@ openentropy server --port 8080 --allow-raw    # enable raw output
 ```bash
 curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
 curl "http://localhost:8080/health"
+```
+
+### `entropy` — Deep min-entropy analysis
+
+```bash
+openentropy entropy
+openentropy entropy --sources mach_timing
 ```
 
 ### `report` — NIST test battery
