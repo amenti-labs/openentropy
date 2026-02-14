@@ -2,7 +2,7 @@
 
 ## 0.4.0 — 2026-02-13
 
-### New Frontier Sources (37 → 39 total)
+### New Frontier Sources (37 → 38 total)
 
 - **`dvfs_race`** — Cross-core DVFS frequency race. Spawns two threads on different CPU cores running tight counting loops; the difference in iteration counts captures physical frequency jitter from independent DVFS controllers. PoC measured H∞ = 7.288 bits/byte — the highest of any discovered source.
 - **`cas_contention`** — Multi-thread atomic CAS arbitration. 4 threads race on compare-and-swap operations targeting shared cache lines. Hardware coherence engine arbitration timing is physically nondeterministic. PoC measured H∞ = 2.463 bits/byte.
@@ -20,7 +20,6 @@
 ### Improvements
 
 - Both new sources added to `FAST_SOURCES` (27 fast sources total)
-- `interleaved_frontier` composite now round-robins 8 standalone frontier sources
 - Comprehensive documentation updates: SOURCE_CATALOG, README, CLAUDE.md, ARCHITECTURE, all docs
 - Version bump to 0.4.0 across workspace, pyproject.toml
 - Removed dead code (vdsp_timing.rs)

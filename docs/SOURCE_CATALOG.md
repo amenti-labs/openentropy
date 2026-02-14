@@ -1,6 +1,6 @@
 # OpenEntropy — Source Catalog
 
-All 39 entropy sources, their physics, quality, and operational characteristics.
+All 38 entropy sources, their physics, quality, and operational characteristics.
 
 > **Grades are for raw (unconditioned) output.** After SHA-256 conditioning, all sources produce Grade A output. The raw grades reflect the true hardware entropy density before any whitening.
 
@@ -46,7 +46,6 @@ All 39 entropy sources, their physics, quality, and operational characteristics.
 | 36 | `kqueue_events` | Frontier | A* | — | 0.05s | macOS/BSD |
 | 37 | `dvfs_race` | Frontier | A | 7.96 | <0.1s | All |
 | 38 | `cas_contention` | Frontier | D | 3.02 | <0.1s | All |
-| 39 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -290,24 +289,11 @@ All 39 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** <100ms — very fast
 - **Platform:** All (uses std::thread + atomics)
 
-### Composite Sources
-
-> Composite sources do not measure a single independent entropy domain.
-> They combine multiple standalone sources for higher-quality output.
-> In CLI output, composite sources are marked with `[COMPOSITE]`.
-
-#### 39. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
-- **Physics:** Rapidly alternates between all 8 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
-- **Raw entropy:** Estimated A (cross-source interference is independent entropy)
-- **Speed:** ~200ms (sum of individual source costs)
-- **Platform:** All (requires ≥2 available frontier sources)
-- **Note:** This is a composite source — it combines all standalone frontier sources.
-
 ## Grade Distribution (Raw Output)
 
 | Grade | Count | Sources |
 |-------|-------|---------|
-| A | 11+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **dvfs_race**, **interleaved_frontier**\* |
+| A | 11+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **dvfs_race** |
 | B | 6 | clock_jitter, cache_contention, compression_timing, dispatch_queue, **amx_timing**, **mach_ipc** |
 | C | 7 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat, **pipe_buffer** |
 | D | 7 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter*, **cas_contention** |

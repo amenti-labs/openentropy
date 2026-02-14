@@ -116,8 +116,14 @@ impl EntropyPool {
     }
 
     /// Collect entropy only from sources whose names are in the given list.
-    /// Uses parallel threads with a 5-second hard timeout per source.
+    /// Uses parallel threads. Collects 1000 samples per source.
     pub fn collect_enabled(&self, enabled_names: &[String]) -> usize {
+        self.collect_enabled_n(enabled_names, 1000)
+    }
+
+    /// Collect `n_samples` of entropy from sources whose names are in the list.
+    /// Smaller `n_samples` values are faster — use this for interactive/TUI contexts.
+    pub fn collect_enabled_n(&self, enabled_names: &[String], n_samples: usize) -> usize {
         use std::sync::Arc;
         let results: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -132,7 +138,7 @@ impl EntropyPool {
                 .map(|ss_mutex| {
                     let results = Arc::clone(&results);
                     s.spawn(move || {
-                        let data = Self::collect_one(ss_mutex);
+                        let data = Self::collect_one_n(ss_mutex, n_samples);
                         if !data.is_empty() {
                             results.lock().unwrap().extend_from_slice(&data);
                         }
@@ -152,9 +158,13 @@ impl EntropyPool {
     }
 
     fn collect_one(ss_mutex: &Mutex<SourceState>) -> Vec<u8> {
+        Self::collect_one_n(ss_mutex, 1000)
+    }
+
+    fn collect_one_n(ss_mutex: &Mutex<SourceState>, n_samples: usize) -> Vec<u8> {
         let mut ss = ss_mutex.lock().unwrap();
         let t0 = Instant::now();
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ss.source.collect(1000))) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ss.source.collect(n_samples))) {
             Ok(data) if !data.is_empty() => {
                 ss.last_collect_time = t0.elapsed();
                 ss.total_bytes += data.len() as u64;

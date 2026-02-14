@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Core entropy harvesting library — 39 unconventional sources from your computer's physics"
+description = "Core entropy harvesting library — 38 unconventional sources from your computer's physics"
 
 [[example]]
 name = "basic"

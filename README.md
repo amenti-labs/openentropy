@@ -8,7 +8,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=main&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*Harvest real entropy from 39 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
+*Harvest real entropy from 38 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -103,7 +103,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 ## Entropy Sources
 
-39 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
+38 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
 
 ### Timing (3)
 
@@ -181,7 +181,6 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 | `kqueue_events` | — | 0.05s | BSD kqueue event multiplexing timer/file/socket jitter |
 | `dvfs_race` | 7.804 | 0.13s | Cross-core DVFS frequency race (H∞=7.288) |
 | `cas_contention` | 2.352 | <0.01s | Multi-thread atomic CAS arbitration contention |
-| `interleaved_frontier` | — | 0.20s | **[COMPOSITE]** Cross-source interference entropy |
 
 Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
 

@@ -9,32 +9,20 @@
 //! ```text
 //! frontier/
 //! ├── mod.rs              ← you are here (re-exports + shared helpers)
-//! │
-//! │  ── Standalone sources (each harvests one independent entropy domain) ──
 //! ├── amx_timing.rs       ← AMX coprocessor matrix multiply jitter
 //! ├── thread_lifecycle.rs ← pthread create/join scheduling jitter
 //! ├── mach_ipc.rs         ← Mach port OOL message + VM remapping jitter
 //! ├── tlb_shootdown.rs    ← mprotect-induced TLB invalidation IPI jitter
 //! ├── pipe_buffer.rs      ← multi-pipe kernel zone allocator contention
 //! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
-//! │
-//! │  ── Composite sources (combine multiple standalone sources) ──
-//! └── interleaved.rs      ← [COMPOSITE] rapidly alternates all standalone
-//!                            frontier sources; the cross-source interference
-//!                            is itself independent entropy
+//! ├── dvfs_race.rs        ← cross-core DVFS frequency race
+//! └── cas_contention.rs   ← CAS atomic contention timing
 //! ```
 //!
-//! ## Standalone vs Composite
-//!
-//! **Standalone sources** each measure a single, independent physical entropy
-//! domain. They work in isolation and can be benchmarked independently.
-//!
-//! **Composite sources** combine multiple standalone sources. They are marked
-//! with `composite: true` in their [`SourceInfo`] so the CLI can display them
-//! distinctly. Currently there is one composite source:
-//! [`InterleavedFrontierSource`], which round-robins through all standalone
-//! frontier sources and XORs their cross-source interference timing with the
-//! collected bytes.
+//! Each source measures a single, independent physical entropy domain.
+//! They work in isolation and can be benchmarked independently. Source
+//! combination is handled by the [`EntropyPool`](crate::pool::EntropyPool),
+//! not by individual sources.
 //!
 //! ## Configuration
 //!
@@ -53,9 +41,6 @@ mod pipe_buffer;
 mod thread_lifecycle;
 mod tlb_shootdown;
 
-// Composite sources — combine multiple standalone sources.
-mod interleaved;
-
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
@@ -65,9 +50,6 @@ pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
-
-// Composite re-exports.
-pub use interleaved::InterleavedFrontierSource;
 
 // ---------------------------------------------------------------------------
 // Shared extraction helpers (used by multiple frontier sources)
@@ -145,22 +127,6 @@ pub(crate) fn extract_timing_entropy_variance(timings: &[u64], n_samples: usize)
     raw
 }
 
-/// Create instances of all standalone (non-composite) frontier sources.
-///
-/// Used by [`InterleavedFrontierSource`] to build its round-robin pool.
-pub(crate) fn standalone_frontier_sources() -> Vec<Box<dyn crate::source::EntropySource>> {
-    vec![
-        Box::new(AMXTimingSource::default()),
-        Box::new(ThreadLifecycleSource),
-        Box::new(MachIPCSource::default()),
-        Box::new(TLBShootdownSource::default()),
-        Box::new(PipeBufferSource::default()),
-        Box::new(KqueueEventsSource::default()),
-        Box::new(DVFSRaceSource),
-        Box::new(CASContentionSource::default()),
-    ]
-}
-
 // ---------------------------------------------------------------------------
 // Tests for shared helpers
 // ---------------------------------------------------------------------------
@@ -204,13 +170,6 @@ mod tests {
         assert!(extract_timing_entropy_variance(&[1, 2, 3], 10).is_empty());
     }
 
-    // Standalone sources helper
-    #[test]
-    fn standalone_frontier_sources_returns_eight() {
-        let sources = standalone_frontier_sources();
-        assert_eq!(sources.len(), 8);
-    }
-
     // All frontier sources have valid metadata
     #[test]
     fn all_frontier_sources_have_valid_names() {
@@ -223,7 +182,6 @@ mod tests {
             Box::new(KqueueEventsSource::default()),
             Box::new(DVFSRaceSource),
             Box::new(CASContentionSource::default()),
-            Box::new(InterleavedFrontierSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

@@ -112,7 +112,7 @@ impl EntropySource for MachIPCSource {
     }
 
     fn is_available(&self) -> bool {
-        true
+        cfg!(target_os = "macos")
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

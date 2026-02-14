@@ -142,15 +142,18 @@ impl EntropySource for AMXTimingSource {
             Vec::new()
         };
 
+        // Pre-allocate matrices at the maximum size to avoid per-iteration allocation.
+        let max_n = *sizes.iter().max().unwrap_or(&128);
+        let max_len = max_n * max_n;
+        let mut a = vec![0.0f32; max_len];
+        let mut b = vec![0.0f32; max_len];
+        let mut c = vec![0.0f32; max_len];
+
         for i in 0..raw_count {
             let n = sizes[i % sizes.len()];
             let len = n * n;
 
-            let mut a = vec![0.0f32; len];
-            let mut b = vec![0.0f32; len];
-            let mut c = vec![0.0f32; len];
-
-            for val in a.iter_mut().chain(b.iter_mut()) {
+            for val in a[..len].iter_mut().chain(b[..len].iter_mut()) {
                 lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
                 *val = (lcg >> 32) as f32 / u32::MAX as f32;
             }

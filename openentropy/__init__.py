@@ -1,5 +1,5 @@
 """
-openentropy: Your computer is a quantum noise observatory.
+openentropy: Your computer is a hardware noise observatory.
 
 Harvests entropy from unconventional hardware sources — clock jitter,
 kernel counters, memory timing, GPU scheduling, network latency, and more.

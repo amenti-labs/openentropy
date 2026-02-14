@@ -202,7 +202,11 @@ impl EntropySource for KqueueEventsSource {
         for i in 0..self.config.num_file_watchers {
             let path = std::env::temp_dir().join(format!("oe_kq_{i}_{}", std::process::id()));
             if std::fs::write(&path, b"entropy").is_ok() {
-                let c_path = std::ffi::CString::new(path.to_str().unwrap_or("")).unwrap();
+                let path_str = path.to_str().unwrap_or("");
+                let c_path = match std::ffi::CString::new(path_str) {
+                    Ok(c) => c,
+                    Err(_) => continue, // skip paths with null bytes
+                };
                 let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY) };
                 if fd >= 0 {
                     let mut ev: libc::kevent = unsafe { std::mem::zeroed() };

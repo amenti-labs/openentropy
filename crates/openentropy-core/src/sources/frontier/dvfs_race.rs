@@ -36,12 +36,12 @@ static DVFS_RACE_INFO: SourceInfo = SourceInfo {
     description: "Cross-core DVFS frequency race between thread pairs",
     physics: "Spawns two threads running tight counting loops on different cores. \
               After a ~2\u{00b5}s race window, the absolute difference in iteration \
-              counts captures physical frequency jitter from independent DVFS \
-              controllers. Apple Silicon P-core and E-core clusters have separate \
-              voltage/frequency domains that adjust asynchronously based on thermal \
-              state, power budget, and workload. The scheduler\u{2019}s core placement, \
-              cache coherence latency for the stop signal, and per-core frequency \
-              transitions all contribute independent nondeterminism. \
+              counts captures nondeterminism from: scheduler core placement (P-core vs \
+              E-core), cache coherence latency for the stop signal, interrupt jitter, \
+              and cross-core pipeline state differences. On Apple Silicon, P-core and \
+              E-core clusters have separate frequency domains, but the 2\u{00b5}s window is \
+              too short for DVFS transitions (~100\u{00b5}s-1ms); the primary entropy comes \
+              from scheduling and cache-coherence nondeterminism. \
               PoC measured H\u{221e} = 7.381 bits/byte.",
     category: SourceCategory::Frontier,
     platform_requirements: &[],

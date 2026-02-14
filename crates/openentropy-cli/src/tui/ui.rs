@@ -1,86 +1,207 @@
 //! TUI rendering — single-source focus design.
 //!
-//! ┌──────────────────────────────────────────────┐
-//! │  🔬 OpenEntropy    cycle #42   32ms     │
-//! ├─────────────────────┬────────────────────────┤
-//! │  Sources            │  mach_timing           │
-//! │  ▸ clock_jitter     │  Timing · Silicon      │
-//! │    mach_timing  ●   │                        │
-//! │    sleep_jitter     │  Mach absolute time    │
-//! │    sysctl_deltas    │  LSB jitter from the   │
-//! │    ...              │  performance counter   │
-//! │                     ├────────────────────────┤
-//! │                     │  ╭ entropy (bits/byte) │
-//! │                     │  │  ~~~7.83~~~         │
-//! │                     │  ╰──────────────────── │
-//! ├─────────────────────┴────────────────────────┤
-//! │  a3 f1 09 cc 7b 2e ...   256 bytes collected │
-//! ├──────────────────────────────────────────────┤
-//! │  ↑↓ navigate   space: select   r: refresh    │
-//! └──────────────────────────────────────────────┘
+//! All draw functions receive an `&App` (non-shared fields) and `&Snapshot`
+//! (shared state captured in a single mutex lock per frame).
 
-use super::app::App;
+use super::app::{App, ChartMode, Sample, Snapshot, rolling_autocorr};
+use openentropy_core::ConditioningMode;
 use ratatui::{prelude::*, widgets::*};
 
+// ---------------------------------------------------------------------------
+// Category lookup (single source of truth for short_cat + display_cat)
+// ---------------------------------------------------------------------------
+
+const CATEGORIES: &[(&str, &str, &str)] = &[
+    ("timing", "TMG", "Timing"),
+    ("system", "SYS", "System"),
+    ("network", "NET", "Network"),
+    ("hardware", "HW", "Hardware"),
+    ("silicon", "SI", "Silicon"),
+    ("cross_domain", "XD", "Cross-Domain"),
+    ("novel", "NOV", "Novel"),
+    ("frontier", "FRN", "Frontier"),
+];
+
+fn short_cat(cat: &str) -> &'static str {
+    CATEGORIES
+        .iter()
+        .find(|(k, _, _)| *k == cat)
+        .map(|(_, s, _)| *s)
+        .unwrap_or("?")
+}
+
+fn display_cat(cat: &str) -> &str {
+    CATEGORIES
+        .iter()
+        .find(|(k, _, _)| *k == cat)
+        .map(|(_, _, d)| *d)
+        .unwrap_or(cat)
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+fn entropy_color(val: f64) -> Style {
+    if val >= 7.5 {
+        Style::default().fg(Color::Green)
+    } else if val >= 5.0 {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::Red)
+    }
+}
+
+fn format_time(secs: f64) -> String {
+    if secs >= 1.0 {
+        format!("{secs:.1}s")
+    } else {
+        format!("{:.1}ms", secs * 1000.0)
+    }
+}
+
+/// Build spans for entropy values with coloring.
+fn entropy_spans(label: &str, label_style: Style, h: f64, h_min: f64) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(label.to_string(), label_style),
+        Span::styled("Shannon ", Style::default().bold()),
+        Span::styled(format!("{h:.3}"), entropy_color(h)),
+        Span::styled("  NIST min ", Style::default().bold()),
+        Span::styled(format!("{h_min:.3}"), entropy_color(h_min)),
+    ]
+}
+
+/// Extract chart values from history, handling autocorrelation specially.
+fn extract_chart_values(history: &[Sample], mode: ChartMode) -> Vec<f64> {
+    if mode == ChartMode::Autocorrelation {
+        let raw: Vec<f64> = history.iter().map(|s| s.output_value).collect();
+        rolling_autocorr(&raw, 60)
+    } else {
+        history.iter().map(|s| mode.value_from(s)).collect()
+    }
+}
+
+/// Render a placeholder block with a gray message (used for empty states).
+fn draw_placeholder(f: &mut Frame, area: Rect, title: String, message: &str) {
+    let block = Block::default().borders(Borders::ALL).title(title);
+    let p = Paragraph::new(message)
+        .style(Style::default().fg(Color::DarkGray))
+        .block(block);
+    f.render_widget(p, area);
+}
+
+// ---------------------------------------------------------------------------
+// Main draw entry point
+// ---------------------------------------------------------------------------
+
 pub fn draw(f: &mut Frame, app: &App) {
+    let snap = app.snapshot();
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // title
             Constraint::Min(10),   // main
-            Constraint::Length(3), // output
+            Constraint::Length(4), // output
             Constraint::Length(1), // keys
         ])
         .split(f.area());
 
-    draw_title(f, rows[0], app);
-    draw_main(f, rows[1], app);
-    draw_output(f, rows[2], app);
+    draw_title(f, rows[0], app, &snap);
+    draw_main(f, rows[1], app, &snap);
+    draw_output(f, rows[2], app, &snap);
     draw_keys(f, rows[3]);
 }
 
-fn draw_title(f: &mut Frame, area: Rect, app: &App) {
-    let cycle = app.cycle_count();
-    let ms = app.last_ms();
-    let bytes = app.total_bytes();
-    let spin = if app.is_collecting() { " ⟳" } else { "" };
+// ---------------------------------------------------------------------------
+// Title bar
+// ---------------------------------------------------------------------------
+
+fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
+    let rate = app.refresh_rate_secs();
+    let spin = if app.is_paused() {
+        " PAUSED"
+    } else if snap.collecting {
+        " ⟳"
+    } else {
+        ""
+    };
 
     let active_label = app.active_name().unwrap_or("none");
+    let rate_str = if rate >= 1.0 {
+        format!("{rate:.0}s")
+    } else {
+        format!("{:.0}ms", rate * 1000.0)
+    };
+
+    let mut title_spans = vec![
+        Span::styled(" 🔬 OpenEntropy ", Style::default().bold().fg(Color::Cyan)),
+        Span::raw("  watching: "),
+        Span::styled(active_label, Style::default().bold().fg(Color::Yellow)),
+    ];
+
+    if let Some(cmp_name) = app.compare_name() {
+        title_spans.push(Span::styled(
+            format!(" vs {cmp_name}"),
+            Style::default().bold().fg(Color::Magenta),
+        ));
+    }
+
+    title_spans.extend([
+        Span::styled(
+            format!(
+                "  #{}  {}ms  {}B ",
+                snap.cycle_count, snap.last_ms, snap.total_bytes
+            ),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::styled(
+            format!(" @{rate_str}"),
+            Style::default().bold().fg(Color::Magenta),
+        ),
+        Span::styled(format!("{spin} "), Style::default().fg(Color::DarkGray)),
+    ]);
+
+    if let Some(path) = &snap.last_export {
+        title_spans.push(Span::styled(
+            format!(" saved: {} ", path.display()),
+            Style::default().fg(Color::Green),
+        ));
+    }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(Line::from(vec![
-            Span::styled(" 🔬 OpenEntropy ", Style::default().bold().fg(Color::Cyan)),
-            Span::raw("  watching: "),
-            Span::styled(active_label, Style::default().bold().fg(Color::Yellow)),
-            Span::styled(
-                format!("  #{cycle}  {ms}ms  {bytes}B{spin} "),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]));
+        .title(Line::from(title_spans));
 
     f.render_widget(block, area);
 }
 
-fn draw_main(f: &mut Frame, area: Rect, app: &App) {
+// ---------------------------------------------------------------------------
+// Main area (sources + info + chart)
+// ---------------------------------------------------------------------------
+
+fn draw_main(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
         .split(area);
 
-    draw_source_list(f, cols[0], app);
+    draw_source_list(f, cols[0], app, snap);
 
     let right = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
         .split(cols[1]);
 
-    draw_info(f, right[0], app);
-    draw_chart(f, right[1], app);
+    draw_info(f, right[0], app, snap);
+    draw_chart(f, right[1], app, snap);
 }
 
-fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
+// ---------------------------------------------------------------------------
+// Source list
+// ---------------------------------------------------------------------------
+
+fn draw_source_list(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let names = app.source_names();
     let cats = app.source_categories();
 
@@ -93,18 +214,15 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
 
             let pointer = if is_cursor { "▸" } else { " " };
             let marker = if is_active { "●" } else { " " };
-
-            // Short category
             let cat = short_cat(&cats[i]);
 
-            // Show last-known stats if we have them
-            let stat = app.source_stat(name);
-            let entropy_str = match &stat {
+            let stat = snap.source_stats.get(name.as_str());
+            let entropy_str = match stat {
                 Some(s) => format!("{:.1}", s.entropy),
                 None => "—".into(),
             };
-            let time_str = match &stat {
-                Some(s) => format!("{:.2}s", s.time),
+            let time_str = match stat {
+                Some(s) => format_time(s.time),
                 None => "—".into(),
             };
 
@@ -113,7 +231,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
             } else if is_active {
                 Style::default().fg(Color::Yellow).bold()
             } else {
-                match &stat {
+                match stat {
                     Some(s) if s.entropy >= 7.5 => Style::default().fg(Color::Green),
                     Some(s) if s.entropy >= 5.0 => Style::default().fg(Color::Yellow),
                     Some(_) => Style::default().fg(Color::Red),
@@ -133,6 +251,10 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
+    let header = Row::new(vec!["", "", "Source", "Cat", "H", "Time"])
+        .style(Style::default().bold().fg(Color::DarkGray))
+        .bottom_margin(0);
+
     let table = Table::new(
         items,
         [
@@ -144,6 +266,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
             Constraint::Length(7),  // time
         ],
     )
+    .header(header)
     .block(
         Block::default()
             .borders(Borders::ALL)
@@ -153,13 +276,17 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(table, area);
 }
 
-fn draw_info(f: &mut Frame, area: Rect, app: &App) {
+// ---------------------------------------------------------------------------
+// Info panel
+// ---------------------------------------------------------------------------
+
+fn draw_info(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let infos = app.source_infos();
     let idx = app.active().unwrap_or(app.cursor());
 
     let text = if idx < infos.len() {
         let info = &infos[idx];
-        let stat = app.source_stat(&info.name);
+        let stat = snap.source_stats.get(info.name.as_str());
 
         let mut lines = vec![
             Line::from(Span::styled(
@@ -167,27 +294,41 @@ fn draw_info(f: &mut Frame, area: Rect, app: &App) {
                 Style::default().bold().fg(Color::Cyan),
             )),
             Line::from(Span::styled(
-                &info.category,
+                display_cat(&info.category),
                 Style::default().fg(Color::DarkGray),
             )),
         ];
 
         if let Some(s) = stat {
             lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled("H: ", Style::default().bold()),
-                Span::styled(
-                    format!("{:.3} bits/byte", s.entropy),
-                    if s.entropy >= 7.5 {
-                        Style::default().fg(Color::Green)
-                    } else if s.entropy >= 5.0 {
-                        Style::default().fg(Color::Yellow)
-                    } else {
-                        Style::default().fg(Color::Red)
-                    },
-                ),
-                Span::raw(format!("  {}B  {:.2}s", s.bytes, s.time)),
-            ]));
+            lines.push(Line::from(entropy_spans(
+                "last ",
+                Style::default().fg(Color::DarkGray),
+                s.entropy,
+                s.min_entropy,
+            )));
+        }
+
+        if snap.active_history.len() >= 2 {
+            let n = snap.active_history.len() as f64;
+            let avg_sh: f64 = snap.active_history.iter().map(|s| s.shannon).sum::<f64>() / n;
+            let avg_min: f64 = snap
+                .active_history
+                .iter()
+                .map(|s| s.min_entropy)
+                .sum::<f64>()
+                / n;
+            let mut spans = entropy_spans(
+                "avg  ",
+                Style::default().bold().fg(Color::Magenta),
+                avg_sh,
+                avg_min,
+            );
+            spans.push(Span::styled(
+                format!("  n={}", snap.active_history.len()),
+                Style::default().fg(Color::DarkGray),
+            ));
+            lines.push(Line::from(spans));
         }
 
         lines.push(Line::from(""));
@@ -209,87 +350,350 @@ fn draw_info(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(p, area);
 }
 
-fn draw_chart(f: &mut Frame, area: Rect, app: &App) {
-    let history = app.active_history();
+// ---------------------------------------------------------------------------
+// Chart
+// ---------------------------------------------------------------------------
+
+fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
+    let mode = app.chart_mode();
     let name = app.active_name().unwrap_or("—");
 
-    if history.is_empty() {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" {name} — select a source "));
-        let p = Paragraph::new("Press space on a source to start watching")
-            .style(Style::default().fg(Color::DarkGray))
-            .block(block);
-        f.render_widget(p, area);
+    if mode == ChartMode::ByteDistribution {
+        draw_byte_dist(f, area, snap, name);
         return;
     }
 
-    let data: Vec<(f64, f64)> = history
-        .iter()
-        .enumerate()
-        .map(|(i, &v)| (i as f64, v))
-        .collect();
+    if snap.active_history.is_empty() {
+        draw_placeholder(
+            f,
+            area,
+            format!(" {name} — select a source "),
+            "Press space on a source to start watching",
+        );
+        return;
+    }
 
-    let latest = history.last().copied().unwrap_or(0.0);
-    let min_val = history.iter().copied().fold(f64::MAX, f64::min);
-    let max_val = history.iter().copied().fold(f64::MIN, f64::max);
+    let values = extract_chart_values(&snap.active_history, mode);
+    let compare_values = extract_chart_values(&snap.compare_history, mode);
 
-    let datasets = vec![
+    if values.is_empty() {
+        draw_placeholder(
+            f,
+            area,
+            format!(" {name} — collecting... "),
+            "Waiting for data...",
+        );
+        return;
+    }
+
+    let to_points = |vals: &[f64]| -> Vec<(f64, f64)> {
+        vals.iter()
+            .enumerate()
+            .map(|(i, &v)| (i as f64, v))
+            .collect()
+    };
+    let data = to_points(&values);
+    let compare_data = to_points(&compare_values);
+
+    let cmp_name = app.compare_name().unwrap_or("?");
+    let latest = *values.last().unwrap_or(&0.0);
+
+    // Compute bounds across both traces
+    let all_vals = values.iter().chain(compare_values.iter()).copied();
+    let min_val = all_vals.clone().fold(f64::MAX, f64::min);
+    let max_val = all_vals.fold(f64::MIN, f64::max);
+
+    let mut datasets = vec![
         Dataset::default()
-            .name(format!("{latest:.2}"))
+            .name(format!("{name} {latest:.2}"))
             .marker(symbols::Marker::Braille)
             .style(Style::default().fg(Color::Cyan))
             .data(&data),
     ];
 
-    let x_max = (history.len() as f64).max(10.0);
-    let y_min = (min_val - 0.5).max(0.0);
-    let y_max = (max_val + 0.5).min(8.0);
+    if !compare_data.is_empty() {
+        let cmp_latest = *compare_values.last().unwrap_or(&0.0);
+        datasets.push(
+            Dataset::default()
+                .name(format!("{cmp_name} {cmp_latest:.2}"))
+                .marker(symbols::Marker::Braille)
+                .style(Style::default().fg(Color::Magenta))
+                .data(&compare_data),
+        );
+    }
+
+    let x_max = (data.len().max(compare_data.len()) as f64).max(10.0);
+    let y_label = mode.y_label();
+    let (y_min, y_max) = mode.y_bounds(min_val, max_val);
+
+    let compare_hint = if app.compare_source().is_some() {
+        format!(" vs {cmp_name}")
+    } else {
+        String::new()
+    };
+    let title = format!(
+        " {name}{compare_hint}  [g] {}  {latest:.2} {y_label} ",
+        mode.label()
+    );
 
     let chart = Chart::new(datasets)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" {name}  H={latest:.2} bits/byte ")),
+                .title(title)
+                .title_bottom(Line::from(format!(" {} ", mode.description())).dark_gray()),
         )
-        .x_axis(Axis::default().bounds([0.0, x_max]).labels(vec![
-            Line::from("0"),
-            Line::from(format!("{}", history.len())),
-        ]))
-        .y_axis(Axis::default().bounds([y_min, y_max]).labels(vec![
-            Line::from(format!("{y_min:.1}")),
-            Line::from(format!("{y_max:.1}")),
-        ]));
+        .x_axis(
+            Axis::default()
+                .title("sample".dark_gray())
+                .bounds([0.0, x_max])
+                .labels(vec![Line::from("0"), Line::from(format!("{}", data.len()))]),
+        )
+        .y_axis(
+            Axis::default()
+                .title(y_label.dark_gray())
+                .bounds([y_min, y_max])
+                .labels(vec![
+                    Line::from(format!("{y_min:.1}")),
+                    Line::from(format!("{y_max:.1}")),
+                ]),
+        );
 
     f.render_widget(chart, area);
 }
 
-fn draw_output(f: &mut Frame, area: Rect, app: &App) {
-    let hex = app.rng_hex();
+// ---------------------------------------------------------------------------
+// Byte distribution (sparkline)
+// ---------------------------------------------------------------------------
+
+fn draw_byte_dist(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
+    let freq = snap.byte_freq;
+    let total: u64 = freq.iter().sum();
+
+    if total == 0 {
+        draw_placeholder(
+            f,
+            area,
+            format!(" {name} — [g] Byte dist — collecting... "),
+            "Accumulating byte frequencies...",
+        );
+        return;
+    }
+
+    // Bin 256 values into groups that fit the available width
+    let inner_w = area.width.saturating_sub(2) as usize;
+    let bin_size = (256 + inner_w - 1) / inner_w.max(1);
+    let n_bins = 256_usize.div_ceil(bin_size);
+
+    let mut bins: Vec<u64> = Vec::with_capacity(n_bins);
+    for chunk in freq.chunks(bin_size) {
+        bins.push(chunk.iter().sum());
+    }
+
+    let max_bin = *bins.iter().max().unwrap_or(&1);
+    let expected = total as f64 / n_bins as f64;
+    let chi_sq: f64 = bins
+        .iter()
+        .map(|&b| {
+            let diff = b as f64 - expected;
+            diff * diff / expected
+        })
+        .sum();
+
+    let title = format!(" {name}  [g] Byte dist  n={total}  chi2={chi_sq:.1}  max={max_bin} ",);
+
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Live Output ");
-    let p = Paragraph::new(hex)
-        .style(Style::default().fg(Color::Yellow))
-        .block(block);
+        .title(title)
+        .title_bottom(
+            Line::from(format!(" {} ", ChartMode::ByteDistribution.description())).dark_gray(),
+        );
+
+    let sparkline = Sparkline::default()
+        .block(block)
+        .data(&bins)
+        .max(max_bin)
+        .style(Style::default().fg(Color::Cyan));
+
+    f.render_widget(sparkline, area);
+}
+
+// ---------------------------------------------------------------------------
+// Output panel
+// ---------------------------------------------------------------------------
+
+fn draw_output(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
+    let mode = app.conditioning_mode();
+
+    let (mode_label, mode_color) = match mode {
+        ConditioningMode::Sha256 => ("SHA-256", Color::Green),
+        ConditioningMode::VonNeumann => ("VonNeumann", Color::Yellow),
+        ConditioningMode::Raw => ("Raw", Color::Red),
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("raw   ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&snap.raw_hex, Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                format!("{mode_label:<6}"),
+                Style::default().bold().fg(mode_color),
+            ),
+            Span::styled(&snap.rng_hex, Style::default().fg(Color::Yellow)),
+        ]),
+    ];
+
+    let sz = app.sample_size();
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" Live Output  [c] {mode_label}  [n] {sz}B "));
+    let p = Paragraph::new(lines).block(block);
     f.render_widget(p, area);
 }
 
+// ---------------------------------------------------------------------------
+// Key help bar
+// ---------------------------------------------------------------------------
+
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(" ↑↓ navigate   space: select source   r: refresh   q: quit")
+    let bar = Paragraph::new(" ↑↓ nav  space: select  g: graph  c: cond  n: size  Tab: compare  p: pause  s: export  +/-: speed  q: quit")
         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }
 
-fn short_cat(cat: &str) -> &str {
-    match cat {
-        "Timing" => "TMG",
-        "System" => "SYS",
-        "Network" => "NET",
-        "Hardware" => "HW",
-        "Silicon" => "SI",
-        "CrossDomain" => "XD",
-        "Novel" => "NOV",
-        _ => "?",
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_cat_maps_all_known_categories() {
+        assert_eq!(short_cat("timing"), "TMG");
+        assert_eq!(short_cat("system"), "SYS");
+        assert_eq!(short_cat("network"), "NET");
+        assert_eq!(short_cat("hardware"), "HW");
+        assert_eq!(short_cat("silicon"), "SI");
+        assert_eq!(short_cat("cross_domain"), "XD");
+        assert_eq!(short_cat("novel"), "NOV");
+    }
+
+    #[test]
+    fn short_cat_unknown_returns_question_mark() {
+        assert_eq!(short_cat(""), "?");
+        assert_eq!(short_cat("Timing"), "?");
+        assert_eq!(short_cat("something_else"), "?");
+    }
+
+    #[test]
+    fn display_cat_maps_all_known_categories() {
+        assert_eq!(display_cat("timing"), "Timing");
+        assert_eq!(display_cat("system"), "System");
+        assert_eq!(display_cat("network"), "Network");
+        assert_eq!(display_cat("hardware"), "Hardware");
+        assert_eq!(display_cat("silicon"), "Silicon");
+        assert_eq!(display_cat("cross_domain"), "Cross-Domain");
+        assert_eq!(display_cat("novel"), "Novel");
+    }
+
+    #[test]
+    fn display_cat_unknown_passes_through() {
+        assert_eq!(display_cat("something"), "something");
+    }
+
+    #[test]
+    fn categories_table_consistent() {
+        for (key, short, display) in CATEGORIES {
+            assert_eq!(short_cat(key), *short);
+            assert_eq!(display_cat(key), *display);
+        }
+    }
+
+    #[test]
+    fn format_time_sub_millisecond() {
+        assert_eq!(format_time(0.0001), "0.1ms");
+        assert_eq!(format_time(0.0005), "0.5ms");
+    }
+
+    #[test]
+    fn format_time_milliseconds() {
+        assert_eq!(format_time(0.015), "15.0ms");
+        assert_eq!(format_time(0.1), "100.0ms");
+        assert_eq!(format_time(0.999), "999.0ms");
+    }
+
+    #[test]
+    fn format_time_seconds() {
+        assert_eq!(format_time(1.0), "1.0s");
+        assert_eq!(format_time(2.5), "2.5s");
+        assert_eq!(format_time(10.0), "10.0s");
+    }
+
+    #[test]
+    fn entropy_color_thresholds() {
+        assert_eq!(entropy_color(7.5).fg, Some(Color::Green));
+        assert_eq!(entropy_color(8.0).fg, Some(Color::Green));
+        assert_eq!(entropy_color(5.0).fg, Some(Color::Yellow));
+        assert_eq!(entropy_color(6.0).fg, Some(Color::Yellow));
+        assert_eq!(entropy_color(4.9).fg, Some(Color::Red));
+        assert_eq!(entropy_color(0.0).fg, Some(Color::Red));
+    }
+
+    #[test]
+    fn extract_chart_values_shannon() {
+        let history = vec![
+            Sample {
+                shannon: 7.0,
+                min_entropy: 6.0,
+                collect_time_ms: 1.0,
+                output_value: 0.5,
+            },
+            Sample {
+                shannon: 7.5,
+                min_entropy: 6.5,
+                collect_time_ms: 2.0,
+                output_value: 0.6,
+            },
+        ];
+        let vals = extract_chart_values(&history, ChartMode::Shannon);
+        assert_eq!(vals, vec![7.0, 7.5]);
+    }
+
+    #[test]
+    fn extract_chart_values_autocorrelation_too_short() {
+        let history = vec![
+            Sample {
+                shannon: 7.0,
+                min_entropy: 6.0,
+                collect_time_ms: 1.0,
+                output_value: 0.5,
+            },
+            Sample {
+                shannon: 7.5,
+                min_entropy: 6.5,
+                collect_time_ms: 2.0,
+                output_value: 0.6,
+            },
+        ];
+        let vals = extract_chart_values(&history, ChartMode::Autocorrelation);
+        assert!(vals.is_empty());
+    }
+
+    #[test]
+    fn extract_chart_values_autocorrelation_with_data() {
+        let history: Vec<Sample> = (0..10)
+            .map(|i| Sample {
+                shannon: 7.0,
+                min_entropy: 6.0,
+                collect_time_ms: 1.0,
+                output_value: (i as f64) / 10.0,
+            })
+            .collect();
+        let vals = extract_chart_values(&history, ChartMode::Autocorrelation);
+        assert_eq!(vals.len(), 9);
     }
 }
