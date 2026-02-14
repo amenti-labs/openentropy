@@ -1,6 +1,6 @@
 # OpenEntropy — Source Catalog
 
-All 37 entropy sources, their physics, quality, and operational characteristics.
+All 39 entropy sources, their physics, quality, and operational characteristics.
 
 > **Grades are for raw (unconditioned) output.** After SHA-256 conditioning, all sources produce Grade A output. The raw grades reflect the true hardware entropy density before any whitening.
 
@@ -44,7 +44,9 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 | 34 | `tlb_shootdown` | Frontier | A | 6.46 | 0.03s | All |
 | 35 | `pipe_buffer` | Frontier | C | 3.22 | 0.01s | All |
 | 36 | `kqueue_events` | Frontier | A* | — | 0.05s | macOS/BSD |
-| 37 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
+| 38 | `dvfs_race` | Frontier | A | 7.96 | <0.1s | All |
+| 39 | `cas_contention` | Frontier | D | 3.02 | <0.1s | All |
+| 40 | `interleaved_frontier` | Frontier **[C]** | A* | — | 0.2s | All |
 
 **Grade scale:** A ≥ 6.5, B ≥ 5.0, C ≥ 3.5, D ≥ 2.0, F < 2.0 (Shannon entropy bits per byte, max 8.0)
 
@@ -275,14 +277,27 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 - **Speed:** ~50ms
 - **Platform:** macOS/BSD (uses kqueue)
 
+#### 38. `dvfs_race` — Cross-core DVFS frequency race (new)
+- **Physics:** Spawns two threads running tight counting loops on different CPU cores. After a ~2μs race window, the absolute difference in iteration counts captures physical frequency jitter from independent DVFS (Dynamic Voltage and Frequency Scaling) controllers. Apple Silicon P-core and E-core clusters have separate voltage/frequency domains that adjust asynchronously based on thermal state, power budget, and workload. The scheduler's core placement, cache coherence latency for the stop signal, and per-core frequency transitions all contribute independent nondeterminism.
+- **Raw entropy:** A (7.96 Shannon, H∞ = 7.288 bits/byte from PoC — highest of any discovered source)
+- **Speed:** <100ms — very fast
+- **Platform:** All (uses std::thread)
+
+#### 39. `cas_contention` — Multi-thread atomic CAS arbitration contention (new)
+- **Physics:** Spawns 4 threads performing atomic compare-and-swap operations on shared targets spread across 128-byte-aligned cache lines. The hardware coherence engine (MOESI protocol on Apple Silicon) must arbitrate concurrent exclusive-access requests. This arbitration is physically nondeterministic due to interconnect fabric latency variations, thermal state, and traffic from other cores/devices. XOR-combining timing measurements from all threads amplifies the arbitration entropy.
+- **Config:** `CASContentionConfig { num_threads }`
+- **Raw entropy:** D (3.02 Shannon, H∞ = 2.619 bits/byte from PoC with 4-thread XOR combine)
+- **Speed:** <100ms — very fast
+- **Platform:** All (uses std::thread + atomics)
+
 ### Composite Sources
 
 > Composite sources do not measure a single independent entropy domain.
 > They combine multiple standalone sources for higher-quality output.
 > In CLI output, composite sources are marked with `[COMPOSITE]`.
 
-#### 37. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
-- **Physics:** Rapidly alternates between all 6 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
+#### 40. `interleaved_frontier` — **[COMPOSITE]** Cross-source interference entropy (new)
+- **Physics:** Rapidly alternates between all 8 frontier sources in round-robin, collecting small 4-byte batches from each. Each source's system perturbations affect the next source's measurements: AMX dispatch affects memory controller state which affects TLB shootdown timing; pipe zone allocations affect kernel magazine state which affects Mach port timing; thread scheduling decisions affect kqueue timer delivery. Measures both the transition timing between sources and XORs it with collected source bytes.
 - **Raw entropy:** Estimated A (cross-source interference is independent entropy)
 - **Speed:** ~200ms (sum of individual source costs)
 - **Platform:** All (requires ≥2 available frontier sources)
@@ -292,10 +307,10 @@ All 37 entropy sources, their physics, quality, and operational characteristics.
 
 | Grade | Count | Sources |
 |-------|-------|---------|
-| A | 10+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **interleaved_frontier**\* |
+| A | 11+ | dns_timing, tcp_connect_timing, memory_timing, gpu_timing, page_fault_timing, dyld_timing, vm_page_timing, spotlight_timing, **thread_lifecycle**, **tlb_shootdown**, **kqueue_events**\*, **dvfs_race**, **interleaved_frontier**\* |
 | B | 6 | clock_jitter, cache_contention, compression_timing, dispatch_queue, **amx_timing**, **mach_ipc** |
 | C | 7 | process_table, ioregistry, disk_io, bluetooth_noise, dram_row_buffer, cpu_io_beat, **pipe_buffer** |
-| D | 6 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter* |
+| D | 7 | sysctl_deltas, vmstat_deltas, cpu_memory_beat, multi_domain_beat, hash_timing, sleep_jitter*, **cas_contention** |
 | F | 2 | mach_timing, speculative_execution |
 | N/A | 4 | audio_noise, camera_noise, wifi_noise, sensor_noise |
 

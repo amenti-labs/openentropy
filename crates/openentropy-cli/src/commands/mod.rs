@@ -39,6 +39,8 @@ const FAST_SOURCES: &[&str] = &[
     "tlb_shootdown",
     "pipe_buffer",
     "kqueue_events",
+    "dvfs_race",
+    "cas_contention",
     "interleaved_frontier",
 ];
 

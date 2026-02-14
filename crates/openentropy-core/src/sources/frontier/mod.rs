@@ -45,6 +45,8 @@
 
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
+mod cas_contention;
+mod dvfs_race;
 mod kqueue_events;
 mod mach_ipc;
 mod pipe_buffer;
@@ -56,6 +58,8 @@ mod interleaved;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
+pub use cas_contention::{CASContentionConfig, CASContentionSource};
+pub use dvfs_race::DVFSRaceSource;
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
@@ -155,6 +159,8 @@ pub(crate) fn standalone_frontier_sources() -> Vec<Box<dyn crate::source::Entrop
         Box::new(TLBShootdownSource::default()),
         Box::new(PipeBufferSource::default()),
         Box::new(KqueueEventsSource::default()),
+        Box::new(DVFSRaceSource),
+        Box::new(CASContentionSource::default()),
     ]
 }
 
@@ -203,9 +209,9 @@ mod tests {
 
     // Standalone sources helper
     #[test]
-    fn standalone_frontier_sources_returns_six() {
+    fn standalone_frontier_sources_returns_eight() {
         let sources = standalone_frontier_sources();
-        assert_eq!(sources.len(), 6);
+        assert_eq!(sources.len(), 8);
     }
 
     // All frontier sources have valid metadata
@@ -218,6 +224,8 @@ mod tests {
             Box::new(TLBShootdownSource::default()),
             Box::new(PipeBufferSource::default()),
             Box::new(KqueueEventsSource::default()),
+            Box::new(DVFSRaceSource),
+            Box::new(CASContentionSource::default()),
             Box::new(InterleavedFrontierSource),
         ];
         for src in &sources {
