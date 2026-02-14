@@ -24,6 +24,16 @@ htmlcov/
 target/
 .venv-*/
 
+# C build artifacts
+*.o
+*.dSYM/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # Legacy Python code (preserved for reference, not part of release)
 _python_legacy/
 

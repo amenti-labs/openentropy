@@ -1,6 +1,6 @@
 # OpenEntropy — Source Catalog
 
-All 38 entropy sources, their physics, quality, and operational characteristics.
+All 36 entropy sources, their physics, quality, and operational characteristics.
 
 > **Grades are for raw (unconditioned) output.** After SHA-256 conditioning, all sources produce Grade A output. The raw grades reflect the true hardware entropy density before any whitening.
 

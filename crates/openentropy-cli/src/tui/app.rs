@@ -441,7 +441,10 @@ impl App {
                 let _ = tx.send(());
             });
 
-            if rx.recv_timeout(Duration::from_secs(COLLECT_TIMEOUT_SECS)).is_err() {
+            if rx
+                .recv_timeout(Duration::from_secs(COLLECT_TIMEOUT_SECS))
+                .is_err()
+            {
                 // Timed out — the collection thread is still running in the
                 // background and will deposit bytes into the pool buffer
                 // eventually, which is harmless. Unblock the TUI now.
@@ -486,10 +489,10 @@ impl App {
                 }
             }));
 
-            if inner.is_err() {
-                if let Ok(mut s) = shared.lock() {
-                    s.collecting = false;
-                }
+            if inner.is_err()
+                && let Ok(mut s) = shared.lock()
+            {
+                s.collecting = false;
             }
             flag.store(false, Ordering::Relaxed);
         });

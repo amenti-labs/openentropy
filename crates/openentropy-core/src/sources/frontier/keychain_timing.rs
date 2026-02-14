@@ -13,8 +13,7 @@ use super::extract_timing_entropy_variance;
 /// # use openentropy_core::sources::frontier::KeychainTimingConfig;
 /// let config = KeychainTimingConfig::default();
 /// ```
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct KeychainTimingConfig {
     /// Use SecItemAdd/Delete (write path) instead of SecItemCopyMatching (read path).
     ///
@@ -127,11 +126,7 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
             cStr: *const i8,
             encoding: u32,
         ) -> CFStringRef;
-        fn CFDataCreate(
-            alloc: CFAllocatorRef,
-            bytes: *const u8,
-            length: isize,
-        ) -> CFDataRef;
+        fn CFDataCreate(alloc: CFAllocatorRef, bytes: *const u8, length: isize) -> CFDataRef;
         fn CFDictionaryCreateMutable(
             alloc: CFAllocatorRef,
             capacity: isize,
@@ -279,11 +274,7 @@ fn collect_write_path(n_samples: usize) -> Vec<u8> {
             cStr: *const i8,
             encoding: u32,
         ) -> CFStringRef;
-        fn CFDataCreate(
-            alloc: CFAllocatorRef,
-            bytes: *const u8,
-            length: isize,
-        ) -> CFDataRef;
+        fn CFDataCreate(alloc: CFAllocatorRef, bytes: *const u8, length: isize) -> CFDataRef;
         fn CFDictionaryCreateMutable(
             alloc: CFAllocatorRef,
             capacity: isize,

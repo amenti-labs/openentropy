@@ -224,6 +224,7 @@ pub enum SourceCategory {
     Silicon,      // DRAM row buffer, cache, page faults, speculative exec
     CrossDomain,  // Beat frequencies between clock domains
     Novel,        // GCD dispatch, VM pages, Spotlight
+    Frontier,     // AMX, thread lifecycle, mach IPC, TLB, pipes, kqueue, DVFS, CAS, keychain
 }
 
 // Implements Display: formats as lowercase string
@@ -362,6 +363,7 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>>
 | `sources::cross_domain` | `CPUIOBeatSource`, `CPUMemoryBeatSource` |
 | `sources::compression` | `CompressionTimingSource`, `HashTimingSource` |
 | `sources::novel` | `DispatchQueueSource`, `VMPageTimingSource`, `SpotlightTimingSource` |
+| `sources::frontier` | `AMXTimingSource`, `ThreadLifecycleSource`, `MachIPCSource`, `TLBShootdownSource`, `PipeBufferSource`, `KqueueEventsSource`, `DVFSRaceSource`, `CASContentionSource`, `KeychainTimingSource` |
 
 ---
 
@@ -545,7 +547,7 @@ HTTP entropy server with ANU QRNG API compatibility.
 /// Parameters for /api/v1/random:
 ///   length: 1-65536 (default 1024)
 ///   type: "hex16" (default), "uint8", "uint16"
-pub async fn run_server(pool: EntropyPool, host: &str, port: u16)
+pub async fn run_server(pool: EntropyPool, host: &str, port: u16, allow_raw: bool)
 ```
 
 ### Endpoints
@@ -590,7 +592,7 @@ See [INTEGRATIONS.md](INTEGRATIONS.md) for usage examples and integration guides
 
 ## openentropy-cli
 
-Command-line binary providing 9 subcommands.
+Command-line binary providing 10 subcommands.
 
 **Crate:** `openentropy-cli`
 **Binary name:** `openentropy`
@@ -608,7 +610,8 @@ Command-line binary providing 9 subcommands.
 | `server` | Start HTTP entropy server | `--port N`, `--host addr`, `--sources filter` |
 | `monitor` | Interactive TUI dashboard | `--refresh secs`, `--sources filter` |
 | `report` | NIST test battery with report | `--samples N`, `--source name`, `--output path` |
-| `pool` | Display pool health metrics | -- |
+| `entropy` | Deep min-entropy analysis (NIST SP 800-90B) | `--sources filter`, `--conditioning mode` |
+| `pool` | Display pool health metrics | `--sources filter`, `--conditioning mode` |
 
 ### Source Filtering
 
@@ -703,7 +706,7 @@ use openentropy_server::run_server;
 async fn main() {
     let pool = EntropyPool::auto();
     println!("Entropy server starting on 127.0.0.1:8042");
-    run_server(pool, "127.0.0.1", 8042).await;
+    run_server(pool, "127.0.0.1", 8042, false).await;
 }
 ```
 

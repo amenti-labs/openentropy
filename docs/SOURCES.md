@@ -33,6 +33,15 @@
 | 27 | `dispatch_queue` | Novel | Thread pool scheduling jitter | ~500 b/s | macOS |
 | 28 | `vm_page_timing` | Novel | Mach VM page allocation timing | ~400 b/s | macOS |
 | 30 | `spotlight_timing` | Novel | Spotlight metadata query timing | ~200 b/s | macOS |
+| 31 | `amx_timing` | Frontier | Apple AMX coprocessor dispatch jitter | ~500 b/s | macOS (ARM) |
+| 32 | `thread_lifecycle` | Frontier | pthread create/join cycle timing | ~400 b/s | All |
+| 33 | `mach_ipc` | Frontier | Mach port IPC allocation timing | ~300 b/s | macOS |
+| 34 | `tlb_shootdown` | Frontier | mprotect() TLB invalidation IPI latency | ~400 b/s | All |
+| 35 | `pipe_buffer` | Frontier | Kernel zone allocator via pipe lifecycle | ~200 b/s | All |
+| 36 | `kqueue_events` | Frontier | BSD kqueue event multiplexing jitter | ~300 b/s | macOS |
+| 37 | `dvfs_race` | Frontier | Cross-core DVFS frequency race | ~500 b/s | All |
+| 38 | `cas_contention` | Frontier | Multi-thread atomic CAS arbitration | ~200 b/s | All |
+| 39 | `keychain_timing` | Frontier | macOS Keychain Services API timing | ~300 b/s | macOS |
 
 ---
 
@@ -439,6 +448,127 @@ These sources exploit the interference patterns that arise when independent cloc
 **Physics:** Spotlight metadata query timing reflects the Spotlight index size, disk cache state, concurrent indexing activity, and file system metadata access patterns.
 
 **Implementation:** Times `mdls` (metadata listing) operations against system files.
+
+---
+
+## Frontier Sources
+
+Experimental sources exploring unconventional entropy extraction mechanisms. These exploit OS kernel internals, cross-core interactions, and hardware coprocessor scheduling.
+
+### 31. `amx_timing`
+
+**Category:** Frontier
+**Struct:** `AMXTimingSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~500 b/s
+
+**Physics:** The Apple Matrix coprocessor (AMX) shares execution resources with the CPU. Matrix multiplication dispatch timing varies with AMX unit availability, thermal state, and concurrent workload pressure on shared execution ports.
+
+**Implementation:** Dispatches small matrix operations and measures completion timing jitter.
+
+---
+
+### 32. `thread_lifecycle`
+
+**Category:** Frontier
+**Struct:** `ThreadLifecycleSource`
+**Platform:** All
+**Estimated Rate:** ~400 b/s
+
+**Physics:** Thread creation and destruction involves kernel scheduler decisions, stack allocation from the virtual memory subsystem, and TLS (Thread Local Storage) setup. The timing captures kernel allocator state and scheduler queue depth.
+
+**Implementation:** Rapidly creates and joins pthreads, measuring the full lifecycle timing.
+
+---
+
+### 33. `mach_ipc`
+
+**Category:** Frontier
+**Struct:** `MachIPCSource`
+**Platform:** macOS
+**Estimated Rate:** ~300 b/s
+
+**Physics:** Mach port allocation and deallocation involves the kernel IPC subsystem's port namespace management. Timing depends on port table fragmentation, IPC space lock contention, and kernel zone allocator state.
+
+**Implementation:** Allocates and deallocates Mach ports in rapid succession, capturing per-operation timing jitter.
+
+---
+
+### 34. `tlb_shootdown`
+
+**Category:** Frontier
+**Struct:** `TLBShootdownSource`
+**Platform:** All
+**Estimated Rate:** ~400 b/s
+
+**Physics:** Calling `mprotect()` on mapped memory triggers TLB (Translation Lookaside Buffer) invalidation via inter-processor interrupts (IPIs). The latency depends on which cores have cached the TLB entries, cross-core interrupt delivery time, and whether other cores are in low-power states.
+
+**Implementation:** Maps memory, then repeatedly changes page protections via `mprotect()`, measuring the system call latency which includes IPI round-trip time.
+
+---
+
+### 35. `pipe_buffer`
+
+**Category:** Frontier
+**Struct:** `PipeBufferSource`
+**Platform:** All
+**Estimated Rate:** ~200 b/s
+
+**Physics:** Creating and destroying pipes exercises the kernel's zone allocator for pipe buffer memory. Allocation timing depends on zone fragmentation, free list state, and memory pressure.
+
+**Implementation:** Rapidly creates and closes pipe file descriptor pairs, measuring per-cycle timing.
+
+---
+
+### 36. `kqueue_events`
+
+**Category:** Frontier
+**Struct:** `KqueueEventsSource`
+**Platform:** macOS, BSD
+**Estimated Rate:** ~300 b/s
+
+**Physics:** BSD kqueue event multiplexing combines timer events, file descriptor readiness, and process notifications. The timing jitter comes from kernel event queue management, timer coalescing, and I/O completion notification delivery.
+
+**Implementation:** Registers mixed event types (timers, file descriptors, sockets) with kqueue and measures event delivery timing.
+
+---
+
+### 37. `dvfs_race`
+
+**Category:** Frontier
+**Struct:** `DVFSRaceSource`
+**Platform:** All
+**Estimated Rate:** ~500 b/s
+
+**Physics:** Dynamic Voltage and Frequency Scaling (DVFS) adjusts CPU frequency based on load. By racing workloads across cores, the source captures the non-deterministic timing of frequency transitions and the interference between cores sharing a voltage domain.
+
+**Implementation:** Spawns concurrent workloads on multiple cores and measures the timing differential as DVFS adjusts frequencies.
+
+---
+
+### 38. `cas_contention`
+
+**Category:** Frontier
+**Struct:** `CASContentionSource`
+**Platform:** All
+**Estimated Rate:** ~200 b/s
+
+**Physics:** Compare-and-swap (CAS) operations on shared atomic variables experience hardware arbitration contention when multiple cores compete. The cache coherency protocol (MOESI/MESI) introduces non-deterministic delays as cache lines bounce between cores.
+
+**Implementation:** Multiple threads perform atomic CAS operations on shared variables, and the contention-induced retry timing captures cache coherency protocol jitter.
+
+---
+
+### 39. `keychain_timing`
+
+**Category:** Frontier
+**Struct:** `KeychainTimingSource`
+**Platform:** macOS
+**Estimated Rate:** ~300 b/s
+
+**Physics:** macOS Keychain Services API calls traverse the Security framework into `securityd`, involving XPC IPC, database access, and cryptographic operations. The timing jitter captures XPC message delivery, SQLite page cache state, and encryption overhead.
+
+**Implementation:** Performs Keychain API queries (searching for non-existent items) and measures the round-trip timing through the Security framework.
 
 ---
 

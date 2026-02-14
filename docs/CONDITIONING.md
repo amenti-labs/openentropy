@@ -6,7 +6,7 @@ How raw hardware entropy becomes cryptographically uniform random bytes.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     Entropy Sources (30)                      │
+│                     Entropy Sources (36)                      │
 │  clock_jitter, dns_timing, page_fault_timing, ...            │
 │  Each returns raw bytes — NO internal conditioning           │
 └──────────────────┬───────────────────────────────────────────┘
@@ -60,7 +60,7 @@ Raw mode returns XOR-combined source bytes with **no conditioning at all** — n
 | Rust API | `pool.get_raw_bytes(n)` |
 | CLI | `openentropy stream --unconditioned` |
 | CLI | `openentropy device <name> --unconditioned` |
-| HTTP API | `GET /entropy?bytes=N&raw=true` (requires `--allow-raw` flag) |
+| HTTP API | `GET /api/v1/random?length=N&type=hex&raw=true` (requires `--allow-raw` flag) |
 | Python SDK | `pool.get_raw_bytes(n)` |
 
 The HTTP server requires the `--allow-raw` startup flag to enable raw mode — this prevents accidental exposure of unconditioned entropy.

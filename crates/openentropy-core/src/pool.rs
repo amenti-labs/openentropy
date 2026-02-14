@@ -164,7 +164,9 @@ impl EntropyPool {
     fn collect_one_n(ss_mutex: &Mutex<SourceState>, n_samples: usize) -> Vec<u8> {
         let mut ss = ss_mutex.lock().unwrap();
         let t0 = Instant::now();
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ss.source.collect(n_samples))) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ss.source.collect(n_samples)
+        })) {
             Ok(data) if !data.is_empty() => {
                 ss.last_collect_time = t0.elapsed();
                 ss.total_bytes += data.len() as u64;

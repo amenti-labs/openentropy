@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 |---------|--------------------|
-| 0.3.x   | ✅ Current release |
-| < 0.3   | ❌ No longer supported |
+| 0.4.x   | ✅ Current release |
+| < 0.4   | ❌ No longer supported |
 
 ## Reporting a Vulnerability
 
@@ -22,7 +22,7 @@ We will acknowledge your report within 48 hours and aim to provide a fix or miti
 
 ## What OpenEntropy IS
 
-- A **hardware entropy harvester** that extracts randomness from physical phenomena in consumer hardware (clock jitter, DRAM timing, cache contention, sensor noise, etc.)
+- A **hardware entropy harvester** that extracts randomness from physical phenomena in consumer hardware (clock jitter, DRAM timing, cache contention, page fault timing, etc.)
 - A tool for **researchers** studying device entropy characteristics
 - A **supplement** to existing entropy sources (OS CSPRNG, hardware RNG modules)
 - An **entropy provider** for applications that benefit from hardware randomness (e.g., LLM sampling via ollama-auxrng)

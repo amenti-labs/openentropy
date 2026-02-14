@@ -4,7 +4,7 @@
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with five crates, each with a focused responsibility.
 
-**Version:** 0.3.0 (Rust rewrite)
+**Version:** 0.4.0 (Rust rewrite)
 **Edition:** Rust 2024
 **License:** MIT
 
@@ -225,7 +225,7 @@ pub struct SourceInfo {
 
 ### `SourceCategory` enum
 
-Seven categories that classify entropy sources by the physical domain they exploit.
+Eight categories that classify entropy sources by the physical domain they exploit.
 
 ```rust
 pub enum SourceCategory {
@@ -236,6 +236,7 @@ pub enum SourceCategory {
     Silicon,      // DRAM row buffer, cache, page faults, speculative exec
     CrossDomain,  // Beat frequencies between clock domains
     Novel,        // GCD dispatch, VM pages, Spotlight
+    Frontier,     // AMX timing, thread lifecycle, DVFS race, CAS contention, etc.
 }
 ```
 
