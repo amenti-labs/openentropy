@@ -41,7 +41,7 @@ pub struct GPUDivergenceSource;
 /// Metal framework FFI via Objective-C runtime (macOS only).
 #[cfg(target_os = "macos")]
 mod metal {
-    use std::ffi::{c_void, CString};
+    use std::ffi::{CString, c_void};
 
     // Objective-C runtime types.
     type Id = *mut c_void;
@@ -223,7 +223,11 @@ kernel void divergence(
             let raw = msg_send_fn!(unsafe extern "C" fn(Id, Sel) -> Id)(cls as Id, sel_alloc);
             // NSUTF8StringEncoding = 4
             msg_send_fn!(unsafe extern "C" fn(Id, Sel, *const u8, u64, u64) -> Id)(
-                raw, sel_init, s.as_ptr(), s.len() as u64, 4,
+                raw,
+                sel_init,
+                s.as_ptr(),
+                s.len() as u64,
+                4,
             )
         }
     }
@@ -253,9 +257,8 @@ kernel void divergence(
             // library.newFunctionWithName:("divergence")
             let func_name = nsstring("divergence");
             let sel_func = sel("newFunctionWithName:");
-            let function = msg_send_fn!(unsafe extern "C" fn(Id, Sel, Id) -> Id)(
-                library, sel_func, func_name,
-            );
+            let function =
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel, Id) -> Id)(library, sel_func, func_name);
             if function.is_null() {
                 return None;
             }
@@ -264,7 +267,10 @@ kernel void divergence(
             let sel_pipe = sel("newComputePipelineStateWithFunction:error:");
             let mut error2: Id = std::ptr::null_mut();
             let pipeline = msg_send_fn!(unsafe extern "C" fn(Id, Sel, Id, *mut Id) -> Id)(
-                device, sel_pipe, function, &mut error2,
+                device,
+                sel_pipe,
+                function,
+                &mut error2,
             );
             if pipeline.is_null() {
                 return None;

@@ -255,20 +255,11 @@ impl EntropySource for CounterBeatSource {
 
             // Extract entropy: consecutive beat differences capture the phase
             // drift rate, then XOR adjacent deltas and fold to bytes.
-            let deltas: Vec<u64> = beats
-                .windows(2)
-                .map(|w| w[1].wrapping_sub(w[0]))
-                .collect();
+            let deltas: Vec<u64> = beats.windows(2).map(|w| w[1].wrapping_sub(w[0])).collect();
 
-            let xored: Vec<u64> = deltas
-                .windows(2)
-                .map(|w| w[0] ^ w[1])
-                .collect();
+            let xored: Vec<u64> = deltas.windows(2).map(|w| w[0] ^ w[1]).collect();
 
-            let mut output: Vec<u8> = xored
-                .iter()
-                .map(|&x| xor_fold_u64(x))
-                .collect();
+            let mut output: Vec<u8> = xored.iter().map(|&x| xor_fold_u64(x)).collect();
             output.truncate(n_samples);
             output
         }

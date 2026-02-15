@@ -242,7 +242,10 @@ mod tests {
     fn source_info_categories() {
         assert_eq!(ClockJitterSource.info().category, SourceCategory::Timing);
         assert_eq!(MachTimingSource.info().category, SourceCategory::Timing);
-        assert_eq!(SleepJitterSource.info().category, SourceCategory::Scheduling);
+        assert_eq!(
+            SleepJitterSource.info().category,
+            SourceCategory::Scheduling
+        );
         assert!(!ClockJitterSource.info().composite);
         assert!(!MachTimingSource.info().composite);
         assert!(!SleepJitterSource.info().composite);

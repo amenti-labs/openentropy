@@ -56,13 +56,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install maturin
-        run: pip install maturin
+      - name: Create virtualenv and install maturin
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin
 
       - name: Build Python bindings
-        run: cd crates/openentropy-python && maturin build --release
+        run: |
+          source .venv/bin/activate
+          cd crates/openentropy-python && maturin build --release
 
       - name: Python import smoke test
         run: |
+          source .venv/bin/activate
           maturin develop --release
           python -c "import openentropy; print(openentropy.version())"
