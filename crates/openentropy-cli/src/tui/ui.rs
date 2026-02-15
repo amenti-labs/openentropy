@@ -165,6 +165,17 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         Span::styled(format!("{spin} "), Style::default().fg(Color::DarkGray)),
     ]);
 
+    if app.is_recording() {
+        let rec_elapsed = app
+            .recording_elapsed()
+            .map(|d| format!("{:.0}s", d.as_secs_f64()))
+            .unwrap_or_default();
+        title_spans.push(Span::styled(
+            format!(" REC {} {}smp ", rec_elapsed, app.recording_samples()),
+            Style::default().bold().fg(Color::White).bg(Color::Red),
+        ));
+    }
+
     if let Some(path) = &snap.last_export {
         title_spans.push(Span::styled(
             format!(" saved: {} ", path.display()),
@@ -563,7 +574,7 @@ fn draw_output(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // ---------------------------------------------------------------------------
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(" ↑↓ nav  space: select  g: graph  c: cond  n: size  Tab: compare  p: pause  s: export  +/-: speed  q: quit")
+    let bar = Paragraph::new(" ↑↓ nav  space: select  r: record  g: graph  c: cond  n: size  Tab: compare  p: pause  s: export  +/-: speed  q: quit")
         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }

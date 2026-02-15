@@ -257,6 +257,12 @@ pub struct App {
     compare_source: Option<usize>,
     sample_size_idx: usize,
     table_state: TableState,
+    /// Whether the TUI is in recording mode (toggled with 'r').
+    recording: bool,
+    /// When recording started (for elapsed display).
+    recording_since: Option<Instant>,
+    /// Number of samples recorded in this TUI recording session.
+    recording_samples: u64,
 }
 
 impl App {
@@ -292,6 +298,9 @@ impl App {
             compare_source: None,
             sample_size_idx: 1, // default 32 bytes
             table_state: TableState::default().with_selected(Some(0)),
+            recording: false,
+            recording_since: None,
+            recording_samples: 0,
         }
     }
 
@@ -379,7 +388,15 @@ impl App {
                     self.kick_collect();
                 }
             }
-            KeyCode::Char('r') => self.kick_collect(),
+            KeyCode::Char('r') => {
+                self.recording = !self.recording;
+                if self.recording {
+                    self.recording_since = Some(Instant::now());
+                    self.recording_samples = 0;
+                } else {
+                    self.recording_since = None;
+                }
+            }
             KeyCode::Char('c') => {
                 self.conditioning_mode = next_conditioning(self.conditioning_mode);
                 self.kick_collect();
@@ -588,6 +605,18 @@ impl App {
     }
     pub fn table_state_mut(&mut self) -> &mut TableState {
         &mut self.table_state
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.recording
+    }
+
+    pub fn recording_elapsed(&self) -> Option<Duration> {
+        self.recording_since.map(|t| t.elapsed())
+    }
+
+    pub fn recording_samples(&self) -> u64 {
+        self.recording_samples
     }
 
     pub fn active_name(&self) -> Option<&str> {
