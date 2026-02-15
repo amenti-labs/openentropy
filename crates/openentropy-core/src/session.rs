@@ -46,7 +46,7 @@ pub fn detect_machine_info() -> MachineInfo {
     let arch = std::env::consts::ARCH.to_string();
     let chip = detect_chip().unwrap_or_else(|| "unknown".to_string());
     let cores = std::thread::available_parallelism()
-        .map(|n| n.get())
+        .map(std::num::NonZero::get)
         .unwrap_or(1);
 
     MachineInfo {
@@ -170,7 +170,14 @@ impl Default for SessionConfig {
 // Session writer
 // ---------------------------------------------------------------------------
 
+/// Number of samples between periodic flushes. Balances crash-safety
+/// (data written to disk) against performance (fewer syscalls).
+const FLUSH_INTERVAL: u64 = 64;
+
 /// Handles incremental file I/O for a recording session.
+///
+/// Implements `Drop` to flush buffers and write a best-effort session.json
+/// if `finish()` was never called (e.g., due to a panic or early exit).
 pub struct SessionWriter {
     session_dir: PathBuf,
     csv_writer: BufWriter<File>,
@@ -184,10 +191,16 @@ pub struct SessionWriter {
     session_id: String,
     config: SessionConfig,
     machine: MachineInfo,
+    /// Set to true after `finish()` succeeds so `Drop` doesn't double-write.
+    finished: bool,
 }
 
 impl SessionWriter {
     /// Create a new session writer, creating the session directory and files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session directory or any output files cannot be created.
     pub fn new(config: SessionConfig) -> std::io::Result<Self> {
         let machine = detect_machine_info();
         let session_id = Uuid::new_v4().to_string();
@@ -197,7 +210,7 @@ impl SessionWriter {
         let ts = started_at.duration_since(UNIX_EPOCH).unwrap_or_default();
         let dt = format_iso8601_compact(ts);
         let sources_slug = config.sources.join("-");
-        let dir_name = format!("{}-{}", dt, sources_slug);
+        let dir_name = format!("{dt}-{sources_slug}");
 
         let session_dir = config.output_dir.join(&dir_name);
         fs::create_dir_all(&session_dir)?;
@@ -237,42 +250,51 @@ impl SessionWriter {
             session_id,
             config,
             machine,
+            finished: false,
         })
     }
 
     /// Record a single sample from a source.
+    ///
+    /// Buffers are flushed periodically (every [`FLUSH_INTERVAL`] samples)
+    /// rather than on every call, for performance. Data is still safe against
+    /// process crashes because `Drop` flushes and writes session.json.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to any of the output files fails.
     pub fn write_sample(&mut self, source: &str, raw_bytes: &[u8]) -> std::io::Result<()> {
+        if raw_bytes.is_empty() {
+            return Ok(());
+        }
+
+        #[allow(clippy::cast_possible_truncation)] // ns won't overflow u64 until ~2554
         let timestamp_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
 
         let shannon = quick_shannon(raw_bytes);
-        let min_entropy = quick_min_entropy(raw_bytes);
+        // Clamp to 0.0 to avoid displaying "-0.00" in CSV
+        let min_entropy = quick_min_entropy(raw_bytes).max(0.0);
         let value_hex = hex_encode(raw_bytes);
 
         // Write CSV row
         writeln!(
             self.csv_writer,
-            "{},{},{},{:.2},{:.2}",
-            timestamp_ns, source, value_hex, shannon, min_entropy
+            "{timestamp_ns},{source},{value_hex},{shannon:.2},{min_entropy:.2}",
         )?;
-        self.csv_writer.flush()?;
 
         // Write raw bytes
         self.raw_writer.write_all(raw_bytes)?;
-        self.raw_writer.flush()?;
 
         // Write index row
         writeln!(
             self.index_writer,
-            "{},{},{},{}",
+            "{},{},{timestamp_ns},{source}",
             self.raw_offset,
             raw_bytes.len(),
-            timestamp_ns,
-            source
         )?;
-        self.index_writer.flush()?;
 
         self.raw_offset += raw_bytes.len() as u64;
         self.total_samples += 1;
@@ -281,22 +303,31 @@ impl SessionWriter {
             .entry(source.to_string())
             .or_insert(0) += 1;
 
+        // Periodic flush for crash-safety without per-sample syscall overhead
+        if self.total_samples.is_multiple_of(FLUSH_INTERVAL) {
+            self.flush_all()?;
+        }
+
         Ok(())
     }
 
-    /// Finalize the session, writing session.json. Call this on graceful shutdown.
-    pub fn finish(mut self) -> std::io::Result<PathBuf> {
-        // Flush all writers
+    /// Flush all buffered writers to disk.
+    fn flush_all(&mut self) -> std::io::Result<()> {
         self.csv_writer.flush()?;
         self.raw_writer.flush()?;
         self.index_writer.flush()?;
+        Ok(())
+    }
 
+    /// Build the session metadata from current state.
+    #[allow(clippy::cast_possible_truncation)] // durations won't overflow u64 in practice
+    fn build_meta(&self) -> SessionMeta {
         let ended_at = SystemTime::now();
         let duration = self.started_instant.elapsed();
 
-        let meta = SessionMeta {
+        SessionMeta {
             version: 1,
-            id: self.session_id,
+            id: self.session_id.clone(),
             started_at: format_iso8601(
                 self.started_at
                     .duration_since(UNIX_EPOCH)
@@ -309,37 +340,67 @@ impl SessionWriter {
             interval_ms: self.config.interval.map(|d| d.as_millis() as u64),
             total_samples: self.total_samples,
             samples_per_source: self.samples_per_source.clone(),
-            machine: self.machine,
+            machine: self.machine.clone(),
             tags: self.config.tags.clone(),
             note: self.config.note.clone(),
             openentropy_version: crate::VERSION.to_string(),
-        };
+        }
+    }
 
-        let json = serde_json::to_string_pretty(&meta)
-            .map_err(std::io::Error::other)?;
-        fs::write(self.session_dir.join("session.json"), json)?;
+    /// Write session.json to disk.
+    fn write_session_json(&self, meta: &SessionMeta) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(meta).map_err(std::io::Error::other)?;
+        fs::write(self.session_dir.join("session.json"), json)
+    }
 
+    /// Finalize the session, writing session.json. Call this on graceful shutdown.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing buffers or writing session.json fails.
+    pub fn finish(mut self) -> std::io::Result<PathBuf> {
+        self.flush_all()?;
+        let meta = self.build_meta();
+        self.write_session_json(&meta)?;
+        self.finished = true;
         Ok(self.session_dir.clone())
     }
 
     /// Get the session directory path.
+    #[must_use]
     pub fn session_dir(&self) -> &Path {
         &self.session_dir
     }
 
     /// Get total samples recorded so far.
+    #[must_use]
     pub fn total_samples(&self) -> u64 {
         self.total_samples
     }
 
     /// Get elapsed time since recording started.
+    #[must_use]
     pub fn elapsed(&self) -> Duration {
         self.started_instant.elapsed()
     }
 
     /// Get per-source sample counts.
+    #[must_use]
     pub fn samples_per_source(&self) -> &HashMap<String, u64> {
         &self.samples_per_source
+    }
+}
+
+impl Drop for SessionWriter {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+        // Best-effort: flush buffers and write session.json so data isn't lost
+        // on panic/early-exit. Errors are silently ignored since we're in Drop.
+        let _ = self.flush_all();
+        let meta = self.build_meta();
+        let _ = self.write_session_json(&meta);
     }
 }
 
@@ -352,7 +413,7 @@ fn hex_encode(bytes: &[u8]) -> String {
     use std::fmt::Write;
     let mut s = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
-        write!(s, "{:02x}", b).unwrap();
+        write!(s, "{b:02x}").unwrap();
     }
     s
 }
@@ -362,10 +423,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 fn format_iso8601_compact(since_epoch: Duration) -> String {
     let secs = since_epoch.as_secs();
     let (year, month, day, hour, min, sec) = secs_to_utc(secs);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}{:02}{:02}Z",
-        year, month, day, hour, min, sec
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}{min:02}{sec:02}Z")
 }
 
 /// Format a duration-since-epoch as a full ISO-8601 timestamp.
@@ -373,10 +431,7 @@ fn format_iso8601_compact(since_epoch: Duration) -> String {
 fn format_iso8601(since_epoch: Duration) -> String {
     let secs = since_epoch.as_secs();
     let (year, month, day, hour, min, sec) = secs_to_utc(secs);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hour, min, sec
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
 }
 
 /// Convert seconds since Unix epoch to (year, month, day, hour, minute, second) UTC.
@@ -637,6 +692,93 @@ mod tests {
         assert_eq!(parsed.id, "test-id");
         assert_eq!(parsed.total_samples, 3000);
         assert_eq!(parsed.duration_ms, 300000);
+    }
+
+    // -----------------------------------------------------------------------
+    // Drop safety tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_drop_writes_session_json_without_finish() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["drop_test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        let mut writer = SessionWriter::new(config).unwrap();
+        let dir = writer.session_dir().to_path_buf();
+        writer.write_sample("drop_test", &[42; 100]).unwrap();
+        // Drop without calling finish()
+        drop(writer);
+
+        // session.json should still be written by Drop
+        assert!(dir.join("session.json").exists());
+        let meta: SessionMeta =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("session.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta.total_samples, 1);
+    }
+
+    #[test]
+    fn test_finish_prevents_double_write_on_drop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        let writer = SessionWriter::new(config).unwrap();
+        let dir = writer.session_dir().to_path_buf();
+        let _ = writer.finish().unwrap();
+
+        // session.json should exist (from finish), and Drop should not error
+        assert!(dir.join("session.json").exists());
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_write_sample_skips_empty_bytes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        let mut writer = SessionWriter::new(config).unwrap();
+        writer.write_sample("test", &[]).unwrap();
+        assert_eq!(writer.total_samples(), 0);
+        let _ = writer.finish().unwrap();
+    }
+
+    #[test]
+    fn test_min_entropy_not_negative_in_csv() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        let mut writer = SessionWriter::new(config).unwrap();
+        // All-same bytes produce near-zero min-entropy that could display as -0.00
+        writer.write_sample("test", &[0xAA; 100]).unwrap();
+        let dir = writer.session_dir().to_path_buf();
+        let _ = writer.finish().unwrap();
+
+        let csv = std::fs::read_to_string(dir.join("samples.csv")).unwrap();
+        for line in csv.lines().skip(1) {
+            assert!(
+                !line.contains("-0.00"),
+                "CSV should not contain negative zero: {line}"
+            );
+        }
     }
 
     // -----------------------------------------------------------------------

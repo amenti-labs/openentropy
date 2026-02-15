@@ -6,11 +6,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use openentropy_core::conditioning::condition;
 use openentropy_core::session::{SessionConfig, SessionWriter};
 
 use super::make_pool;
 
 /// Run the record command.
+#[allow(clippy::too_many_lines)]
 pub fn run(
     sources_filter: &str,
     duration: Option<&str>,
@@ -50,9 +52,7 @@ pub fn run(
     }
 
     // Build session config
-    let output_dir = output
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("sessions"));
+    let output_dir = output.map_or_else(|| PathBuf::from("sessions"), PathBuf::from);
 
     let config = SessionConfig {
         sources: available.clone(),
@@ -60,7 +60,7 @@ pub fn run(
         interval: interval_dur,
         output_dir,
         tags: tag_map,
-        note: note.map(|s| s.to_string()),
+        note: note.map(str::to_string),
         duration: max_duration,
         sample_size: 1000,
     };
@@ -102,9 +102,9 @@ pub fn run(
 
     // Recording loop
     let start = Instant::now();
-    let source_list: Vec<String> = available.clone();
+    let mut had_write_error = false;
 
-    while running.load(Ordering::SeqCst) {
+    'outer: while running.load(Ordering::SeqCst) {
         // Check duration limit
         if let Some(max) = max_duration
             && start.elapsed() >= max
@@ -112,19 +112,30 @@ pub fn run(
             break;
         }
 
-        // Collect from each source
-        for source_name in &source_list {
+        // Collect from each source individually.
+        // We use collect_enabled_n to collect from one source at a time, then
+        // drain exactly those bytes from the pool buffer. This prevents bytes
+        // from different sources being mixed in the shared buffer. Conditioning
+        // is applied per-source after draining.
+        for source_name in &available {
             if !running.load(Ordering::SeqCst) {
-                break;
+                break 'outer;
             }
 
-            // Collect raw bytes from this source
-            pool.collect_enabled_n(std::slice::from_ref(source_name), 1000);
-            let raw_bytes = pool.get_bytes(1000, mode);
+            let n_collected =
+                pool.collect_enabled_n(std::slice::from_ref(source_name), 1000);
+            if n_collected == 0 {
+                continue;
+            }
 
-            if let Err(e) = writer.write_sample(source_name, &raw_bytes) {
+            // Drain exactly the bytes this source produced, then condition
+            let raw = pool.get_raw_bytes(n_collected);
+            let conditioned = condition(&raw, raw.len(), mode);
+
+            if let Err(e) = writer.write_sample(source_name, &conditioned) {
                 eprintln!("\nError writing sample: {e}");
-                break;
+                had_write_error = true;
+                break 'outer;
             }
         }
 
@@ -149,6 +160,10 @@ pub fn run(
     println!();
     println!();
 
+    if had_write_error {
+        eprintln!("Recording stopped due to write error.");
+    }
+
     // Finalize session
     match writer.finish() {
         Ok(dir) => {
@@ -168,35 +183,24 @@ pub fn run(
 /// Parse a duration string like "5m", "30s", "1h", "100ms".
 fn parse_duration(s: &str) -> Duration {
     let s = s.trim();
-    if let Some(rest) = s.strip_suffix("ms") {
-        Duration::from_millis(rest.parse().unwrap_or_else(|_| {
-            eprintln!("Invalid duration: {s}");
-            std::process::exit(1);
-        }))
+
+    let (numeric, multiplier) = if let Some(rest) = s.strip_suffix("ms") {
+        (rest, 1u64)
     } else if let Some(rest) = s.strip_suffix('s') {
-        Duration::from_secs(rest.parse().unwrap_or_else(|_| {
-            eprintln!("Invalid duration: {s}");
-            std::process::exit(1);
-        }))
+        (rest, 1000)
     } else if let Some(rest) = s.strip_suffix('m') {
-        Duration::from_secs(
-            rest.parse::<u64>().unwrap_or_else(|_| {
-                eprintln!("Invalid duration: {s}");
-                std::process::exit(1);
-            }) * 60,
-        )
+        (rest, 60_000)
     } else if let Some(rest) = s.strip_suffix('h') {
-        Duration::from_secs(
-            rest.parse::<u64>().unwrap_or_else(|_| {
-                eprintln!("Invalid duration: {s}");
-                std::process::exit(1);
-            }) * 3600,
-        )
+        (rest, 3_600_000)
     } else {
         // Assume seconds
-        Duration::from_secs(s.parse().unwrap_or_else(|_| {
-            eprintln!("Invalid duration: {s}");
-            std::process::exit(1);
-        }))
-    }
+        (s, 1000)
+    };
+
+    let value: u64 = numeric.parse().unwrap_or_else(|_| {
+        eprintln!("Invalid duration: {s}");
+        std::process::exit(1);
+    });
+
+    Duration::from_millis(value * multiplier)
 }
