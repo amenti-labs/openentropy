@@ -33,31 +33,45 @@
 //! config struct documentation for field descriptions and valid ranges.
 
 // Standalone sources — one independent entropy domain each.
+mod accelerate_jitter;
 mod amx_timing;
 mod audio_pll_timing;
 mod cas_contention;
 mod counter_beat;
 mod denormal_timing;
 mod dvfs_race;
+mod fsync_journal;
+mod gpu_divergence;
+mod iosurface_crossing;
 mod keychain_timing;
 mod kqueue_events;
 mod mach_ipc;
+mod nvme_latency;
+mod pdn_resonance;
 mod pipe_buffer;
+mod quantum_boundary;
 mod thread_lifecycle;
 mod tlb_shootdown;
 mod usb_timing;
 
 // Re-export all source structs and their configs.
+pub use accelerate_jitter::AccelerateJitterSource;
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
 pub use counter_beat::CounterBeatSource;
 pub use denormal_timing::DenormalTimingSource;
 pub use dvfs_race::DVFSRaceSource;
+pub use fsync_journal::FsyncJournalSource;
+pub use gpu_divergence::GPUDivergenceSource;
+pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
+pub use nvme_latency::NVMeLatencySource;
+pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
+pub use quantum_boundary::QuantumBoundarySource;
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
 pub use usb_timing::USBTimingSource;
@@ -198,6 +212,13 @@ mod tests {
             Box::new(AudioPLLTimingSource),
             Box::new(USBTimingSource),
             Box::new(CounterBeatSource),
+            Box::new(NVMeLatencySource),
+            Box::new(AccelerateJitterSource),
+            Box::new(GPUDivergenceSource),
+            Box::new(PDNResonanceSource),
+            Box::new(IOSurfaceCrossingSource),
+            Box::new(QuantumBoundarySource),
+            Box::new(FsyncJournalSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

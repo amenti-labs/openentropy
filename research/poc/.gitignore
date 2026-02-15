@@ -1,5 +1,6 @@
 # Compiled PoC binaries
 *
 !*.c
+!*.m
 !*.md
 !.gitignore

@@ -1,4 +1,4 @@
-//! All 40 entropy source implementations.
+//! All 47 entropy source implementations.
 
 pub mod helpers;
 
@@ -78,5 +78,13 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::AudioPLLTimingSource),
         Box::new(frontier::USBTimingSource),
         Box::new(frontier::CounterBeatSource),
+        // Frontier: unprecedented entropy sources (2026-02-14)
+        Box::new(frontier::NVMeLatencySource),
+        Box::new(frontier::AccelerateJitterSource),
+        Box::new(frontier::GPUDivergenceSource),
+        Box::new(frontier::PDNResonanceSource),
+        Box::new(frontier::IOSurfaceCrossingSource),
+        Box::new(frontier::QuantumBoundarySource),
+        Box::new(frontier::FsyncJournalSource),
     ]
 }
