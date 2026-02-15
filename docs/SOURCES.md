@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-36 sources across 8 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+44 sources across 12 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -8,40 +8,40 @@
 |---|--------|----------|---------|-----------|----------|
 | 1 | `clock_jitter` | Timing | PLL phase noise between clocks | ~500 b/s | All |
 | 2 | `mach_timing` | Timing | ARM system counter LSB jitter | ~300 b/s | macOS |
-| 3 | `sleep_jitter` | Timing | OS scheduler wake-up jitter | ~400 b/s | All |
+| 3 | `sleep_jitter` | Scheduling | OS scheduler wake-up jitter | ~400 b/s | All |
 | 4 | `sysctl` | System | Kernel counter fluctuations | ~2000 b/s | macOS, Linux |
 | 5 | `vmstat` | System | VM subsystem page counters | ~500 b/s | macOS, Linux |
 | 6 | `process` | System | Process table snapshot hash | ~300 b/s | All |
 | 7 | `dns_timing` | Network | DNS resolution latency jitter | ~400 b/s | All |
 | 8 | `tcp_connect` | Network | TCP handshake timing variance | ~300 b/s | All |
 | 9 | `wifi_rssi` | Network | WiFi signal strength noise floor | ~200 b/s | macOS |
-| 10 | `disk_io` | Hardware | Block device I/O timing jitter | ~500 b/s | All |
-| 11 | `memory_timing` | Hardware | DRAM access timing variations | ~800 b/s | All |
-| 12 | `gpu_timing` | Hardware | GPU compute dispatch jitter | ~600 b/s | macOS (Metal) |
-| 13 | `audio_noise` | Hardware | Microphone thermal noise floor | ~1000 b/s | Requires mic |
-| 14 | `camera_noise` | Hardware | Camera sensor dark current | ~2000 b/s | Requires camera |
-| 15 | `bluetooth_noise` | Hardware | BLE ambient RF environment | ~200 b/s | macOS |
-| 17 | `ioregistry` | Hardware | IOKit registry value mining | ~500 b/s | macOS |
-| 18 | `dram_row_buffer` | Silicon | DRAM row buffer hit/miss timing | ~3000 b/s | All |
-| 19 | `cache_contention` | Silicon | L1/L2 cache contention timing | ~2500 b/s | All |
-| 20 | `page_fault_timing` | Silicon | mmap/munmap page fault latency | ~1500 b/s | All |
-| 21 | `speculative_execution` | Silicon | Branch predictor state timing | ~2000 b/s | All |
-| 22 | `cpu_io_beat` | Cross-Domain | CPU vs I/O clock beat frequency | ~300 b/s | All |
-| 23 | `cpu_memory_beat` | Cross-Domain | CPU vs memory controller beat | ~400 b/s | All |
-| 24 | `compression_timing` | Novel | zlib compression timing oracle | ~300 b/s | All |
-| 26 | `hash_timing` | Novel | SHA-256 timing data-dependency | ~400 b/s | All |
-| 27 | `dispatch_queue` | Novel | Thread pool scheduling jitter | ~500 b/s | macOS |
-| 28 | `vm_page_timing` | Novel | Mach VM page allocation timing | ~400 b/s | macOS |
-| 30 | `spotlight_timing` | Novel | Spotlight metadata query timing | ~200 b/s | macOS |
-| 31 | `amx_timing` | Frontier | Apple AMX coprocessor dispatch jitter | ~500 b/s | macOS (ARM) |
-| 32 | `thread_lifecycle` | Frontier | pthread create/join cycle timing | ~400 b/s | All |
-| 33 | `mach_ipc` | Frontier | Mach port IPC allocation timing | ~300 b/s | macOS |
-| 34 | `tlb_shootdown` | Frontier | mprotect() TLB invalidation IPI latency | ~400 b/s | All |
-| 35 | `pipe_buffer` | Frontier | Kernel zone allocator via pipe lifecycle | ~200 b/s | All |
-| 36 | `kqueue_events` | Frontier | BSD kqueue event multiplexing jitter | ~300 b/s | macOS |
-| 37 | `dvfs_race` | Frontier | Cross-core DVFS frequency race | ~500 b/s | All |
-| 38 | `cas_contention` | Frontier | Multi-thread atomic CAS arbitration | ~200 b/s | All |
-| 39 | `keychain_timing` | Frontier | macOS Keychain Services API timing | ~300 b/s | macOS |
+| 10 | `disk_io` | IO | Block device I/O timing jitter | ~500 b/s | All |
+| 11 | `memory_timing` | Timing | DRAM access timing variations | ~800 b/s | All |
+| 12 | `gpu_timing` | GPU | GPU compute dispatch jitter | ~600 b/s | macOS (Metal) |
+| 13 | `audio_noise` | Sensor | Microphone thermal noise floor | ~1000 b/s | Requires mic |
+| 14 | `camera_noise` | Sensor | Camera sensor dark current | ~2000 b/s | Requires camera |
+| 15 | `bluetooth_noise` | Sensor | BLE ambient RF environment | ~200 b/s | macOS |
+| 17 | `ioregistry` | System | IOKit registry value mining | ~500 b/s | macOS |
+| 18 | `dram_row_buffer` | Timing | DRAM row buffer hit/miss timing | ~3000 b/s | All |
+| 19 | `cache_contention` | Timing | L1/L2 cache contention timing | ~2500 b/s | All |
+| 20 | `page_fault_timing` | Timing | mmap/munmap page fault latency | ~1500 b/s | All |
+| 21 | `speculative_execution` | Microarch | Branch predictor state timing | ~2000 b/s | All |
+| 22 | `cpu_io_beat` | Composite | CPU vs I/O clock beat frequency | ~300 b/s | All |
+| 23 | `cpu_memory_beat` | Composite | CPU vs memory controller beat | ~400 b/s | All |
+| 24 | `compression_timing` | Signal | zlib compression timing oracle | ~300 b/s | All |
+| 26 | `hash_timing` | Signal | SHA-256 timing data-dependency | ~400 b/s | All |
+| 27 | `dispatch_queue` | Scheduling | Thread pool scheduling jitter | ~500 b/s | macOS |
+| 28 | `vm_page_timing` | Timing | Mach VM page allocation timing | ~400 b/s | macOS |
+| 30 | `spotlight_timing` | Signal | Spotlight metadata query timing | ~200 b/s | macOS |
+| 31 | `amx_timing` | Microarch | Apple AMX coprocessor dispatch jitter | ~500 b/s | macOS (ARM) |
+| 32 | `thread_lifecycle` | Scheduling | pthread create/join cycle timing | ~400 b/s | All |
+| 33 | `mach_ipc` | IPC | Mach port IPC allocation timing | ~300 b/s | macOS |
+| 34 | `tlb_shootdown` | Microarch | mprotect() TLB invalidation IPI latency | ~400 b/s | All |
+| 35 | `pipe_buffer` | IPC | Kernel zone allocator via pipe lifecycle | ~200 b/s | All |
+| 36 | `kqueue_events` | IPC | BSD kqueue event multiplexing jitter | ~300 b/s | macOS |
+| 37 | `dvfs_race` | Microarch | Cross-core DVFS frequency race | ~500 b/s | All |
+| 38 | `cas_contention` | Microarch | Multi-thread atomic CAS arbitration | ~200 b/s | All |
+| 39 | `keychain_timing` | IPC | macOS Keychain Services API timing | ~300 b/s | macOS |
 
 ---
 
@@ -82,7 +82,7 @@
 
 ### 3. `sleep_jitter`
 
-**Category:** Timing
+**Category:** Scheduling
 **Struct:** `SleepJitterSource`
 **Platform:** All
 **Estimated Rate:** ~400 b/s
@@ -179,11 +179,11 @@
 
 ---
 
-## Hardware Sources
+## IO Sources
 
 ### 10. `disk_io`
 
-**Category:** Hardware
+**Category:** IO
 **Struct:** `DiskIOSource`
 **Platform:** All
 **Estimated Rate:** ~500 b/s
@@ -196,7 +196,7 @@
 
 ### 11. `memory_timing`
 
-**Category:** Hardware
+**Category:** Timing
 **Struct:** `MemoryTimingSource`
 **Platform:** All
 **Estimated Rate:** ~800 b/s
@@ -211,7 +211,7 @@
 
 ### 12. `gpu_timing`
 
-**Category:** Hardware
+**Category:** GPU
 **Struct:** `GPUTimingSource`
 **Platform:** macOS (Metal)
 **Estimated Rate:** ~600 b/s
@@ -224,7 +224,7 @@
 
 ### 13. `audio_noise`
 
-**Category:** Hardware
+**Category:** Sensor
 **Struct:** `AudioNoiseSource`
 **Platform:** Requires microphone (built-in or external)
 **Estimated Rate:** ~1000 b/s
@@ -237,7 +237,7 @@
 
 ### 14. `camera_noise`
 
-**Category:** Hardware
+**Category:** Sensor
 **Struct:** `CameraNoiseSource`
 **Platform:** Requires camera (built-in or USB)
 **Estimated Rate:** ~2000 b/s
@@ -252,7 +252,7 @@
 
 ### 15. `bluetooth_noise`
 
-**Category:** Hardware
+**Category:** Sensor
 **Struct:** `BluetoothNoiseSource`
 **Platform:** macOS (CoreBluetooth)
 **Estimated Rate:** ~200 b/s
@@ -265,7 +265,7 @@
 
 ### 17. `ioregistry`
 
-**Category:** Hardware
+**Category:** System
 **Struct:** `IORegistryEntropySource`
 **Platform:** macOS
 **Estimated Rate:** ~500 b/s
@@ -276,13 +276,13 @@
 
 ---
 
-## Silicon Microarchitecture Sources
+## Microarchitecture Sources
 
-These four sources exploit physical effects at the CPU and DRAM silicon level. They produce the highest entropy rates because they operate at nanosecond timescales with minimal software overhead.
+These sources exploit physical effects at the CPU and DRAM silicon level. They produce the highest entropy rates because they operate at nanosecond timescales with minimal software overhead.
 
 ### 18. `dram_row_buffer`
 
-**Category:** Silicon
+**Category:** Timing
 **Struct:** `DRAMRowBufferSource`
 **Platform:** All
 **Estimated Rate:** ~3000 b/s
@@ -303,7 +303,7 @@ These four sources exploit physical effects at the CPU and DRAM silicon level. T
 
 ### 19. `cache_contention`
 
-**Category:** Silicon
+**Category:** Timing
 **Struct:** `CacheContentionSource`
 **Platform:** All
 **Estimated Rate:** ~2500 b/s
@@ -318,7 +318,7 @@ These four sources exploit physical effects at the CPU and DRAM silicon level. T
 
 ### 20. `page_fault_timing`
 
-**Category:** Silicon
+**Category:** Timing
 **Struct:** `PageFaultTimingSource`
 **Platform:** All
 **Estimated Rate:** ~1500 b/s
@@ -341,7 +341,7 @@ The timing depends on physical memory fragmentation, the kernel's page allocator
 
 ### 21. `speculative_execution`
 
-**Category:** Silicon
+**Category:** Microarch
 **Struct:** `SpeculativeExecutionSource`
 **Platform:** All
 **Estimated Rate:** ~2000 b/s
@@ -354,13 +354,13 @@ The timing depends on physical memory fragmentation, the kernel's page allocator
 
 ---
 
-## Cross-Domain Beat Frequency Sources
+## Composite Sources
 
 These sources exploit the interference patterns that arise when independent clock domains interact. Each subsystem (CPU, memory controller, I/O bus) has its own PLL with independent phase noise. When operations cross domain boundaries, the beat frequency of their jitter creates entropy.
 
 ### 22. `cpu_io_beat`
 
-**Category:** Cross-Domain
+**Category:** Composite
 **Struct:** `CPUIOBeatSource`
 **Platform:** All
 **Estimated Rate:** ~300 b/s
@@ -373,7 +373,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ### 23. `cpu_memory_beat`
 
-**Category:** Cross-Domain
+**Category:** Composite
 **Struct:** `CPUMemoryBeatSource`
 **Platform:** All
 **Estimated Rate:** ~400 b/s
@@ -384,11 +384,11 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ---
 
-## Novel Sources
+## Signal Sources
 
 ### 25. `compression_timing`
 
-**Category:** Novel
+**Category:** Signal
 **Struct:** `CompressionTimingSource`
 **Platform:** All
 **Estimated Rate:** ~300 b/s

@@ -41,9 +41,11 @@ const FAST_SOURCES: &[&str] = &[
     "dvfs_race",
     "cas_contention",
     "denormal_timing",
-    "counter_beat",
     "audio_pll_timing",
     "usb_timing",
+    // Unprecedented entropy sources (fast ones only)
+    "nvme_latency",
+    "pdn_resonance",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.

@@ -20,6 +20,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
+use ratatui::widgets::TableState;
 
 use openentropy_core::ConditioningMode;
 use openentropy_core::pool::{EntropyPool, SourceHealth};
@@ -255,6 +256,7 @@ pub struct App {
     paused: bool,
     compare_source: Option<usize>,
     sample_size_idx: usize,
+    table_state: TableState,
 }
 
 impl App {
@@ -289,6 +291,7 @@ impl App {
             paused: false,
             compare_source: None,
             sample_size_idx: 1, // default 32 bytes
+            table_state: TableState::default().with_selected(Some(0)),
         }
     }
 
@@ -354,11 +357,13 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.cursor > 0 {
                     self.cursor -= 1;
+                    self.table_state.select(Some(self.cursor));
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if self.cursor < self.source_names.len().saturating_sub(1) {
                     self.cursor += 1;
+                    self.table_state.select(Some(self.cursor));
                 }
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
@@ -580,6 +585,9 @@ impl App {
     }
     pub fn compare_source(&self) -> Option<usize> {
         self.compare_source
+    }
+    pub fn table_state_mut(&mut self) -> &mut TableState {
+        &mut self.table_state
     }
 
     pub fn active_name(&self) -> Option<&str> {

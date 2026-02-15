@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_delta_bytes_i64, run_command};
 
@@ -32,7 +32,8 @@ static SYSCTL_INFO: SourceInfo = SourceInfo {
               The LSBs of their deltas reflect the unpredictable micro-timing of the entire \
               operating system\u{2019}s activity.",
     category: SourceCategory::System,
-    platform_requirements: &["macos"],
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 5000.0,
     composite: false,
 };

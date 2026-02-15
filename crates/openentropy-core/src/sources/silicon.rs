@@ -4,7 +4,7 @@
 
 use rand::Rng;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_timing_entropy, mach_time};
 
@@ -28,8 +28,9 @@ static DRAM_ROW_BUFFER_INFO: SourceInfo = SourceInfo {
               which is slower. The exact timing depends on: physical address mapping, \
               row buffer state from ALL system activity, memory controller scheduling, \
               and DRAM refresh interference.",
-    category: SourceCategory::Silicon,
-    platform_requirements: &[],
+    category: SourceCategory::Timing,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 3000.0,
     composite: false,
 };
@@ -101,8 +102,9 @@ static CACHE_CONTENTION_INFO: SourceInfo = SourceInfo {
               \u{2014} the cache is a shared resource whose state is fundamentally \
               unpredictable. A cache miss requires main memory access (100+ ns vs \
               1 ns for L1 hit).",
-    category: SourceCategory::Silicon,
-    platform_requirements: &[],
+    category: SourceCategory::Timing,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2500.0,
     composite: false,
 };
@@ -195,8 +197,9 @@ static PAGE_FAULT_TIMING_INFO: SourceInfo = SourceInfo {
               requires: TLB lookup, hardware page table walk (up to 4 levels on ARM64), \
               physical page allocation from the kernel free list, and zero-fill for \
               security. The timing depends on physical memory fragmentation.",
-    category: SourceCategory::Silicon,
-    platform_requirements: &[],
+    category: SourceCategory::Timing,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -288,8 +291,9 @@ static SPECULATIVE_EXECUTION_INFO: SourceInfo = SourceInfo {
               previously executed code. Mispredictions cause pipeline flushes (~15 cycle \
               penalty on M4). By running data-dependent branches and measuring timing, \
               we capture the predictor's internal state.",
-    category: SourceCategory::Silicon,
-    platform_requirements: &[],
+    category: SourceCategory::Microarch,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -422,18 +426,18 @@ mod tests {
 
     #[test]
     fn source_info_categories() {
-        assert_eq!(DRAMRowBufferSource.info().category, SourceCategory::Silicon);
+        assert_eq!(DRAMRowBufferSource.info().category, SourceCategory::Timing);
         assert_eq!(
             CacheContentionSource.info().category,
-            SourceCategory::Silicon
+            SourceCategory::Timing
         );
         assert_eq!(
             PageFaultTimingSource.info().category,
-            SourceCategory::Silicon
+            SourceCategory::Timing
         );
         assert_eq!(
             SpeculativeExecutionSource.info().category,
-            SourceCategory::Silicon
+            SourceCategory::Microarch
         );
     }
 

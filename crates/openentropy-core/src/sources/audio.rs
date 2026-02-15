@@ -4,7 +4,7 @@
 //! avfoundation backend, then extracts the lower 4 bits of each int16 sample.
 //! These LSBs are dominated by Johnson-Nyquist thermal noise.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 use super::helpers::{command_exists, pack_nibbles};
 
@@ -22,8 +22,9 @@ static AUDIO_NOISE_INFO: SourceInfo = SourceInfo {
               impedance. This is genuine quantum-origin entropy: random electron motion \
               in a resistor at temperature T produces voltage noise proportional to \
               \u{221a}(4kT R \u{0394}f).",
-    category: SourceCategory::Hardware,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Sensor,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::AudioUnit],
     entropy_rate_estimate: 10000.0,
     composite: false,
 };
@@ -88,7 +89,7 @@ mod tests {
     fn audio_noise_info() {
         let src = AudioNoiseSource;
         assert_eq!(src.name(), "audio_noise");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::Sensor);
         assert_eq!(src.info().entropy_rate_estimate, 10000.0);
         assert!(!src.info().composite);
     }

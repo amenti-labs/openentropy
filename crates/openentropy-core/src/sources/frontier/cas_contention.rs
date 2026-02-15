@@ -5,7 +5,7 @@
 //!
 //! PoC measured H∞ = 2.463 bits/byte (4-thread XOR combined).
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
 use std::sync::Arc;
@@ -75,8 +75,9 @@ static CAS_CONTENTION_INFO: SourceInfo = SourceInfo {
               variations, thermal state, and traffic from other cores/devices. \
               XOR-combining timing measurements from all threads amplifies the \
               arbitration entropy. PoC measured H\u{221e} = 2.463 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Microarch,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -196,7 +197,7 @@ mod tests {
     fn info() {
         let src = CASContentionSource::default();
         assert_eq!(src.info().name, "cas_contention");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert!(matches!(src.info().category, SourceCategory::Microarch));
         assert!(!src.info().composite);
     }
 

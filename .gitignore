@@ -1,41 +1,39 @@
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
-.ruff_cache/
-.pytest_cache/
-.mypy_cache/
-*.bin
-*.so
-*.dylib
-.venv/
-venv/
-env/
-.env
-.DS_Store
-htmlcov/
-.coverage
-
-# Rust
-target/
-.venv-*/
 
 # C build artifacts
-*.o
-*.dSYM/
-
 # IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
 # Legacy Python code (preserved for reference, not part of release)
-_python_legacy/
-
 # Local scratch / planning
+# Rust
+*$py.class
+*.bin
+*.dSYM/
+*.dylib
+*.egg
+*.egg-info/
+*.o
+*.py[cod]
+*.so
+*.swo
+*.swp
+.DS_Store
+.coverage
+.eggs/
+.env
+.idea/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv-*/
+.venv/
+.vscode/
+CLAUDE.md
+__pycache__/
+_python_legacy/
+build/
+dist/
+env/
+htmlcov/
+target/
 tmp/
+venv/
+research/internal/

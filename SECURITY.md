@@ -13,7 +13,7 @@ We take security seriously. If you discover a vulnerability in OpenEntropy, plea
 
 ### How to Report
 
-1. **Email**: [security@amenti-labs.com](mailto:security@amenti-labs.com)
+1. **Email**: [contact@amentilabs.com](mailto:contact@amentilabs.com)
 2. **GitHub Security Advisories**: [Report a vulnerability](https://github.com/amenti-labs/openentropy/security/advisories/new)
 
 **Do not** open a public GitHub issue for security vulnerabilities.

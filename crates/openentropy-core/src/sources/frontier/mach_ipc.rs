@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Configuration for Mach IPC entropy collection.
@@ -100,8 +100,9 @@ static MACH_IPC_INFO: SourceInfo = SourceInfo {
               Round-robin across ports with varied queue depths creates namespace contention. \
               Timing captures: OOL VM remap latency, port namespace splay tree operations, \
               per-port lock contention, and cross-core scheduling nondeterminism.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::IPC,
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -325,7 +326,7 @@ mod tests {
     fn info() {
         let src = MachIPCSource::default();
         assert_eq!(src.name(), "mach_ipc");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IPC);
         assert!(!src.info().composite);
     }
 

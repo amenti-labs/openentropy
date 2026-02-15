@@ -9,7 +9,7 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 const MEASUREMENT_DELAY: Duration = Duration::from_millis(10);
 const SAMPLES_PER_COLLECT: usize = 8;
@@ -40,8 +40,9 @@ static WIFI_RSSI_INFO: SourceInfo = SourceInfo {
               off walls/objects), constructive/destructive interference at \
               2.4/5/6 GHz, Rayleigh fading from moving objects, atmospheric \
               absorption, and thermal noise in the radio receiver's LNA.",
-    category: SourceCategory::Hardware,
-    platform_requirements: &["macos", "wifi"],
+    category: SourceCategory::Network,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::Wifi],
     entropy_rate_estimate: 30.0,
     composite: false,
 };
@@ -337,9 +338,10 @@ mod tests {
     fn source_info() {
         let src = WiFiRSSISource::new();
         assert_eq!(src.info().name, "wifi_rssi");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::Network);
         assert!((src.info().entropy_rate_estimate - 30.0).abs() < f64::EPSILON);
-        assert_eq!(src.info().platform_requirements, &["macos", "wifi"]);
+        assert_eq!(src.info().platform, Platform::MacOS);
+        assert_eq!(src.info().requirements, &[Requirement::Wifi]);
         assert!(!src.info().composite);
     }
 

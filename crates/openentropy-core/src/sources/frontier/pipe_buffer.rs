@@ -1,6 +1,6 @@
 //! Pipe buffer timing — entropy from multi-pipe kernel zone allocator contention.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Configuration for pipe buffer entropy collection.
@@ -109,8 +109,9 @@ static PIPE_BUFFER_INFO: SourceInfo = SourceInfo {
               contention. Variable write sizes exercise different mbuf paths. Non-blocking mode \
               captures EAGAIN timing on different kernel failure paths. Zone allocator timing \
               depends on zone fragmentation, magazine layer state, and cross-CPU transfers.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::IPC,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -250,7 +251,7 @@ mod tests {
     fn info() {
         let src = PipeBufferSource::default();
         assert_eq!(src.name(), "pipe_buffer");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IPC);
         assert!(!src.info().composite);
     }
 

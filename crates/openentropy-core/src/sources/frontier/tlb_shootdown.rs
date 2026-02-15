@@ -1,6 +1,6 @@
 //! TLB shootdown timing — entropy from mprotect-induced IPI broadcasts.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 use super::extract_timing_entropy_variance;
@@ -104,8 +104,9 @@ static TLB_SHOOTDOWN_INFO: SourceInfo = SourceInfo {
               shootdowns captures relative timing with higher min-entropy. IPI latency depends \
               on: what each core is executing, P-core vs E-core cluster latency, core power \
               states, and concurrent IPI traffic.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Microarch,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -211,7 +212,7 @@ mod tests {
     fn info() {
         let src = TLBShootdownSource::default();
         assert_eq!(src.name(), "tlb_shootdown");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Microarch);
         assert!(!src.info().composite);
     }
 

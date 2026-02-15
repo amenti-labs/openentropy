@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::run_command_raw;
 
@@ -29,7 +29,8 @@ static PROCESS_INFO: SourceInfo = SourceInfo {
               semi-randomly, CPU percentages fluctuate with scheduling decisions, and \
               resident memory sizes shift with page reclamation.",
     category: SourceCategory::System,
-    platform_requirements: &[],
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 400.0,
     composite: false,
 };

@@ -4,7 +4,7 @@
 //! as raw grayscale video, then extracts the lower 4 bits of each pixel value.
 //! In darkness, these LSBs are dominated by shot noise and dark current.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 use super::helpers::{command_exists, pack_nibbles};
 
@@ -16,8 +16,9 @@ static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
               \u{2014} a quantum process. Read noise from the amplifier adds further randomness. \
               The LSBs of pixel values in dark frames are dominated by shot noise \
               (Poisson-distributed photon counting).",
-    category: SourceCategory::Hardware,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Sensor,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::Camera],
     entropy_rate_estimate: 50000.0,
     composite: false,
 };
@@ -75,7 +76,7 @@ mod tests {
     fn camera_noise_info() {
         let src = CameraNoiseSource;
         assert_eq!(src.name(), "camera_noise");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::Sensor);
         assert_eq!(src.info().entropy_rate_estimate, 50000.0);
         assert!(!src.info().composite);
     }

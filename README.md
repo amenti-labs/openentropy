@@ -2,13 +2,13 @@
 
 # openentropy
 
-**Your computer is a hardware noise observatory.**
+**Harvest real entropy from hardware noise. Study it raw or condition it for crypto.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*Harvest real entropy from 36 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
+*44 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -59,15 +59,31 @@ data = pool.get_random_bytes(256)
 
 ---
 
+## Two Audiences
+
+**Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) meets NIST SP 800-90B requirements.
+
+**Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source.
+
+Raw mode enables:
+- **Hardware characterization** — measure min-entropy, autocorrelation, and spectral properties of individual noise sources
+- **Silicon validation** — compare noise profiles across chip revisions, thermal states, and voltage domains
+- **Anomaly detection** — monitor entropy source health for signs of hardware degradation or tampering
+- **Cross-domain analysis** — study correlations between independent entropy domains (thermal vs timing vs IPC)
+
+---
+
 ## What Makes This Different
 
 Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy continuously harvests **real physical noise** from your hardware:
 
-- **Timing jitter** — clock phase noise, scheduling nondeterminism, nanosleep drift
-- **Silicon microarchitecture** — DRAM row buffer conflicts, CPU cache contention, speculative execution variance, page fault latency
-- **Thermal fluctuations** — sensor readouts, GPU dispatch scheduling, disk I/O latency
-- **Network nondeterminism** — DNS resolution timing, TCP handshake variance
-- **Cross-domain beat frequencies** — interference patterns between CPU, memory, and I/O subsystems
+- **Thermal noise** — denormal FPU micropower, audio PLL drift, power delivery network resonance
+- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, cache contention, speculative execution variance, TLB shootdowns, DVFS races
+- **I/O and IPC** — disk and NVMe latency, USB timing, Mach port IPC, pipe buffer allocation, kqueue event multiplexing
+- **GPU and compute** — GPU dispatch scheduling, warp divergence, IOSurface cross-domain timing
+- **Scheduling and system** — nanosleep drift, GCD dispatch queues, thread lifecycle, kernel counters, process table snapshots
+- **Network and sensors** — DNS resolution timing, TCP handshake variance, WiFi RSSI, BLE ambient RF, audio ADC noise
+- **Composite beat frequencies** — interference patterns between CPU, memory, and I/O subsystems
 
 The pool XOR-combines independent streams. No single source failure can compromise the pool.
 
@@ -79,9 +95,9 @@ Conditioning is **optional and configurable**. Use `--conditioning` on the CLI o
 |------|------|-------------|
 | **SHA-256** (default) | `--conditioning sha256` | Full NIST SP 800-90B conditioning. Cryptographic quality output. |
 | **Von Neumann** | `--conditioning vonneumann` | Debiasing only — removes bias while preserving more of the raw signal structure. |
-| **Raw** | `--conditioning raw` | No processing. XOR-combined source bytes with zero whitening. |
+| **Raw** | `--conditioning raw` | No processing. Source bytes with zero whitening — preserves the actual hardware noise signal for research. |
 
-Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise signal. OpenEntropy preserves it — pass `--conditioning raw` for unwhitened bytes, ideal for researchers studying actual hardware noise characteristics. See [Conditioning](docs/CONDITIONING.md) for details.
+Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG post-processing that makes every source look like uniform random bytes, destroying the information researchers need. Raw output preserves per-source noise structure: bias, autocorrelation, spectral features, and cross-source correlations. See [Conditioning](docs/CONDITIONING.md) for details.
 
 ---
 
@@ -89,7 +105,7 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCE_CATALOG.md) | All 36 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 44 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -103,84 +119,113 @@ Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise si
 
 ## Entropy Sources
 
-36 sources across 8 categories. Results from `openentropy bench` on Apple Silicon:
+44 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
-### Timing (3)
+### Thermal (3)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `denormal_timing` | 1.031 | <0.01s | Denormal FPU micropower thermal noise |
+| `audio_pll_timing` | 7.795 | 0.08s | Audio PLL clock drift from thermal perturbation |
+| `pdn_resonance` | 0.861 | <0.01s | Power delivery network LC resonance noise |
+
+### Timing (7)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `clock_jitter` | 6.507 | 0.00s | Phase noise between performance counter and monotonic clocks |
 | `mach_timing` | 7.832 | 0.00s | Mach absolute time LSB jitter |
-| `sleep_jitter` | 7.963 | 0.00s | Scheduling jitter in nanosleep() calls |
+| `memory_timing` | 5.056 | 0.01s | DRAM access timing variations |
+| `dram_row_buffer` | 7.959 | 0.00s | DRAM row buffer conflict timing |
+| `cache_contention` | 7.960 | 0.01s | CPU cache line contention noise |
+| `page_fault_timing` | 7.967 | 0.01s | Virtual memory page fault latency |
+| `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
 
-### System (3)
+### Scheduling (3)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `sleep_jitter` | 7.963 | 0.00s | Scheduling jitter in nanosleep() calls |
+| `dispatch_queue` | 6.688 | 0.09s | GCD dispatch queue scheduling jitter |
+| `thread_lifecycle` | 6.788 | 0.08s | pthread create/join cycle timing |
+
+### IO (4)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
+| `nvme_latency` | 5.321 | 0.01s | NVMe command submission/completion timing |
+| `usb_timing` | 7.734 | 0.03s | USB bus transaction timing jitter |
+| `fsync_journal` | 7.796 | 16.69s | fsync journal commit latency noise |
+
+### IPC (4)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
+| `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
+| `kqueue_events` | 7.489 | 12.25s | BSD kqueue event multiplexing timer/file/socket jitter |
+| `keychain_timing` | 7.543 | 0.02s | macOS Keychain Services API timing jitter |
+
+### Microarch (5)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `speculative_execution` | 7.967 | 0.00s | Branch prediction / speculative execution jitter |
+| `dvfs_race` | 7.804 | 0.13s | Cross-core DVFS frequency race (H∞=7.288) |
+| `cas_contention` | 2.352 | <0.01s | Multi-thread atomic CAS arbitration contention |
+| `tlb_shootdown` | 6.456 | 0.03s | mprotect() TLB invalidation IPI latency |
+| `amx_timing` | 5.188 | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
+
+### GPU (3)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
+| `gpu_divergence` | 7.837 | 0.76s | GPU warp divergence timing variance |
+| `iosurface_crossing` | 5.048 | 0.08s | IOSurface CPU-GPU cross-domain timing |
+
+### Network (3)
+
+| Source | Shannon H | Time | Description |
+|--------|:---------:|-----:|-------------|
+| `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
+| `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
+| `wifi_rssi` | — | — | WiFi received signal strength fluctuations *(requires WiFi)* |
+
+### System (4)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `sysctl_deltas` | 7.968 | 0.28s | Kernel counter fluctuations across 50+ sysctl keys |
 | `vmstat_deltas` | 7.965 | 0.38s | VM subsystem page fault and swap counters |
 | `process_table` | 7.971 | 1.99s | Process table snapshot entropy |
-
-### Network (2)
-
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
-| `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
-
-### Hardware (6)
-
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
-| `memory_timing` | 5.056 | 0.01s | DRAM access timing variations |
-| `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
-| `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
 | `ioregistry` | 7.964 | 2.15s | IOKit registry value mining |
 
-> `wifi_rssi`, `audio_noise`, and `camera_noise` are available on machines with the corresponding hardware.
-
-### Silicon Microarchitecture (4)
-
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `dram_row_buffer` | 7.959 | 0.00s | DRAM row buffer conflict timing |
-| `cache_contention` | 7.960 | 0.01s | CPU cache line contention noise |
-| `page_fault_timing` | 7.967 | 0.01s | Virtual memory page fault latency |
-| `speculative_execution` | 7.967 | 0.00s | Branch prediction / speculative execution jitter |
-
-### Cross-Domain Beat Frequencies (2)
+### Composite (2)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `cpu_io_beat` | 6.707 | 0.04s | CPU and I/O subsystem beat frequency |
 | `cpu_memory_beat` | 6.256 | 0.00s | CPU and memory controller beat pattern |
 
-### Novel (5)
+### Signal (3)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `compression_timing` | 7.966 | 1.02s | zlib compression timing oracle |
 | `hash_timing` | 7.122 | 0.04s | SHA-256 hash timing data-dependency |
-| `dispatch_queue` | 6.688 | 0.09s | GCD dispatch queue scheduling jitter |
-| `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
 | `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
 
-### Frontier (9)
+### Sensor (3)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
-| `amx_timing` | 5.188 | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
-| `thread_lifecycle` | 6.788 | 0.08s | pthread create/join cycle timing |
-| `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
-| `tlb_shootdown` | 6.456 | 0.03s | mprotect() TLB invalidation IPI latency |
-| `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
-| `kqueue_events` | — | 0.05s | BSD kqueue event multiplexing timer/file/socket jitter |
-| `dvfs_race` | 7.804 | 0.13s | Cross-core DVFS frequency race (H∞=7.288) |
-| `cas_contention` | 2.352 | <0.01s | Multi-thread atomic CAS arbitration contention |
-| `keychain_timing` | 7.543 | 0.02s | macOS Keychain Services API timing jitter |
+| `audio_noise` | — | — | Audio ADC thermal noise floor *(requires mic)* |
+| `camera_noise` | — | — | Image sensor dark current noise *(requires camera)* |
+| `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
 
-Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
+Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
 
 ---
 
@@ -301,7 +346,7 @@ Cargo workspace with 5 crates:
 | `openentropy-python` | Python bindings via PyO3/maturin |
 
 ```
-Sources (36) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (44) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -316,9 +361,9 @@ Sources (36) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **36/36** | Full suite — WiFi, BLE, camera, mic |
-| **Mac Mini / Studio / Pro** | 31–33 | No built-in camera, mic on some models |
-| **Intel Mac** | ~18 | Some silicon sources are ARM-specific |
+| **MacBook (M-series)** | **44/44** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 39–41 | No built-in camera, mic on some models |
+| **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
 | **Linux** | 10–15 | Timing, network, disk, process sources |
 
 The library detects available hardware at runtime and only activates working sources.

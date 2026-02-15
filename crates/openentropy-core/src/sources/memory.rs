@@ -6,7 +6,7 @@
 use std::ptr;
 use std::time::Instant;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 /// Page size for mmap allocations (4 KB on most platforms).
 const PAGE_SIZE: usize = 4096;
@@ -18,8 +18,9 @@ static MEMORY_TIMING_INFO: SourceInfo = SourceInfo {
               comes from heap fragmentation, page fault handling, and kernel memory pressure. \
               Access timing varies with: DRAM refresh interference (~64ms cycle), cache \
               hierarchy state (L1/L2/L3 hits vs misses), and memory controller scheduling.",
-    category: SourceCategory::Hardware,
-    platform_requirements: &[],
+    category: SourceCategory::Timing,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -123,6 +124,6 @@ mod tests {
     fn memory_timing_info() {
         let src = MemoryTimingSource;
         assert_eq!(src.name(), "memory_timing");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::Timing);
     }
 }

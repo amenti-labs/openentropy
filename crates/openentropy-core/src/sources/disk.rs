@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use tempfile::NamedTempFile;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 /// Size of the temporary file used for random reads.
 const TEMP_FILE_SIZE: usize = 64 * 1024; // 64 KB
@@ -27,8 +27,9 @@ static DISK_IO_INFO: SourceInfo = SourceInfo {
               flash translation layer (FTL) remapping, wear leveling, garbage collection, \
               read disturb mitigation, NAND page read latency variation (depends on charge \
               level in floating-gate transistors), and NVMe controller queue arbitration.",
-    category: SourceCategory::Hardware,
-    platform_requirements: &[],
+    category: SourceCategory::IO,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 800.0,
     composite: false,
 };
@@ -129,6 +130,6 @@ mod tests {
     fn disk_io_info() {
         let src = DiskIOSource;
         assert_eq!(src.name(), "disk_io");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::IO);
     }
 }

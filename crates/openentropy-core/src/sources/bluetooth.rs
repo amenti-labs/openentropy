@@ -11,7 +11,7 @@
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 /// Path to system_profiler on macOS.
 const SYSTEM_PROFILER_PATH: &str = "/usr/sbin/system_profiler";
@@ -26,8 +26,9 @@ static BLUETOOTH_NOISE_INFO: SourceInfo = SourceInfo {
               nearby devices. Each RSSI reading reflects: 2.4 GHz multipath propagation, \
               frequency hopping across 40 channels, advertising interval jitter (\u{00b1}10ms), \
               transmit power variation, and receiver thermal noise.",
-    category: SourceCategory::Hardware,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Sensor,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::Bluetooth],
     entropy_rate_estimate: 50.0,
     composite: false,
 };
@@ -147,7 +148,7 @@ mod tests {
     fn bluetooth_noise_info() {
         let src = BluetoothNoiseSource;
         assert_eq!(src.name(), "bluetooth_noise");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::Sensor);
     }
 
     #[test]

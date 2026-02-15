@@ -11,7 +11,7 @@
 //!
 //! PoC measured H∞ ≈ 5.4 bits/byte for PLL beat detection queries.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
 
 static AUDIO_PLL_TIMING_INFO: SourceInfo = SourceInfo {
@@ -24,8 +24,9 @@ static AUDIO_PLL_TIMING_INFO: SourceInfo = SourceInfo {
               timing captures the instantaneous phase relationship between these \
               independent clock domains. \
               PoC measured H\u{221e} \u{2248} 5.4 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Thermal,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::AudioUnit],
     entropy_rate_estimate: 4000.0,
     composite: false,
 };
@@ -186,7 +187,7 @@ mod tests {
     fn info() {
         let src = AudioPLLTimingSource;
         assert_eq!(src.name(), "audio_pll_timing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Thermal);
         assert!(!src.info().composite);
     }
 

@@ -9,7 +9,7 @@
 //! On Apple Silicon, denormal handling is fast (no microcode penalty),
 //! but residual pipeline state and cache effects still create jitter.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Number of floating-point operations per timing measurement.
@@ -25,8 +25,9 @@ static DENORMAL_TIMING_INFO: SourceInfo = SourceInfo {
               residual timing jitter comes from FPU pipeline state, cache line \
               alignment, and memory controller arbitration. \
               PoC measured H\u{221e} \u{2248} 1.2 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Thermal,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 300.0,
     composite: false,
 };
@@ -89,7 +90,7 @@ mod tests {
     fn info() {
         let src = DenormalTimingSource;
         assert_eq!(src.name(), "denormal_timing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Thermal);
         assert!(!src.info().composite);
     }
 

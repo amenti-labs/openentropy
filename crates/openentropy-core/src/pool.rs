@@ -365,6 +365,8 @@ impl EntropyPool {
                     description: info.description.to_string(),
                     physics: info.physics.to_string(),
                     category: info.category.to_string(),
+                    platform: info.platform.to_string(),
+                    requirements: info.requirements.iter().map(|r| r.to_string()).collect(),
                     entropy_rate_estimate: info.entropy_rate_estimate,
                     composite: info.composite,
                 }
@@ -429,6 +431,10 @@ pub struct SourceInfoSnapshot {
     pub physics: String,
     /// Source category.
     pub category: String,
+    /// Target platform.
+    pub platform: String,
+    /// Hardware/software requirements.
+    pub requirements: Vec<String>,
     /// Estimated entropy rate.
     pub entropy_rate_estimate: f64,
     /// Whether this is a composite source.
@@ -438,7 +444,7 @@ pub struct SourceInfoSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{SourceCategory, SourceInfo};
+    use crate::source::{Platform, SourceCategory, SourceInfo};
 
     // -----------------------------------------------------------------------
     // Mock entropy source for testing
@@ -458,7 +464,8 @@ mod tests {
                     description: "mock source",
                     physics: "deterministic test data",
                     category: SourceCategory::System,
-                    platform_requirements: &[],
+                    platform: Platform::Any,
+                    requirements: &[],
                     entropy_rate_estimate: 1.0,
                     composite: false,
                 },
@@ -492,7 +499,8 @@ mod tests {
                     description: "failing mock",
                     physics: "always fails",
                     category: SourceCategory::System,
-                    platform_requirements: &[],
+                    platform: Platform::Any,
+                    requirements: &[],
                     entropy_rate_estimate: 0.0,
                     composite: false,
                 },

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_delta_bytes_i64, run_command};
 
@@ -29,7 +29,8 @@ static IOREGISTRY_INFO: SourceInfo = SourceInfo {
               vsync counters. Each counter is driven by independent hardware subsystems. \
               The LSBs of their deltas capture silicon-level activity across the entire SoC.",
     category: SourceCategory::System,
-    platform_requirements: &["macos"],
+    platform: Platform::MacOS,
+    requirements: &[Requirement::IOKit],
     entropy_rate_estimate: 1000.0,
     composite: false,
 };

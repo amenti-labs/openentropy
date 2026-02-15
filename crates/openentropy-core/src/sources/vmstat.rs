@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_delta_bytes_i64, run_command};
 
@@ -30,7 +30,8 @@ static VMSTAT_INFO: SourceInfo = SourceInfo {
               management \u{2014} each counter changes when hardware page table walks, TLB \
               misses, or memory pressure triggers compressor/swap.",
     category: SourceCategory::System,
-    platform_requirements: &["macos"],
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 1000.0,
     composite: false,
 };

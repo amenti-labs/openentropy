@@ -19,7 +19,7 @@ use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use sha2::{Digest, Sha256};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_timing_entropy, mach_time};
 
@@ -35,8 +35,9 @@ static COMPRESSION_TIMING_INFO: SourceInfo = SourceInfo {
               traversal, LZ77 match finding). The CPU\u{2019}s branch predictor state from \
               ALL running code affects prediction accuracy for these branches. Pipeline \
               stalls from mispredictions create timing variation.",
-    category: SourceCategory::Novel,
-    platform_requirements: &[],
+    category: SourceCategory::Signal,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1800.0,
     composite: false,
 };
@@ -108,8 +109,9 @@ static HASH_TIMING_INFO: SourceInfo = SourceInfo {
               memory access patterns for the message schedule, cache line alignment, TLB \
               state, and CPU frequency scaling. The timing also captures micro-architectural \
               side effects from other processes.",
-    category: SourceCategory::Novel,
-    platform_requirements: &[],
+    category: SourceCategory::Signal,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -174,7 +176,7 @@ mod tests {
     fn compression_timing_info() {
         let src = CompressionTimingSource;
         assert_eq!(src.name(), "compression_timing");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Signal);
         assert!(!src.info().composite);
     }
 
@@ -182,7 +184,7 @@ mod tests {
     fn hash_timing_info() {
         let src = HashTimingSource;
         assert_eq!(src.name(), "hash_timing");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Signal);
         assert!(!src.info().composite);
     }
 

@@ -7,7 +7,7 @@
 //!
 //! PoC measured H∞ = 7.381 bits/byte — the highest of any discovered source.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
 use std::sync::Arc;
@@ -43,8 +43,9 @@ static DVFS_RACE_INFO: SourceInfo = SourceInfo {
               too short for DVFS transitions (~100\u{00b5}s-1ms); the primary entropy comes \
               from scheduling and cache-coherence nondeterminism. \
               PoC measured H\u{221e} = 7.381 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Microarch,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 5000.0,
     composite: false,
 };
@@ -139,7 +140,7 @@ mod tests {
     fn info() {
         let src = DVFSRaceSource;
         assert_eq!(src.info().name, "dvfs_race");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert!(matches!(src.info().category, SourceCategory::Microarch));
         assert!(!src.info().composite);
     }
 
