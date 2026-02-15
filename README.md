@@ -4,6 +4,8 @@
 
 **Harvest real entropy from hardware noise. Study it raw or condition it for crypto.**
 
+[![Crates.io](https://img.shields.io/crates/v/openentropy-core.svg)](https://crates.io/crates/openentropy-core)
+[![docs.rs](https://docs.rs/openentropy-core/badge.svg)](https://docs.rs/openentropy-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
@@ -22,7 +24,7 @@
 
 ```bash
 # Install
-cargo install --git https://github.com/amenti-labs/openentropy openentropy-cli
+cargo install openentropy-cli
 
 # Discover entropy sources on your machine
 openentropy scan
