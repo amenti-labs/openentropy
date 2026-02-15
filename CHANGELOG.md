@@ -2,6 +2,16 @@
 
 ## 0.4.0 — 2026-02-13
 
+### Source Taxonomy Refactor
+
+- **Replaced 8 ad-hoc categories with 12 mechanism-based categories:** Thermal, Timing, Scheduling, IO, IPC, Microarch, GPU, Network, System, Composite, Signal, Sensor — each named after the physical mechanism that generates the entropy
+- **Added `Platform` enum** (`Any`, `MacOS`, `Linux`) replacing string-based platform requirements
+- **Added `Requirement` enum** (`Metal`, `AudioUnit`, `Wifi`, `Usb`, `Camera`, `AppleSilicon`, `Bluetooth`, `IOKit`, `IOSurface`, `SecurityFramework`) for precise hardware dependency tracking
+- **Updated `SourceInfo` struct:** `platform_requirements: &[&str]` replaced with typed `platform: Platform` and `requirements: &[Requirement]`
+- Updated `SourceInfoSnapshot` to include `platform` and `requirements` fields
+- Updated CLI TUI category display with new short codes (THM, TMG, SCH, I/O, IPC, uAR, GPU, NET, SYS, CMP, SIG, SNS)
+- All 44 sources reclassified by physical mechanism
+
 ### New Frontier Sources (39 → 36 total)
 
 - **`dvfs_race`** — Cross-core DVFS frequency race. Spawns two threads on different CPU cores running tight counting loops; the difference in iteration counts captures physical frequency jitter from independent DVFS controllers. PoC measured H∞ = 7.288 bits/byte — the highest of any discovered source.
@@ -37,7 +47,7 @@ The entire project has been rewritten in Rust as a Cargo workspace with 5 crates
 `openentropy-core`, `openentropy-cli`, `openentropy-server`, `openentropy-tests`, and `openentropy-python`.
 
 ### Highlights
-- **30 entropy sources** across 7 categories (timing, system, network, hardware, silicon, cross-domain, novel), all with SHA-256 conditioning
+- **30 entropy sources** across 8 categories (timing, system, network, hardware, silicon, cross-domain, novel, frontier), all with SHA-256 conditioning
 - **31 NIST SP 800-22 statistical tests** in a dedicated test suite crate
 - **CLI with 9 commands**: `scan`, `probe`, `bench`, `stream`, `device`, `server`, `monitor`, `report`, `pool`
 - **Interactive TUI monitor** built with ratatui — live charts, source toggling, RNG display

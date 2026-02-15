@@ -21,7 +21,7 @@ OpenEntropy serves dual purposes:
 2. **Raw signal research** — Each source can be sampled in `raw` conditioning mode for analysis of hardware nondeterminism, microarchitectural side channels, and cross-domain timing phenomena. The `research/poc/` directory contains independent C validation programs and a quality audit (`quality_audit.md`) with per-source H∞, autocorrelation, and cross-correlation measurements.
 
 Key research artifacts:
-- `research/poc/quality_audit.md` — Independent validation of all frontier/novel/silicon/cross-domain sources
+- `research/poc/quality_audit.md` — Independent validation of all thermal/timing/microarch/composite sources
 - `research/poc/validate_*.c` — 23 standalone C programs for reproducible entropy measurement
 - `research/poc/thermal_*.c` — 7 thermal noise PoC programs (audio ADC, SMC, DRAM, denormal, PLL, USB, instruction)
 - `research/poc/unprecedented_*.c/.m` — 8 unprecedented entropy PoC programs (convection, NVMe, ANE, GPU, PDN, IOSurface, quantum, fsync)
@@ -48,14 +48,18 @@ Note: `.cargo/config.toml` sets `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` automati
 - **265 tests, 0 clippy warnings.** Keep it that way.
 
 ## Source Categories
-- **Timing** (3): clock_jitter, mach_timing, sleep_jitter
+- **Thermal** (3): denormal_timing, audio_pll_timing, pdn_resonance
+- **Timing** (7): clock_jitter, mach_timing, memory_timing, dram_row_buffer, cache_contention, page_fault_timing, vm_page_timing
+- **Scheduling** (3): sleep_jitter, dispatch_queue, thread_lifecycle
+- **IO** (4): disk_io, nvme_latency, usb_timing, fsync_journal
+- **IPC** (4): mach_ipc, pipe_buffer, kqueue_events, keychain_timing
+- **Microarch** (5): speculative_execution, dvfs_race, cas_contention, tlb_shootdown, amx_timing
+- **GPU** (3): gpu_timing, gpu_divergence, iosurface_crossing
+- **Network** (3): dns_timing, tcp_connect_timing, wifi_rssi
 - **System** (4): sysctl_deltas, vmstat_deltas, process_table, ioregistry
-- **Network** (2): dns_timing, tcp_connect_timing
-- **Hardware** (7): disk_io, memory_timing, gpu_timing, bluetooth_noise, audio_noise, camera_noise, wifi_rssi
-- **Silicon** (4): dram_row_buffer, cache_contention, page_fault_timing, speculative_execution
-- **Cross-Domain** (2): cpu_io_beat, cpu_memory_beat
-- **Novel** (5): compression_timing, hash_timing, dispatch_queue, vm_page_timing, spotlight_timing
-- **Frontier** (17): amx_timing, thread_lifecycle, mach_ipc, tlb_shootdown, pipe_buffer, kqueue_events, dvfs_race, cas_contention, keychain_timing, denormal_timing, audio_pll_timing, usb_timing, nvme_latency, gpu_divergence, pdn_resonance, iosurface_crossing, fsync_journal
+- **Composite** (2): cpu_io_beat, cpu_memory_beat
+- **Signal** (3): compression_timing, hash_timing, spotlight_timing
+- **Sensor** (3): audio_noise, camera_noise, bluetooth_noise
 
 ## Adding a New Source
 1. Create `crates/openentropy-core/src/sources/your_source.rs`
