@@ -21,7 +21,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::conditioning::{quick_min_entropy, quick_shannon, ConditioningMode};
+use crate::conditioning::{ConditioningMode, quick_min_entropy, quick_shannon};
 
 // ---------------------------------------------------------------------------
 // Machine info
@@ -72,9 +72,11 @@ fn os_version() -> Option<String> {
         std::fs::read_to_string("/etc/os-release")
             .ok()
             .and_then(|s| {
-                s.lines()
-                    .find(|l| l.starts_with("PRETTY_NAME="))
-                    .map(|l| l.trim_start_matches("PRETTY_NAME=").trim_matches('"').to_string())
+                s.lines().find(|l| l.starts_with("PRETTY_NAME=")).map(|l| {
+                    l.trim_start_matches("PRETTY_NAME=")
+                        .trim_matches('"')
+                        .to_string()
+                })
             })
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -192,9 +194,7 @@ impl SessionWriter {
         let started_at = SystemTime::now();
 
         // Build directory name: {timestamp}-{source_names}
-        let ts = started_at
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
+        let ts = started_at.duration_since(UNIX_EPOCH).unwrap_or_default();
         let dt = format_iso8601_compact(ts);
         let sources_slug = config.sources.join("-");
         let dir_name = format!("{}-{}", dt, sources_slug);
@@ -205,7 +205,10 @@ impl SessionWriter {
         // Create samples.csv with header
         let csv_file = File::create(session_dir.join("samples.csv"))?;
         let mut csv_writer = BufWriter::new(csv_file);
-        writeln!(csv_writer, "timestamp_ns,source,value_hex,shannon,min_entropy")?;
+        writeln!(
+            csv_writer,
+            "timestamp_ns,source,value_hex,shannon,min_entropy"
+        )?;
         csv_writer.flush()?;
 
         // Create raw.bin
@@ -238,11 +241,7 @@ impl SessionWriter {
     }
 
     /// Record a single sample from a source.
-    pub fn write_sample(
-        &mut self,
-        source: &str,
-        raw_bytes: &[u8],
-    ) -> std::io::Result<()> {
+    pub fn write_sample(&mut self, source: &str, raw_bytes: &[u8]) -> std::io::Result<()> {
         let timestamp_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -277,7 +276,10 @@ impl SessionWriter {
 
         self.raw_offset += raw_bytes.len() as u64;
         self.total_samples += 1;
-        *self.samples_per_source.entry(source.to_string()).or_insert(0) += 1;
+        *self
+            .samples_per_source
+            .entry(source.to_string())
+            .or_insert(0) += 1;
 
         Ok(())
     }
@@ -300,9 +302,7 @@ impl SessionWriter {
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default(),
             ),
-            ended_at: format_iso8601(
-                ended_at.duration_since(UNIX_EPOCH).unwrap_or_default(),
-            ),
+            ended_at: format_iso8601(ended_at.duration_since(UNIX_EPOCH).unwrap_or_default()),
             duration_ms: duration.as_millis() as u64,
             sources: self.config.sources.clone(),
             conditioning: self.config.conditioning.to_string(),
@@ -316,7 +316,7 @@ impl SessionWriter {
         };
 
         let json = serde_json::to_string_pretty(&meta)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         fs::write(self.session_dir.join("session.json"), json)?;
 
         Ok(self.session_dir.clone())
@@ -418,7 +418,7 @@ fn secs_to_utc(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
 }
 
 fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +524,10 @@ mod tests {
         // Check CSV
         let csv = std::fs::read_to_string(dir.join("samples.csv")).unwrap();
         let lines: Vec<&str> = csv.lines().collect();
-        assert_eq!(lines[0], "timestamp_ns,source,value_hex,shannon,min_entropy");
+        assert_eq!(
+            lines[0],
+            "timestamp_ns,source,value_hex,shannon,min_entropy"
+        );
         assert_eq!(lines.len(), 3); // header + 2 samples
         assert!(lines[1].contains("mock_source"));
 

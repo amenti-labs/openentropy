@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use openentropy_core::session::{SessionConfig, SessionWriter};
@@ -34,10 +34,10 @@ pub fn run(
     }
 
     // Parse duration
-    let max_duration = duration.map(|d| parse_duration(d));
+    let max_duration = duration.map(parse_duration);
 
     // Parse interval
-    let interval_dur = interval.map(|i| parse_duration(i));
+    let interval_dur = interval.map(parse_duration);
 
     // Parse tags
     let mut tag_map = HashMap::new();
@@ -106,10 +106,10 @@ pub fn run(
 
     while running.load(Ordering::SeqCst) {
         // Check duration limit
-        if let Some(max) = max_duration {
-            if start.elapsed() >= max {
-                break;
-            }
+        if let Some(max) = max_duration
+            && start.elapsed() >= max
+        {
+            break;
         }
 
         // Collect from each source
