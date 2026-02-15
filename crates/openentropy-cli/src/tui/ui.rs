@@ -12,14 +12,18 @@ use ratatui::{prelude::*, widgets::*};
 // ---------------------------------------------------------------------------
 
 const CATEGORIES: &[(&str, &str, &str)] = &[
+    ("thermal", "THM", "Thermal"),
     ("timing", "TMG", "Timing"),
-    ("system", "SYS", "System"),
+    ("scheduling", "SCH", "Scheduling"),
+    ("io", "I/O", "I/O"),
+    ("ipc", "IPC", "IPC"),
+    ("microarch", "uAR", "Microarch"),
+    ("gpu", "GPU", "GPU"),
     ("network", "NET", "Network"),
-    ("hardware", "HW", "Hardware"),
-    ("silicon", "SI", "Silicon"),
-    ("cross_domain", "XD", "Cross-Domain"),
-    ("novel", "NOV", "Novel"),
-    ("frontier", "FRN", "Frontier"),
+    ("system", "SYS", "System"),
+    ("composite", "CMP", "Composite"),
+    ("signal", "SIG", "Signal"),
+    ("sensor", "SNS", "Sensor"),
 ];
 
 fn short_cat(cat: &str) -> &'static str {
@@ -94,7 +98,7 @@ fn draw_placeholder(f: &mut Frame, area: Rect, title: String, message: &str) {
 // Main draw entry point
 // ---------------------------------------------------------------------------
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let snap = app.snapshot();
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -180,7 +184,7 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // Main area (sources + info + chart)
 // ---------------------------------------------------------------------------
 
-fn draw_main(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
+fn draw_main(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
@@ -201,7 +205,7 @@ fn draw_main(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // Source list
 // ---------------------------------------------------------------------------
 
-fn draw_source_list(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
+fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     let names = app.source_names();
     let cats = app.source_categories();
 
@@ -267,13 +271,14 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         ],
     )
     .header(header)
+    .row_highlight_style(Style::default()) // cursor styling is manual (per-row)
     .block(
         Block::default()
             .borders(Borders::ALL)
             .title(" Sources (space to select) "),
     );
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, app.table_state_mut());
 }
 
 // ---------------------------------------------------------------------------
@@ -573,13 +578,18 @@ mod tests {
 
     #[test]
     fn short_cat_maps_all_known_categories() {
+        assert_eq!(short_cat("thermal"), "THM");
         assert_eq!(short_cat("timing"), "TMG");
-        assert_eq!(short_cat("system"), "SYS");
+        assert_eq!(short_cat("scheduling"), "SCH");
+        assert_eq!(short_cat("io"), "I/O");
+        assert_eq!(short_cat("ipc"), "IPC");
+        assert_eq!(short_cat("microarch"), "uAR");
+        assert_eq!(short_cat("gpu"), "GPU");
         assert_eq!(short_cat("network"), "NET");
-        assert_eq!(short_cat("hardware"), "HW");
-        assert_eq!(short_cat("silicon"), "SI");
-        assert_eq!(short_cat("cross_domain"), "XD");
-        assert_eq!(short_cat("novel"), "NOV");
+        assert_eq!(short_cat("system"), "SYS");
+        assert_eq!(short_cat("composite"), "CMP");
+        assert_eq!(short_cat("signal"), "SIG");
+        assert_eq!(short_cat("sensor"), "SNS");
     }
 
     #[test]
@@ -591,13 +601,18 @@ mod tests {
 
     #[test]
     fn display_cat_maps_all_known_categories() {
+        assert_eq!(display_cat("thermal"), "Thermal");
         assert_eq!(display_cat("timing"), "Timing");
-        assert_eq!(display_cat("system"), "System");
+        assert_eq!(display_cat("scheduling"), "Scheduling");
+        assert_eq!(display_cat("io"), "I/O");
+        assert_eq!(display_cat("ipc"), "IPC");
+        assert_eq!(display_cat("microarch"), "Microarch");
+        assert_eq!(display_cat("gpu"), "GPU");
         assert_eq!(display_cat("network"), "Network");
-        assert_eq!(display_cat("hardware"), "Hardware");
-        assert_eq!(display_cat("silicon"), "Silicon");
-        assert_eq!(display_cat("cross_domain"), "Cross-Domain");
-        assert_eq!(display_cat("novel"), "Novel");
+        assert_eq!(display_cat("system"), "System");
+        assert_eq!(display_cat("composite"), "Composite");
+        assert_eq!(display_cat("signal"), "Signal");
+        assert_eq!(display_cat("sensor"), "Sensor");
     }
 
     #[test]

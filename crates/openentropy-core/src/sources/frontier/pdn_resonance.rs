@@ -9,7 +9,7 @@
 //!
 //! PoC measured H∞ ≈ 1.6 bits/byte under multi-core stress.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Number of iterations per timing measurement.
@@ -25,8 +25,9 @@ static PDN_RESONANCE_INFO: SourceInfo = SourceInfo {
               and cross-core power supply coupling. Each measurement thread combination \
               creates a different current profile exciting different PDN modes. \
               PoC measured H\u{221e} \u{2248} 1.6 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Thermal,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 500.0,
     composite: false,
 };
@@ -115,7 +116,7 @@ mod tests {
     fn info() {
         let src = PDNResonanceSource;
         assert_eq!(src.name(), "pdn_resonance");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Thermal);
         assert!(!src.info().composite);
     }
 

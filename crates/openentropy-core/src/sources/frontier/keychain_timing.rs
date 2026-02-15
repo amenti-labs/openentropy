@@ -1,7 +1,7 @@
 //! Keychain/securityd IPC timing — entropy from the Security framework's
 //! multi-domain round-trip through securityd, SEP, and APFS.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::mach_time;
 
 use super::extract_timing_entropy_variance;
@@ -72,8 +72,9 @@ static KEYCHAIN_TIMING_INFO: SourceInfo = SourceInfo {
               switches) contributes independent jitter. Variance extraction removes serial \
               correlation (lag-1 autocorrelation ~0.43 in raw timings). First 500 samples \
               discarded to avoid warm-up transient from securityd cold caches.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::IPC,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::SecurityFramework],
     entropy_rate_estimate: 6500.0,
     composite: false,
 };
@@ -130,8 +131,8 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
         fn CFDictionaryCreateMutable(
             alloc: CFAllocatorRef,
             capacity: isize,
-            keyCallBacks: *const CFDictionaryKeyCallBacks,
-            valueCallBacks: *const CFDictionaryValueCallBacks,
+            keyCallBacks: *const std::ffi::c_void,
+            valueCallBacks: *const std::ffi::c_void,
         ) -> CFMutableDictionaryRef;
         fn CFDictionarySetValue(
             dict: CFMutableDictionaryRef,
@@ -180,8 +181,8 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
         let add_dict = CFDictionaryCreateMutable(
             std::ptr::null(),
             0,
-            &kCFTypeDictionaryKeyCallBacks as *const _,
-            &kCFTypeDictionaryValueCallBacks as *const _,
+            &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
+            &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
         );
         CFDictionarySetValue(add_dict, kSecClass as _, kSecClassGenericPassword as _);
         CFDictionarySetValue(add_dict, kSecAttrLabel as _, label_cf as _);
@@ -196,8 +197,8 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
         let del_dict = CFDictionaryCreateMutable(
             std::ptr::null(),
             0,
-            &kCFTypeDictionaryKeyCallBacks as *const _,
-            &kCFTypeDictionaryValueCallBacks as *const _,
+            &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
+            &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
         );
         CFDictionarySetValue(del_dict, kSecClass as _, kSecClassGenericPassword as _);
         CFDictionarySetValue(del_dict, kSecAttrLabel as _, label_cf as _);
@@ -208,8 +209,8 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
         let query = CFDictionaryCreateMutable(
             std::ptr::null(),
             0,
-            &kCFTypeDictionaryKeyCallBacks as *const _,
-            &kCFTypeDictionaryValueCallBacks as *const _,
+            &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
+            &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
         );
         CFDictionarySetValue(query, kSecClass as _, kSecClassGenericPassword as _);
         CFDictionarySetValue(query, kSecAttrLabel as _, label_cf as _);
@@ -278,8 +279,8 @@ fn collect_write_path(n_samples: usize) -> Vec<u8> {
         fn CFDictionaryCreateMutable(
             alloc: CFAllocatorRef,
             capacity: isize,
-            keyCallBacks: *const CFDictionaryKeyCallBacks,
-            valueCallBacks: *const CFDictionaryValueCallBacks,
+            keyCallBacks: *const std::ffi::c_void,
+            valueCallBacks: *const std::ffi::c_void,
         ) -> CFMutableDictionaryRef;
         fn CFDictionarySetValue(
             dict: CFMutableDictionaryRef,
@@ -331,8 +332,8 @@ fn collect_write_path(n_samples: usize) -> Vec<u8> {
             let attrs = CFDictionaryCreateMutable(
                 std::ptr::null(),
                 0,
-                &kCFTypeDictionaryKeyCallBacks as *const _,
-                &kCFTypeDictionaryValueCallBacks as *const _,
+                &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
+                &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
             );
             CFDictionarySetValue(attrs, kSecClass as _, kSecClassGenericPassword as _);
             CFDictionarySetValue(attrs, kSecAttrLabel as _, label_cf as _);
@@ -356,8 +357,8 @@ fn collect_write_path(n_samples: usize) -> Vec<u8> {
             let del = CFDictionaryCreateMutable(
                 std::ptr::null(),
                 0,
-                &kCFTypeDictionaryKeyCallBacks as *const _,
-                &kCFTypeDictionaryValueCallBacks as *const _,
+                &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
+                &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
             );
             CFDictionarySetValue(del, kSecClass as _, kSecClassGenericPassword as _);
             CFDictionarySetValue(del, kSecAttrLabel as _, label_cf as _);
@@ -381,7 +382,7 @@ mod tests {
     fn info() {
         let src = KeychainTimingSource::default();
         assert_eq!(src.name(), "keychain_timing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IPC);
         assert!(!src.info().composite);
     }
 

@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::extract_timing_entropy;
 
@@ -23,8 +23,9 @@ static DISPATCH_QUEUE_INFO: SourceInfo = SourceInfo {
               E-cores (efficiency) based on thermal state and load. The migration decisions, \
               queue priority inversions, and QoS tier scheduling create non-deterministic \
               dispatch timing.",
-    category: SourceCategory::Novel,
-    platform_requirements: &[],
+    category: SourceCategory::Scheduling,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -102,8 +103,9 @@ static VM_PAGE_TIMING_INFO: SourceInfo = SourceInfo {
               (IPI interrupt), and physical page management. The timing depends on: \
               VM map fragmentation, physical memory pressure, and cross-core \
               synchronization latency.",
-    category: SourceCategory::Novel,
-    platform_requirements: &[],
+    category: SourceCategory::Timing,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1300.0,
     composite: false,
 };
@@ -193,8 +195,9 @@ static SPOTLIGHT_TIMING_INFO: SourceInfo = SourceInfo {
               on: index size, disk cache residency, concurrent indexing activity, and \
               filesystem metadata state. When Spotlight is actively indexing new files, \
               query latency becomes highly variable.",
-    category: SourceCategory::Novel,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Signal,
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 800.0,
     composite: false,
 };
@@ -269,7 +272,7 @@ mod tests {
     fn dispatch_queue_info() {
         let src = DispatchQueueSource;
         assert_eq!(src.name(), "dispatch_queue");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Scheduling);
         assert!((src.info().entropy_rate_estimate - 1500.0).abs() < f64::EPSILON);
     }
 
@@ -287,7 +290,7 @@ mod tests {
     fn vm_page_timing_info() {
         let src = VMPageTimingSource;
         assert_eq!(src.name(), "vm_page_timing");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Timing);
         assert!((src.info().entropy_rate_estimate - 1300.0).abs() < f64::EPSILON);
     }
 
@@ -306,7 +309,7 @@ mod tests {
     fn spotlight_timing_info() {
         let src = SpotlightTimingSource;
         assert_eq!(src.name(), "spotlight_timing");
-        assert_eq!(src.info().category, SourceCategory::Novel);
+        assert_eq!(src.info().category, SourceCategory::Signal);
         assert!((src.info().entropy_rate_estimate - 800.0).abs() < f64::EPSILON);
     }
 

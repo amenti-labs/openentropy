@@ -7,7 +7,7 @@
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 // ---------------------------------------------------------------------------
 // ClockJitterSource
@@ -29,7 +29,8 @@ static CLOCK_JITTER_INFO: SourceInfo = SourceInfo {
               the LSBs of their difference are genuine analog entropy from \
               crystal oscillator physics.",
     category: SourceCategory::Timing,
-    platform_requirements: &[],
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 0.5,
     composite: false,
 };
@@ -84,7 +85,8 @@ static MACH_TIMING_INFO: SourceInfo = SourceInfo {
               prediction, cache state, interrupt coalescing, and power-state \
               transitions.",
     category: SourceCategory::Timing,
-    platform_requirements: &["macOS"],
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 0.3,
     composite: false,
 };
@@ -146,8 +148,9 @@ static SLEEP_JITTER_INFO: SourceInfo = SourceInfo {
               captures OS scheduler non-determinism: timer interrupt granularity (1-4ms), \
               thread priority decisions, runqueue length, and thermal-dependent clock \
               frequency scaling (DVFS).",
-    category: SourceCategory::Timing,
-    platform_requirements: &[],
+    category: SourceCategory::Scheduling,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 0.4,
     composite: false,
 };
@@ -239,7 +242,7 @@ mod tests {
     fn source_info_categories() {
         assert_eq!(ClockJitterSource.info().category, SourceCategory::Timing);
         assert_eq!(MachTimingSource.info().category, SourceCategory::Timing);
-        assert_eq!(SleepJitterSource.info().category, SourceCategory::Timing);
+        assert_eq!(SleepJitterSource.info().category, SourceCategory::Scheduling);
         assert!(!ClockJitterSource.info().composite);
         assert!(!MachTimingSource.info().composite);
         assert!(!SleepJitterSource.info().composite);

@@ -1,6 +1,6 @@
 //! AMX coprocessor timing — entropy from the Apple Matrix eXtensions unit.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 use super::extract_timing_entropy_debiased;
@@ -105,8 +105,9 @@ static AMX_TIMING_INFO: SourceInfo = SourceInfo {
               memory bandwidth contention, AMX power state transitions, and SLC cache state. \
               Von Neumann debiasing corrects heavy LSB bias. Interleaved memory operations \
               disrupt pipeline steady-state for higher min-entropy.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::Microarch,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::AppleSilicon],
     entropy_rate_estimate: 2500.0,
     composite: false,
 };
@@ -232,7 +233,7 @@ mod tests {
     fn info() {
         let src = AMXTimingSource::default();
         assert_eq!(src.name(), "amx_timing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Microarch);
         assert!(!src.info().composite);
     }
 

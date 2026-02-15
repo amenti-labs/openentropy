@@ -53,7 +53,7 @@ pub use conditioning::{
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
-pub use source::{EntropySource, SourceCategory, SourceInfo};
+pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 /// Library version (from Cargo.toml).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

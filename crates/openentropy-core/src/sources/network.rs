@@ -8,7 +8,7 @@ use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 // ---------------------------------------------------------------------------
 // DNS timing source
@@ -38,7 +38,8 @@ static DNS_TIMING_INFO: SourceInfo = SourceInfo {
               ISP congestion, DNS server load, TCP/IP stack scheduling, NIC \
               interrupt coalescing, and electromagnetic propagation variations.",
     category: SourceCategory::Network,
-    platform_requirements: &[],
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 100.0,
     composite: false,
 };
@@ -197,7 +198,8 @@ static TCP_CONNECT_INFO: SourceInfo = SourceInfo {
               buffer allocation, remote server load, network path congestion, \
               and router queuing delays.",
     category: SourceCategory::Network,
-    platform_requirements: &[],
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 50.0,
     composite: false,
 };

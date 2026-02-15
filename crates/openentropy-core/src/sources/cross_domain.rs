@@ -8,7 +8,7 @@ use std::io::Write;
 
 use tempfile::NamedTempFile;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::{extract_timing_entropy, mach_time};
 
@@ -24,8 +24,9 @@ static CPU_IO_BEAT_INFO: SourceInfo = SourceInfo {
               with separate PLLs. When operations cross domains, the beat frequency of their \
               PLLs creates timing jitter. This is analogous to the acoustic beat frequency \
               between two tuning forks.",
-    category: SourceCategory::CrossDomain,
-    platform_requirements: &[],
+    category: SourceCategory::Composite,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -98,8 +99,9 @@ static CPU_MEMORY_BEAT_INFO: SourceInfo = SourceInfo {
               force the CPU to wait for the memory controller\u{2019}s arbitration, whose timing \
               depends on: DRAM refresh state, competing DMA from GPU/ANE, and row buffer \
               conflicts.",
-    category: SourceCategory::CrossDomain,
-    platform_requirements: &[],
+    category: SourceCategory::Composite,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2500.0,
     composite: false,
 };
@@ -172,7 +174,7 @@ mod tests {
     fn cpu_io_beat_info() {
         let src = CPUIOBeatSource;
         assert_eq!(src.name(), "cpu_io_beat");
-        assert_eq!(src.info().category, SourceCategory::CrossDomain);
+        assert_eq!(src.info().category, SourceCategory::Composite);
         assert!((src.info().entropy_rate_estimate - 1500.0).abs() < f64::EPSILON);
     }
 
@@ -190,7 +192,7 @@ mod tests {
     fn cpu_memory_beat_info() {
         let src = CPUMemoryBeatSource;
         assert_eq!(src.name(), "cpu_memory_beat");
-        assert_eq!(src.info().category, SourceCategory::CrossDomain);
+        assert_eq!(src.info().category, SourceCategory::Composite);
         assert!((src.info().entropy_rate_estimate - 2500.0).abs() < f64::EPSILON);
     }
 

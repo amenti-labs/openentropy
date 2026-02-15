@@ -15,7 +15,7 @@
 //!
 //! PoC measured H∞ ≈ 7.97 bits/byte for memory divergence — near perfect.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time, xor_fold_u64};
 
 static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
@@ -28,8 +28,9 @@ static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
               frequency variation, and warp scheduler arbitration. Each dispatch produces \
               a different execution ordering due to physical nondeterminism in the GPU. \
               PoC measured H\u{221e} \u{2248} 7.97 bits/byte \u{2014} near perfect entropy.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::GPU,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::Metal],
     entropy_rate_estimate: 6000.0,
     composite: false,
 };
@@ -399,7 +400,7 @@ mod tests {
     fn info() {
         let src = GPUDivergenceSource;
         assert_eq!(src.name(), "gpu_divergence");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::GPU);
         assert!(!src.info().composite);
     }
 

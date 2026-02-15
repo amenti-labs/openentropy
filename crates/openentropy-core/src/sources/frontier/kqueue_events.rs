@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Configuration for kqueue events entropy collection.
@@ -115,8 +115,9 @@ static KQUEUE_EVENTS_INFO: SourceInfo = SourceInfo {
               paths. Socket events capture mbuf allocator timing. Multiple simultaneous watchers \
               create knote lock contention and dispatch queue interference. The combination of \
               independent event sources produces high min-entropy.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::IPC,
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 2500.0,
     composite: false,
 };
@@ -338,7 +339,7 @@ mod tests {
     fn info() {
         let src = KqueueEventsSource::default();
         assert_eq!(src.name(), "kqueue_events");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IPC);
         assert!(!src.info().composite);
     }
 

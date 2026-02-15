@@ -11,7 +11,7 @@
 //!
 //! PoC measured H∞ ≈ 3.7 bits/byte for USB device property queries.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
 
 static USB_TIMING_INFO: SourceInfo = SourceInfo {
@@ -24,8 +24,9 @@ static USB_TIMING_INFO: SourceInfo = SourceInfo {
               and oscillator circuit thermal fluctuations. Timing jitter also includes USB \
               bus arbitration contention. \
               PoC measured H\u{221e} \u{2248} 3.7 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::IO,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::Usb, Requirement::IOKit],
     entropy_rate_estimate: 1500.0,
     composite: false,
 };
@@ -221,7 +222,7 @@ mod tests {
     fn info() {
         let src = USBTimingSource;
         assert_eq!(src.name(), "usb_timing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IO);
         assert!(!src.info().composite);
     }
 

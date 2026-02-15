@@ -2,7 +2,7 @@
 
 use std::thread;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Harvests timing jitter from thread creation and destruction.
@@ -39,8 +39,9 @@ static THREAD_LIFECYCLE_INFO: SourceInfo = SourceInfo {
               CPU core selection (P-core vs E-core), stack page allocation, TLS setup, and \
               context switch on join. The scheduler\u{2019}s core selection depends on thermal \
               state, load from ALL processes, and QoS priorities.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::Scheduling,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 3000.0,
     composite: false,
 };
@@ -88,7 +89,7 @@ mod tests {
     fn info() {
         let src = ThreadLifecycleSource;
         assert_eq!(src.name(), "thread_lifecycle");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::Scheduling);
         assert!(!src.info().composite);
     }
 

@@ -17,7 +17,7 @@
 
 use std::io::Write;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
 
 static FSYNC_JOURNAL_INFO: SourceInfo = SourceInfo {
@@ -31,8 +31,9 @@ static FSYNC_JOURNAL_INFO: SourceInfo = SourceInfo {
               (controller firmware scheduling). Every layer contributes independent \
               timing noise from physically distinct sources. \
               PoC measured H\u{221e} \u{2248} 7.1 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::IO,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 2000.0,
     composite: false,
 };
@@ -97,7 +98,7 @@ mod tests {
     fn info() {
         let src = FsyncJournalSource;
         assert_eq!(src.name(), "fsync_journal");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IO);
         assert!(!src.info().composite);
     }
 

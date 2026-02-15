@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use tempfile::NamedTempFile;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 /// Path to the sips binary on macOS.
 const SIPS_PATH: &str = "/usr/bin/sips";
@@ -23,8 +23,9 @@ static GPU_TIMING_INFO: SourceInfo = SourceInfo {
               memory bank conflicts, warp/wavefront scheduling, power throttling, and memory \
               controller arbitration between GPU cores, CPU, and Neural Engine on Apple \
               Silicon's unified memory.",
-    category: SourceCategory::Hardware,
-    platform_requirements: &["macos"],
+    category: SourceCategory::GPU,
+    platform: Platform::MacOS,
+    requirements: &[],
     entropy_rate_estimate: 300.0,
     composite: false,
 };
@@ -167,7 +168,7 @@ mod tests {
     fn gpu_timing_info() {
         let src = GPUTimingSource;
         assert_eq!(src.name(), "gpu_timing");
-        assert_eq!(src.info().category, SourceCategory::Hardware);
+        assert_eq!(src.info().category, SourceCategory::GPU);
     }
 
     #[test]

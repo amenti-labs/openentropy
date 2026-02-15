@@ -15,7 +15,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::Instant;
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
 
 /// Number of distinct offsets to cycle through (hitting different NAND pages).
@@ -35,8 +35,9 @@ static NVME_LATENCY_INFO: SourceInfo = SourceInfo {
               and interrupt delivery latency. Note: freshly-written data typically resides \
               in SSD DRAM cache, not NAND cells. \
               PoC measured H\u{221e} \u{2248} 2.3 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &[],
+    category: SourceCategory::IO,
+    platform: Platform::Any,
+    requirements: &[],
     entropy_rate_estimate: 1000.0,
     composite: false,
 };
@@ -115,7 +116,7 @@ mod tests {
     fn info() {
         let src = NVMeLatencySource;
         assert_eq!(src.name(), "nvme_latency");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::IO);
         assert!(!src.info().composite);
     }
 

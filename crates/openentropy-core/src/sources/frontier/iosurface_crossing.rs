@@ -12,7 +12,7 @@
 //!
 //! PoC measured H∞ ≈ 7.4 bits/byte for round-trip CPU→GPU→CPU timing.
 
-use crate::source::{EntropySource, SourceCategory, SourceInfo};
+use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
@@ -26,8 +26,9 @@ static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
               The combined multi-domain crossing creates high entropy from physically \
               independent noise sources. \
               PoC measured H\u{221e} \u{2248} 7.4 bits/byte.",
-    category: SourceCategory::Frontier,
-    platform_requirements: &["macos"],
+    category: SourceCategory::GPU,
+    platform: Platform::MacOS,
+    requirements: &[Requirement::IOSurface],
     entropy_rate_estimate: 3000.0,
     composite: false,
 };
@@ -266,7 +267,7 @@ mod tests {
     fn info() {
         let src = IOSurfaceCrossingSource;
         assert_eq!(src.name(), "iosurface_crossing");
-        assert_eq!(src.info().category, SourceCategory::Frontier);
+        assert_eq!(src.info().category, SourceCategory::GPU);
         assert!(!src.info().composite);
     }
 
