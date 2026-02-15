@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" alt="openentropy logo" width="200">
+
 # openentropy
 
 **Harvest real entropy from hardware noise. Study it raw or condition it for crypto.**
@@ -10,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*44 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*45 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -107,7 +109,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 44 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 45 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -121,15 +123,16 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-44 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+45 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
-### Thermal (3)
+### Thermal (4)
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `denormal_timing` | 1.031 | <0.01s | Denormal FPU micropower thermal noise |
 | `audio_pll_timing` | 7.795 | 0.08s | Audio PLL clock drift from thermal perturbation |
 | `pdn_resonance` | 0.861 | <0.01s | Power delivery network LC resonance noise |
+| `counter_beat` | 7.796 | 0.39s | Two-oscillator beat: CPU counter vs audio PLL crystal |
 
 ### Timing (7)
 
@@ -349,7 +352,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (44) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -364,7 +367,7 @@ Sources (44) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **44/44** | Full suite — WiFi, BLE, camera, mic |
+| **MacBook (M-series)** | **45/45** | Full suite — WiFi, BLE, camera, mic |
 | **Mac Mini / Studio / Pro** | 39–41 | No built-in camera, mic on some models |
 | **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
 | **Linux** | 10–15 | Timing, network, disk, process sources |
