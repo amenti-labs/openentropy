@@ -50,6 +50,10 @@ serde_json = "1"
 # Python
 pyo3 = { version = "0.23", features = ["extension-module"] }
 
+# Session recording
+uuid = { version = "1", features = ["v4"] }
+ctrlc = "3"
+
 # Testing
 statrs = "0.18"
 rustfft = "6"

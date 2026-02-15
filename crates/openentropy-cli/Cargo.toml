@@ -24,3 +24,6 @@ crossterm = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 libc = { workspace = true }
+uuid = { workspace = true }
+ctrlc = { workspace = true }
+serde = { workspace = true }

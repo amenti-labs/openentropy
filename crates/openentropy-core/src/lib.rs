@@ -44,6 +44,7 @@
 pub mod conditioning;
 pub mod platform;
 pub mod pool;
+pub mod session;
 pub mod source;
 pub mod sources;
 
@@ -53,6 +54,7 @@ pub use conditioning::{
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
+pub use session::{MachineInfo, SessionConfig, SessionMeta, SessionWriter, detect_machine_info};
 pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 /// Library version (from Cargo.toml).
