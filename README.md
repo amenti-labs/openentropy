@@ -105,7 +105,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCE_CATALOG.md) | All 44 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 44 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -225,7 +225,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 | `camera_noise` | — | — | Image sensor dark current noise *(requires camera)* |
 | `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
 
-Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
+Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
 
 ---
 
