@@ -1,14 +1,14 @@
-//! NVMe flash cell read latency — NAND physics entropy.
+//! NVMe I/O stack timing — storage controller scheduling entropy.
 //!
-//! NVMe SSDs have NAND flash cells whose read latency depends on:
-//! - Charge state of neighboring cells (cross-coupling)
-//! - Number of program/erase cycles (oxide wear)
-//! - Temperature-dependent charge retention
-//! - Read disturb effects from prior reads
-//! - SSD internal garbage collection nondeterminism
+//! Each read with F_NOCACHE (bypassing OS buffer cache) traverses:
+//! - Filesystem metadata lookup and block mapping
+//! - NVMe command submission and completion queue arbitration
+//! - SSD controller DRAM cache lookup and scheduling
+//! - SSD internal firmware scheduling (garbage collection, wear leveling)
 //!
-//! By reading from multiple offsets with F_NOCACHE (bypassing buffer cache),
-//! we capture flash cell physics variance.
+//! Note: the file is freshly written, so data typically resides in the SSD's
+//! internal DRAM cache rather than NAND cells. The entropy comes from I/O
+//! stack scheduling nondeterminism, not NAND cell physics.
 //!
 //! PoC measured H∞ ≈ 2.3 bits/byte for multi-offset reads.
 
@@ -26,12 +26,14 @@ const BLOCK_SIZE: usize = 4096;
 
 static NVME_LATENCY_INFO: SourceInfo = SourceInfo {
     name: "nvme_latency",
-    description: "NVMe flash cell read latency jitter from NAND physics",
-    physics: "Reads the same file at multiple offsets with buffer cache bypassed (F_NOCACHE). \
-              Each read traverses NVMe controller \u{2192} NAND flash translation layer \u{2192} \
-              physical cell read. Timing jitter arises from: NAND cell charge state variation, \
-              neighboring cell cross-coupling, oxide wear from P/E cycles, temperature-dependent \
-              charge retention, read disturb effects, and SSD-internal garbage collection. \
+    description: "NVMe I/O stack timing jitter from storage controller scheduling",
+    physics: "Reads a file at multiple offsets with OS buffer cache bypassed (F_NOCACHE). \
+              Each read traverses: filesystem metadata lookup \u{2192} NVMe command queue \
+              submission \u{2192} SSD controller DRAM cache \u{2192} completion interrupt. \
+              Timing jitter arises from NVMe command queue arbitration, SSD controller \
+              firmware scheduling (garbage collection, wear leveling background tasks), \
+              and interrupt delivery latency. Note: freshly-written data typically resides \
+              in SSD DRAM cache, not NAND cells. \
               PoC measured H\u{221e} \u{2248} 2.3 bits/byte.",
     category: SourceCategory::Frontier,
     platform_requirements: &[],

@@ -16,7 +16,7 @@
 //! PoC measured H∞ ≈ 7.97 bits/byte for memory divergence — near perfect.
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
-use crate::sources::helpers::{mach_time, xor_fold_u64};
+use crate::sources::helpers::{extract_timing_entropy, mach_time, xor_fold_u64};
 
 static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
     name: "gpu_divergence",
@@ -351,12 +351,11 @@ impl EntropySource for GPUDivergenceSource {
             };
 
             let raw_count = n_samples * 4 + 64;
-            let mut output: Vec<u8> = Vec::with_capacity(n_samples);
-            let mut prev_folded: Option<u8> = None;
-            let mut counter: u64 = 0;
+            let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
+            let mut gpu_entropy: Vec<u8> = Vec::with_capacity(raw_count);
 
             for _ in 0..raw_count {
-                counter = counter.wrapping_add(1);
+                let t0 = mach_time();
 
                 // GPU dispatch crosses CPU→GPU→CPU clock domains.
                 let results = match state.dispatch() {
@@ -364,28 +363,26 @@ impl EntropySource for GPUDivergenceSource {
                     None => continue,
                 };
 
-                // Capture timestamp — the dispatch timing has jitter from
-                // GPU clock domain crossing and scheduling nondeterminism.
-                let now = mach_time();
+                let t1 = mach_time();
+                timings.push(t1.wrapping_sub(t0));
 
-                // XOR-fold all thread execution orders into one u64.
+                // XOR-fold all thread execution orders into one byte.
+                // This captures GPU scheduling nondeterminism directly.
                 let mut gpu_hash: u64 = 0;
                 for (i, &val) in results.iter().enumerate() {
                     gpu_hash ^= (val as u64).rotate_left((i as u32) & 63);
                 }
+                gpu_entropy.push(xor_fold_u64(gpu_hash));
+            }
 
-                // Combine: counter (decorrelation) ^ timestamp (jitter) ^ GPU order.
-                let combined = counter ^ now ^ gpu_hash;
-                let folded = xor_fold_u64(combined);
+            // Extract timing entropy from dispatch latencies.
+            let timing_bytes = extract_timing_entropy(&timings, n_samples);
 
-                // XOR with previous for additional mixing.
-                if let Some(prev) = prev_folded {
-                    output.push(folded ^ prev);
-                    if output.len() >= n_samples {
-                        break;
-                    }
-                }
-                prev_folded = Some(folded);
+            // XOR GPU execution order entropy with dispatch timing entropy.
+            // Both are genuine, independent entropy sources.
+            let mut output: Vec<u8> = Vec::with_capacity(n_samples);
+            for i in 0..n_samples.min(timing_bytes.len()).min(gpu_entropy.len()) {
+                output.push(timing_bytes[i] ^ gpu_entropy[i]);
             }
 
             output.truncate(n_samples);

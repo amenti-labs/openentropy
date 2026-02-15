@@ -13,7 +13,7 @@
 //! PoC measured H∞ ≈ 7.4 bits/byte for round-trip CPU→GPU→CPU timing.
 
 use crate::source::{EntropySource, SourceCategory, SourceInfo};
-use crate::sources::helpers::{mach_time, xor_fold_u64};
+use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
     name: "iosurface_crossing",
@@ -113,8 +113,8 @@ mod iosurface {
             let dict = CFDictionaryCreateMutable(
                 kCFAllocatorDefault,
                 6,
-                &kCFTypeDictionaryKeyCallBacks as *const _ as *const c_void,
-                &kCFTypeDictionaryValueCallBacks as *const _ as *const c_void,
+                std::ptr::addr_of!(kCFTypeDictionaryKeyCallBacks).cast(),
+                std::ptr::addr_of!(kCFTypeDictionaryValueCallBacks).cast(),
             );
             if dict.is_null() {
                 return None;
@@ -205,7 +205,7 @@ mod iosurface {
         };
         if !num.is_null() {
             unsafe {
-                CFDictionarySetValue(dict, key as *const c_void, num as *const c_void);
+                CFDictionarySetValue(dict, key, num);
                 CFRelease(num as CFTypeRef);
             }
         }
@@ -243,36 +243,17 @@ impl EntropySource for IOSurfaceCrossingSource {
         #[cfg(target_os = "macos")]
         {
             let raw_count = n_samples * 4 + 64;
-            let mut output: Vec<u8> = Vec::with_capacity(n_samples);
-            let mut prev_folded: Option<u8> = None;
-            let mut counter: u64 = 0;
+            let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
             for i in 0..raw_count {
-                counter = counter.wrapping_add(1);
-
                 // IOSurface cycle crosses CPU→fabric→GPU memory controller domains.
-                // The returned value captures write/read timing jitter.
-                let cycle_timing = iosurface::crossing_cycle(i).unwrap_or(0);
-
-                // Capture timestamp after the IOSurface operation.
-                let now = mach_time();
-
-                // Counter (decorrelation) ^ timestamp ^ cycle timing jitter.
-                let combined = counter ^ now ^ cycle_timing;
-                let folded = xor_fold_u64(combined);
-
-                // XOR with previous for additional mixing.
-                if let Some(prev) = prev_folded {
-                    output.push(folded ^ prev);
-                    if output.len() >= n_samples {
-                        break;
-                    }
+                // The returned value captures write/read timing jitter directly.
+                if let Some(cycle_timing) = iosurface::crossing_cycle(i) {
+                    timings.push(cycle_timing);
                 }
-                prev_folded = Some(folded);
             }
 
-            output.truncate(n_samples);
-            output
+            extract_timing_entropy(&timings, n_samples)
         }
     }
 }
