@@ -7,7 +7,6 @@ kernel counters, memory timing, GPU scheduling, network latency, and more.
 This package requires the compiled Rust extension (built via maturin).
 """
 
-__version__ = "0.3.0"
 __author__ = "Amenti Labs"
 
 from openentropy.openentropy import (
@@ -21,11 +20,16 @@ from openentropy.openentropy import (
 __rust_backend__ = True
 __version__ = _rust_version()
 
+
+def version() -> str:
+    return _rust_version()
+
 __all__ = [
     "EntropyPool",
     "detect_available_sources",
     "run_all_tests",
     "calculate_quality_score",
+    "version",
     "__version__",
     "__rust_backend__",
 ]

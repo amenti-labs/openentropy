@@ -3,7 +3,7 @@
 //! **Your computer is a hardware noise observatory.**
 //!
 //! `openentropy-core` is the core entropy harvesting library that extracts randomness
-//! from 38 unconventional hardware sources — clock jitter, DRAM row buffer timing,
+//! from 45 unconventional hardware sources — clock jitter, DRAM row buffer timing,
 //! CPU speculative execution, Bluetooth RSSI, NVMe latency, and more.
 //!
 //! ## Quick Start

@@ -1,22 +1,25 @@
-.PHONY: install dev test lint format build clean
+.PHONY: install dev test lint format build py-build clean
 
 install:
 	pip install -e .
 
 dev:
-	pip install -e ".[dev]"
+	pip install maturin pytest ruff
 
 test:
-	pytest tests/ -v
+	cargo test --workspace --exclude openentropy-python
 
 lint:
-	ruff check esoteric_entropy/ tests/
+	cargo clippy --workspace --exclude openentropy-python -- -D warnings
 
 format:
-	ruff format esoteric_entropy/ tests/
+	cargo fmt --all
 
 build:
-	python -m build
+	cargo build --release --workspace --exclude openentropy-python
+
+py-build:
+	cd crates/openentropy-python && maturin build --release
 
 clean:
 	rm -rf dist/ build/ *.egg-info .ruff_cache .pytest_cache __pycache__

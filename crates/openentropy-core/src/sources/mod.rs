@@ -1,4 +1,4 @@
-//! All 44 entropy source implementations.
+//! All 45 entropy source implementations.
 
 pub mod helpers;
 
@@ -83,5 +83,7 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::PDNResonanceSource),
         Box::new(frontier::IOSurfaceCrossingSource),
         Box::new(frontier::FsyncJournalSource),
+        // Frontier: two-oscillator beat frequency (CPU counter vs audio PLL)
+        Box::new(frontier::CounterBeatSource),
     ]
 }

@@ -46,7 +46,6 @@ jobs:
   python:
     name: Python Bindings
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -62,3 +61,8 @@ jobs:
 
       - name: Build Python bindings
         run: cd crates/openentropy-python && maturin build --release
+
+      - name: Python import smoke test
+        run: |
+          maturin develop --release
+          python -c "import openentropy; print(openentropy.version())"

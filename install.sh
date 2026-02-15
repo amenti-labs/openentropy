@@ -35,18 +35,22 @@ echo "Latest release: $LATEST"
 
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
 
-# Download binary and checksum
+# Download binary and checksums
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "Downloading ${ASSET_NAME}..."
 curl -sSfL "${BASE_URL}/${ASSET_NAME}" -o "${TMPDIR}/${BINARY}"
-curl -sSfL "${BASE_URL}/${ASSET_NAME}.sha256" -o "${TMPDIR}/${BINARY}.sha256"
+curl -sSfL "${BASE_URL}/checksums-sha256.txt" -o "${TMPDIR}/checksums-sha256.txt"
 
 # Verify checksum
 echo "Verifying checksum..."
 cd "$TMPDIR"
-EXPECTED=$(awk '{print $1}' "${BINARY}.sha256")
+EXPECTED=$(awk -v asset="${ASSET_NAME}" '$2 == asset {print $1; exit}' checksums-sha256.txt)
+if [ -z "$EXPECTED" ]; then
+    echo "Error: Could not find checksum for ${ASSET_NAME} in checksums-sha256.txt"
+    exit 1
+fi
 ACTUAL=$(shasum -a 256 "${BINARY}" | awk '{print $1}')
 if [ "$EXPECTED" != "$ACTUAL" ]; then
     echo "Error: Checksum mismatch!"

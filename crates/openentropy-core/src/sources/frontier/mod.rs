@@ -17,7 +17,8 @@
 //! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
 //! ├── dvfs_race.rs        ← cross-core DVFS frequency race
 //! ├── cas_contention.rs   ← CAS atomic contention timing
-//! └── keychain_timing.rs  ← Keychain/securityd round-trip timing
+//! ├── keychain_timing.rs  ← Keychain/securityd round-trip timing
+//! └── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
 //! ```
 //!
 //! Each source measures a single, independent physical entropy domain.
@@ -36,6 +37,7 @@
 mod amx_timing;
 mod audio_pll_timing;
 mod cas_contention;
+mod counter_beat;
 mod denormal_timing;
 mod dvfs_race;
 mod fsync_journal;
@@ -55,6 +57,7 @@ mod usb_timing;
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
+pub use counter_beat::CounterBeatSource;
 pub use denormal_timing::DenormalTimingSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
@@ -210,6 +213,7 @@ mod tests {
             Box::new(PDNResonanceSource),
             Box::new(IOSurfaceCrossingSource),
             Box::new(FsyncJournalSource),
+            Box::new(CounterBeatSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

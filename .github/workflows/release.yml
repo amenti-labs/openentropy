@@ -70,5 +70,7 @@ jobs:
           generate_release_notes: true
           files: |
             release/openentropy-aarch64-apple-darwin
+            release/openentropy-aarch64-apple-darwin.sha256
             release/openentropy-x86_64-apple-darwin
+            release/openentropy-x86_64-apple-darwin.sha256
             release/checksums-sha256.txt

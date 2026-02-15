@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1 — 2026-02-15
+
+### Fixed
+
+- Fixed release/install checksum flow so `install.sh` verifies against release `checksums-sha256.txt`
+- Added `version()` export to Python package so examples and runtime version checks work
+- Updated root `Makefile` targets to valid Rust workspace commands
+- Made Python CI binding job strict and added a Python import smoke test
+
+### Changed
+
+- Synced Python package version to `0.4.1`
+
 ## 0.4.0 — 2026-02-13
 
 ### Source Taxonomy Refactor

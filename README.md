@@ -337,7 +337,7 @@ let health = pool.health_report();
 
 ## Architecture
 
-Cargo workspace with 5 crates:
+Cargo workspace with 6 crates:
 
 | Crate | Description |
 |-------|-------------|
@@ -346,6 +346,7 @@ Cargo workspace with 5 crates:
 | `openentropy-server` | Axum HTTP entropy server |
 | `openentropy-tests` | NIST SP 800-22 inspired test battery |
 | `openentropy-python` | Python bindings via PyO3/maturin |
+| `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
 Sources (44) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
@@ -379,7 +380,7 @@ Requires Rust 1.85+ and macOS or Linux.
 ```bash
 git clone https://github.com/amenti-labs/openentropy.git
 cd openentropy
-cargo build --release
+cargo build --release --workspace --exclude openentropy-python
 cargo test --workspace --exclude openentropy-python
 cargo install --path crates/openentropy-cli
 ```
