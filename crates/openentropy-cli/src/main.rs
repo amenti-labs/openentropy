@@ -97,6 +97,37 @@ enum Commands {
         allow_raw: bool,
     },
 
+    /// Record a session of entropy collection from one or more sources
+    Record {
+        /// Comma-separated source names to record from
+        #[arg(long)]
+        sources: String,
+
+        /// Maximum recording duration (e.g. "5m", "30s", "1h")
+        #[arg(long)]
+        duration: Option<String>,
+
+        /// Metadata tags as key:value pairs
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+
+        /// Session note
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Output directory (default: ./sessions/)
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Sample interval (e.g. "100ms", "1s"); default: continuous
+        #[arg(long)]
+        interval: Option<String>,
+
+        /// Conditioning mode: raw (default for recording), vonneumann, sha256
+        #[arg(long, default_value = "raw", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
+    },
+
     /// Live interactive entropy dashboard
     Monitor {
         /// Refresh rate in seconds
@@ -179,6 +210,23 @@ fn main() {
             sources,
             allow_raw,
         } => commands::server::run(&host, port, sources.as_deref(), allow_raw),
+        Commands::Record {
+            sources,
+            duration,
+            tags,
+            note,
+            output,
+            interval,
+            conditioning,
+        } => commands::record::run(
+            &sources,
+            duration.as_deref(),
+            &tags,
+            note.as_deref(),
+            output.as_deref(),
+            interval.as_deref(),
+            &conditioning,
+        ),
         Commands::Monitor { refresh, sources } => {
             commands::monitor::run(refresh, sources.as_deref())
         }

@@ -4,6 +4,7 @@ pub mod entropy;
 pub mod monitor;
 pub mod pool;
 pub mod probe;
+pub mod record;
 pub mod report;
 pub mod scan;
 pub mod server;
