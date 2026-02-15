@@ -2,13 +2,13 @@
 
 # openentropy
 
-**Your computer is a hardware noise observatory.**
+**Harvest real entropy from hardware noise. Study it raw or condition it for crypto.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*Harvest real entropy from 44 hardware sources hiding inside your computer — clock jitter, kernel counters, DRAM row buffers, cache contention, and more.*
+*44 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -59,6 +59,20 @@ data = pool.get_random_bytes(256)
 
 ---
 
+## Two Audiences
+
+**Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) meets NIST SP 800-90B requirements.
+
+**Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source. Most QRNG and HWRNG APIs apply DRBG post-processing that destroys this signal — OpenEntropy is one of the few tools that exposes it.
+
+Raw mode enables:
+- **Hardware characterization** — measure min-entropy, autocorrelation, and spectral properties of individual noise sources
+- **Silicon validation** — compare noise profiles across chip revisions, thermal states, and voltage domains
+- **Anomaly detection** — monitor entropy source health for signs of hardware degradation or tampering
+- **Cross-domain analysis** — study correlations between independent entropy domains (thermal vs timing vs IPC)
+
+---
+
 ## What Makes This Different
 
 Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy continuously harvests **real physical noise** from your hardware:
@@ -81,9 +95,9 @@ Conditioning is **optional and configurable**. Use `--conditioning` on the CLI o
 |------|------|-------------|
 | **SHA-256** (default) | `--conditioning sha256` | Full NIST SP 800-90B conditioning. Cryptographic quality output. |
 | **Von Neumann** | `--conditioning vonneumann` | Debiasing only — removes bias while preserving more of the raw signal structure. |
-| **Raw** | `--conditioning raw` | No processing. XOR-combined source bytes with zero whitening. |
+| **Raw** | `--conditioning raw` | No processing. Source bytes with zero whitening — preserves the actual hardware noise signal for research. |
 
-Most hardware RNG APIs apply DRBG post-processing that destroys the raw noise signal. OpenEntropy preserves it — pass `--conditioning raw` for unwhitened bytes, ideal for researchers studying actual hardware noise characteristics. See [Conditioning](docs/CONDITIONING.md) for details.
+Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG post-processing that makes every source look like uniform random bytes, destroying the information researchers need. Raw output preserves per-source noise structure: bias, autocorrelation, spectral features, and cross-source correlations. See [Conditioning](docs/CONDITIONING.md) for details.
 
 ---
 
