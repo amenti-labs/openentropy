@@ -88,8 +88,8 @@ mod tests {
     #[test]
     fn info() {
         let src = DenormalTimingSource;
-        assert_eq!(src.info().name, "denormal_timing");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert_eq!(src.name(), "denormal_timing");
+        assert_eq!(src.info().category, SourceCategory::Frontier);
         assert!(!src.info().composite);
     }
 

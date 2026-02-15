@@ -80,33 +80,51 @@ mod iokit {
 
     pub const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
 
+    /// Create a CFString from a null-terminated byte slice.
+    /// Returns null if `CFStringCreateWithCString` fails.
     pub fn cfstr(s: &[u8]) -> *const c_void {
-        unsafe { CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const i8, K_CF_STRING_ENCODING_UTF8) }
+        // SAFETY: CFStringCreateWithCString is a CoreFoundation API that reads a
+        // null-terminated C string. The caller must ensure `s` is null-terminated.
+        // We pass kCFAllocatorDefault (null) for the default allocator.
+        unsafe {
+            CFStringCreateWithCString(
+                std::ptr::null(),
+                s.as_ptr() as *const i8,
+                K_CF_STRING_ENCODING_UTF8,
+            )
+        }
     }
 
     /// Find USB devices and return their IOKit service handles.
+    ///
+    /// The caller is responsible for releasing each returned handle via `IOObjectRelease`.
     pub fn find_usb_devices() -> Vec<u32> {
         let mut devices = Vec::new();
-        let matching = unsafe {
-            IOServiceMatching(c"IOUSBHostDevice".as_ptr() as *const u8)
-        };
+        // SAFETY: IOServiceMatching returns a CFDictionary matching USB host devices.
+        // The returned dictionary is consumed by IOServiceGetMatchingServices.
+        let matching = unsafe { IOServiceMatching(c"IOUSBHostDevice".as_ptr() as *const u8) };
         if matching.is_null() {
             return devices;
         }
 
         let mut iter: u32 = 0;
-        let kr = unsafe { IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter) };
+        // SAFETY: IOServiceGetMatchingServices consumes `matching` (even on failure)
+        // and writes an iterator handle to `iter`. We check the return code.
+        let kr =
+            unsafe { IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter) };
         if kr != 0 || iter == 0 {
             return devices;
         }
 
         loop {
+            // SAFETY: IOIteratorNext returns the next service handle or 0 when exhausted.
             let service = unsafe { IOIteratorNext(iter) };
             if service == 0 {
                 break;
             }
             devices.push(service);
         }
+        // SAFETY: Releasing the iterator we own. Each service handle is still valid.
         unsafe { IOObjectRelease(iter) };
         devices
     }
@@ -114,14 +132,19 @@ mod iokit {
     /// Query a device property and return the elapsed time.
     pub fn query_device_property(device: u32, key: &[u8]) -> std::time::Duration {
         let cf_key = cfstr(key);
+        if cf_key.is_null() {
+            return std::time::Duration::ZERO;
+        }
         let t0 = std::time::Instant::now();
-        let prop = unsafe {
-            IORegistryEntryCreateCFProperty(device, cf_key, std::ptr::null(), 0)
-        };
+        // SAFETY: IORegistryEntryCreateCFProperty reads a property from a valid
+        // IOKit service handle using a valid CFString key. Returns null on failure.
+        let prop = unsafe { IORegistryEntryCreateCFProperty(device, cf_key, std::ptr::null(), 0) };
         let elapsed = t0.elapsed();
         if !prop.is_null() {
+            // SAFETY: Releasing a non-null CF object we received from IOKit.
             unsafe { CFRelease(prop) };
         }
+        // SAFETY: Releasing the CFString we created in cfstr().
         unsafe { CFRelease(cf_key) };
         elapsed
     }
@@ -135,7 +158,15 @@ impl EntropySource for USBTimingSource {
     fn is_available(&self) -> bool {
         #[cfg(target_os = "macos")]
         {
-            !iokit::find_usb_devices().is_empty()
+            // Quick check: find one USB device without full enumeration.
+            let devices = iokit::find_usb_devices();
+            let available = !devices.is_empty();
+            // Release any handles we acquired during the check.
+            for device in &devices {
+                // SAFETY: Releasing IOKit service handles from find_usb_devices().
+                unsafe { iokit::IOObjectRelease(*device) };
+            }
+            available
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -160,10 +191,7 @@ impl EntropySource for USBTimingSource {
             let raw_count = n_samples * 4 + 64;
             let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
-            let property_keys: &[&[u8]] = &[
-                b"sessionID\0",
-                b"USB Address\0",
-            ];
+            let property_keys: &[&[u8]] = &[b"sessionID\0", b"USB Address\0"];
 
             for i in 0..raw_count {
                 let device = devices[i % devices.len()];
@@ -172,10 +200,13 @@ impl EntropySource for USBTimingSource {
                 timings.push(elapsed.as_nanos() as u64);
             }
 
-            // Release device handles.
+            // Release device handles before any further processing.
+            // Done eagerly so handles aren't leaked if extract_timing_entropy panics.
             for device in &devices {
+                // SAFETY: Releasing IOKit service handles we own from find_usb_devices().
                 unsafe { iokit::IOObjectRelease(*device) };
             }
+            drop(devices);
 
             extract_timing_entropy(&timings, n_samples)
         }
@@ -189,8 +220,8 @@ mod tests {
     #[test]
     fn info() {
         let src = USBTimingSource;
-        assert_eq!(src.info().name, "usb_timing");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert_eq!(src.name(), "usb_timing");
+        assert_eq!(src.info().category, SourceCategory::Frontier);
         assert!(!src.info().composite);
     }
 

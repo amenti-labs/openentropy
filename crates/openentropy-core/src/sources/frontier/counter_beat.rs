@@ -37,12 +37,16 @@ static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
 pub struct CounterBeatSource;
 
 /// Read the ARM64 virtual timer counter (CNTVCT_EL0).
+///
 /// This counter runs at a fixed frequency (1 GHz on Apple Silicon)
 /// independent of CPU frequency scaling.
 #[cfg(target_arch = "aarch64")]
 #[inline]
 fn read_cntvct() -> u64 {
     let val: u64;
+    // SAFETY: CNTVCT_EL0 is an ARMv8 system register readable from EL0 (user space)
+    // on all AArch64 processors. It provides a monotonic virtual counter value.
+    // The `mrs` instruction has no side effects beyond reading the register.
     unsafe {
         std::arch::asm!("mrs {}, CNTVCT_EL0", out(reg) val);
     }
@@ -108,8 +112,8 @@ mod tests {
     #[test]
     fn info() {
         let src = CounterBeatSource;
-        assert_eq!(src.info().name, "counter_beat");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert_eq!(src.name(), "counter_beat");
+        assert_eq!(src.info().category, SourceCategory::Frontier);
         assert!(!src.info().composite);
     }
 

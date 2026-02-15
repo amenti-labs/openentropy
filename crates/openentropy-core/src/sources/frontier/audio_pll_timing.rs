@@ -73,6 +73,9 @@ mod coreaudio {
         };
         let mut device: u32 = 0;
         let mut size: u32 = std::mem::size_of::<u32>() as u32;
+        // SAFETY: AudioObjectGetPropertyData is a CoreAudio API that reads a property
+        // from the system audio object. We pass valid pointers to stack-allocated `size`
+        // and `device` with correct sizes. The function writes at most `size` bytes.
         let status = unsafe {
             AudioObjectGetPropertyData(
                 AUDIO_OBJECT_SYSTEM_OBJECT,
@@ -97,6 +100,9 @@ mod coreaudio {
         let mut size: u32 = 8;
 
         let t0 = std::time::Instant::now();
+        // SAFETY: AudioObjectGetPropertyData reads a property from a valid audio device.
+        // `data` is an 8-byte stack buffer, and `size` is set to 8, which is sufficient
+        // for all queried properties (f64 sample rate or u32 latency).
         unsafe {
             AudioObjectGetPropertyData(
                 device,
@@ -147,12 +153,18 @@ impl EntropySource for AudioPLLTimingSource {
             // Cycle through different property queries to exercise different
             // code paths in the audio subsystem, each crossing the PLL boundary.
             let selectors = [
-                (coreaudio::AUDIO_DEVICE_PROPERTY_ACTUAL_SAMPLE_RATE,
-                 coreaudio::AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL),
-                (coreaudio::AUDIO_DEVICE_PROPERTY_LATENCY,
-                 coreaudio::AUDIO_DEVICE_PROPERTY_SCOPE_OUTPUT),
-                (coreaudio::AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE,
-                 coreaudio::AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL),
+                (
+                    coreaudio::AUDIO_DEVICE_PROPERTY_ACTUAL_SAMPLE_RATE,
+                    coreaudio::AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+                ),
+                (
+                    coreaudio::AUDIO_DEVICE_PROPERTY_LATENCY,
+                    coreaudio::AUDIO_DEVICE_PROPERTY_SCOPE_OUTPUT,
+                ),
+                (
+                    coreaudio::AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE,
+                    coreaudio::AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+                ),
             ];
 
             for i in 0..raw_count {
@@ -173,8 +185,8 @@ mod tests {
     #[test]
     fn info() {
         let src = AudioPLLTimingSource;
-        assert_eq!(src.info().name, "audio_pll_timing");
-        assert!(matches!(src.info().category, SourceCategory::Frontier));
+        assert_eq!(src.name(), "audio_pll_timing");
+        assert_eq!(src.info().category, SourceCategory::Frontier);
         assert!(!src.info().composite);
     }
 
