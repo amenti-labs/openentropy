@@ -63,7 +63,7 @@ data = pool.get_random_bytes(256)
 
 **Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) meets NIST SP 800-90B requirements.
 
-**Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source. Most QRNG and HWRNG APIs apply DRBG post-processing that destroys this signal — OpenEntropy is one of the few tools that exposes it.
+**Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source.
 
 Raw mode enables:
 - **Hardware characterization** — measure min-entropy, autocorrelation, and spectral properties of individual noise sources
@@ -125,9 +125,9 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
-| `denormal_timing` | — | — | Denormal FPU micropower thermal noise |
-| `audio_pll_timing` | — | — | Audio PLL clock drift from thermal perturbation |
-| `pdn_resonance` | — | — | Power delivery network LC resonance noise |
+| `denormal_timing` | 1.031 | <0.01s | Denormal FPU micropower thermal noise |
+| `audio_pll_timing` | 7.795 | 0.08s | Audio PLL clock drift from thermal perturbation |
+| `pdn_resonance` | 0.861 | <0.01s | Power delivery network LC resonance noise |
 
 ### Timing (7)
 
@@ -154,9 +154,9 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
-| `nvme_latency` | — | — | NVMe command submission/completion timing |
-| `usb_timing` | — | — | USB bus transaction timing jitter |
-| `fsync_journal` | — | — | fsync journal commit latency noise |
+| `nvme_latency` | 5.321 | 0.01s | NVMe command submission/completion timing |
+| `usb_timing` | 7.734 | 0.03s | USB bus transaction timing jitter |
+| `fsync_journal` | 7.796 | 16.69s | fsync journal commit latency noise |
 
 ### IPC (4)
 
@@ -164,7 +164,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 |--------|:---------:|-----:|-------------|
 | `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
 | `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
-| `kqueue_events` | — | 0.05s | BSD kqueue event multiplexing timer/file/socket jitter |
+| `kqueue_events` | 7.489 | 12.25s | BSD kqueue event multiplexing timer/file/socket jitter |
 | `keychain_timing` | 7.543 | 0.02s | macOS Keychain Services API timing jitter |
 
 ### Microarch (5)
@@ -182,8 +182,8 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
-| `gpu_divergence` | — | — | GPU warp divergence timing variance |
-| `iosurface_crossing` | — | — | IOSurface CPU-GPU cross-domain timing |
+| `gpu_divergence` | 7.837 | 0.76s | GPU warp divergence timing variance |
+| `iosurface_crossing` | 5.048 | 0.08s | IOSurface CPU-GPU cross-domain timing |
 
 ### Network (3)
 
@@ -191,7 +191,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 |--------|:---------:|-----:|-------------|
 | `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
 | `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
-| `wifi_rssi` | — | — | WiFi received signal strength fluctuations |
+| `wifi_rssi` | — | — | WiFi received signal strength fluctuations *(requires WiFi)* |
 
 ### System (4)
 
@@ -221,8 +221,8 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
-| `audio_noise` | — | — | Audio ADC thermal noise floor |
-| `camera_noise` | — | — | Image sensor dark current noise |
+| `audio_noise` | — | — | Audio ADC thermal noise floor *(requires mic)* |
+| `camera_noise` | — | — | Image sensor dark current noise *(requires camera)* |
 | `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
 
 Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCE_CATALOG.md) for physics details on each source.
