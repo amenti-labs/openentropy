@@ -40,7 +40,7 @@
 //! measured H∞ ≈ 5.4 bits/byte proving clock independence.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
-use crate::sources::helpers::xor_fold_u64;
+use crate::sources::helpers::{read_cntvct, xor_fold_u64};
 
 static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
     name: "counter_beat",
@@ -69,28 +69,6 @@ static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
 /// and the audio PLL clock — two physically independent crystal oscillators
 /// with uncorrelated thermal noise.
 pub struct CounterBeatSource;
-
-/// Read the ARM generic timer counter (CNTVCT_EL0) directly.
-///
-/// This is the raw hardware counter driven by the CPU's 24 MHz crystal oscillator,
-/// independent of any OS abstraction layer.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-#[inline(always)]
-fn read_cntvct() -> u64 {
-    let val: u64;
-    // SAFETY: CNTVCT_EL0 is always readable from EL0 on Apple Silicon.
-    // It's a read-only system register with no side effects.
-    unsafe {
-        std::arch::asm!("mrs {}, cntvct_el0", out(reg) val, options(nostack, nomem));
-    }
-    val
-}
-
-#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-#[inline(always)]
-fn read_cntvct() -> u64 {
-    0
-}
 
 /// CoreAudio FFI for audio PLL clock domain crossing.
 #[cfg(target_os = "macos")]

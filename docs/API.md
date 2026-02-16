@@ -194,12 +194,12 @@ Path: `crates/openentropy-cli/`
 Subcommands:
 
 - `scan`
-- `probe`
 - `bench`
+- `analyze`
 - `stream`
 - `device`
 - `server`
 - `monitor`
 - `report`
-- `entropy`
-- `pool`
+- `record`
+- `sessions`

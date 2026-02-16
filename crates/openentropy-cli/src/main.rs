@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "openentropy")]
-#[command(about = "🔬 openentropy — your computer is a hardware noise observatory")]
+#[command(about = "openentropy — your computer is a hardware noise observatory")]
 #[command(version = openentropy_core::VERSION)]
 struct Cli {
     #[command(subcommand)]
@@ -16,17 +16,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Discover available entropy sources on this machine
+    /// List all available entropy sources on this machine
     Scan,
 
-    /// Test a specific source and show quality stats
-    Probe {
-        /// Source name (or partial match)
-        source_name: String,
-    },
-
-    /// Benchmark all available sources with a ranked report
+    /// Benchmark sources: Shannon entropy, min-entropy, grade, speed.
+    /// Use --source to probe a single source in detail.
+    /// Includes a conditioned pool quality section by default.
     Bench {
+        /// Probe a single source by name (partial match). Shows detailed quality stats.
+        #[arg(long)]
+        source: Option<String>,
+
         /// Comma-separated source name filter, or "all" for every source
         #[arg(long)]
         sources: Option<String>,
@@ -34,70 +34,92 @@ enum Commands {
         /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
         #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
+
+        /// Benchmark profile: quick (<10s), standard (default), deep (higher confidence)
+        #[arg(long, default_value = "standard", value_parser = ["quick", "standard", "deep"])]
+        profile: String,
+
+        /// Override samples collected from each source per round
+        #[arg(long)]
+        samples_per_round: Option<usize>,
+
+        /// Override number of measured rounds
+        #[arg(long)]
+        rounds: Option<usize>,
+
+        /// Override number of warmup rounds (not scored)
+        #[arg(long)]
+        warmup_rounds: Option<usize>,
+
+        /// Override per-round collection timeout in seconds
+        #[arg(long)]
+        timeout_sec: Option<f64>,
+
+        /// Ranking strategy
+        #[arg(long, default_value = "balanced", value_parser = ["balanced", "min_entropy", "throughput"])]
+        rank_by: String,
+
+        /// Write machine-readable benchmark report as JSON
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Skip conditioned pool output quality section
+        #[arg(long)]
+        no_pool: bool,
     },
 
-    /// Stream entropy to stdout
-    Stream {
-        /// Output format
-        #[arg(long, default_value = "raw", value_parser = ["raw", "hex", "base64"])]
-        format: String,
-
-        /// Bytes/sec rate limit (0 = unlimited)
-        #[arg(long, default_value = "0")]
-        rate: usize,
-
-        /// Comma-separated source name filter
+    /// Statistical analysis: autocorrelation, spectral, bias, stationarity, runs.
+    /// Min-entropy breakdown (MCV + diagnostics) is included by default.
+    Analyze {
+        /// Comma-separated source name filter, or "all"
         #[arg(long)]
         sources: Option<String>,
 
-        /// Total bytes (0 = infinite)
-        #[arg(long, default_value = "0")]
-        bytes: usize,
+        /// Number of samples to collect per source
+        #[arg(long, default_value = "50000")]
+        samples: usize,
+
+        /// Write full results as JSON
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Compute cross-correlation matrix between all analyzed sources
+        #[arg(long)]
+        cross_correlation: bool,
+
+        /// Skip min-entropy estimators per source
+        #[arg(long)]
+        no_entropy: bool,
+
+        /// Conditioning mode for entropy analysis input: raw (default), vonneumann, sha256
+        #[arg(long, default_value = "raw", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
+
+        /// Output view: summary (default, verdict-driven) or detailed (full metrics)
+        #[arg(long, default_value = "summary", value_parser = ["summary", "detailed"])]
+        view: String,
+    },
+
+    /// Run NIST-inspired randomness test battery with pass/fail and p-values
+    Report {
+        /// Number of bytes to collect per source
+        #[arg(long, default_value = "10000")]
+        samples: usize,
+
+        /// Test a single source
+        #[arg(long)]
+        source: Option<String>,
+
+        /// Output path for report
+        #[arg(long)]
+        output: Option<String>,
 
         /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
         #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
     },
 
-    /// Create a named pipe (FIFO) that continuously provides entropy
-    Device {
-        /// Path to FIFO
-        #[arg(default_value = "/tmp/openentropy-rng")]
-        path: String,
-
-        /// Write buffer size in bytes
-        #[arg(long, default_value = "4096")]
-        buffer_size: usize,
-
-        /// Comma-separated source name filter
-        #[arg(long)]
-        sources: Option<String>,
-
-        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
-        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
-        conditioning: String,
-    },
-
-    /// Start an HTTP entropy server (ANU QRNG API compatible)
-    Server {
-        /// Port to listen on
-        #[arg(long, default_value = "8042")]
-        port: u16,
-
-        /// Bind address
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-
-        /// Comma-separated source name filter
-        #[arg(long)]
-        sources: Option<String>,
-
-        /// Allow conditioning mode selection via ?conditioning=raw|vonneumann|sha256
-        #[arg(long)]
-        allow_raw: bool,
-    },
-
-    /// Record a session of entropy collection from one or more sources
+    /// Record entropy samples to disk for offline analysis
     Record {
         /// Comma-separated source names to record from
         #[arg(long)]
@@ -123,12 +145,16 @@ enum Commands {
         #[arg(long)]
         interval: Option<String>,
 
+        /// Include end-of-session statistical analysis in session.json
+        #[arg(long)]
+        analyze: bool,
+
         /// Conditioning mode: raw (default for recording), vonneumann, sha256
         #[arg(long, default_value = "raw", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
     },
 
-    /// Live interactive entropy dashboard
+    /// Live interactive entropy dashboard (TUI)
     Monitor {
         /// Refresh rate in seconds
         #[arg(long, default_value = "1.0")]
@@ -139,45 +165,87 @@ enum Commands {
         sources: Option<String>,
     },
 
-    /// Full NIST-inspired randomness test battery with report
-    Report {
-        /// Number of bytes to collect per source
-        #[arg(long, default_value = "10000")]
-        samples: usize,
+    /// Stream raw entropy bytes to stdout (pipe-friendly)
+    Stream {
+        /// Output format
+        #[arg(long, default_value = "raw", value_parser = ["raw", "hex", "base64"])]
+        format: String,
 
-        /// Test a single source
+        /// Bytes/sec rate limit (0 = unlimited)
+        #[arg(long, default_value = "0")]
+        rate: usize,
+
+        /// Comma-separated source name filter
         #[arg(long)]
-        source: Option<String>,
+        sources: Option<String>,
 
-        /// Output path for report
+        /// Total bytes (0 = infinite)
+        #[arg(long, default_value = "0")]
+        bytes: usize,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
+    },
+
+    /// Create a FIFO (named pipe) that acts as an entropy device
+    Device {
+        /// Path to FIFO
+        #[arg(default_value = "/tmp/openentropy-rng")]
+        path: String,
+
+        /// Write buffer size in bytes
+        #[arg(long, default_value = "4096")]
+        buffer_size: usize,
+
+        /// Comma-separated source name filter
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
+        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: String,
+    },
+
+    /// List and analyze recorded entropy sessions
+    Sessions {
+        /// Path to a specific session directory to inspect or analyze
+        session: Option<String>,
+
+        /// Directory containing session recordings (default: ./sessions/)
+        #[arg(long, default_value = "sessions")]
+        dir: String,
+
+        /// Run full statistical analysis on the session's raw data
+        #[arg(long)]
+        analyze: bool,
+
+        /// Also run min-entropy estimators per source (MCV + diagnostics)
+        #[arg(long)]
+        entropy: bool,
+
+        /// Write analysis results as JSON
         #[arg(long)]
         output: Option<String>,
-
-        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
-        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
-        conditioning: String,
     },
 
-    /// Deep min-entropy analysis (NIST SP 800-90B estimators)
-    Entropy {
-        /// Comma-separated source name filter, or "all"
+    /// Start an HTTP entropy server (ANU QRNG API compatible)
+    Server {
+        /// Port to listen on
+        #[arg(long, default_value = "8042")]
+        port: u16,
+
+        /// Bind address
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Comma-separated source name filter
         #[arg(long)]
         sources: Option<String>,
 
-        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
-        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
-        conditioning: String,
-    },
-
-    /// Run the entropy pool and output quality metrics
-    Pool {
-        /// Comma-separated source name filter, or "all"
+        /// Allow conditioning mode selection via ?conditioning=raw|vonneumann|sha256
         #[arg(long)]
-        sources: Option<String>,
-
-        /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
-        #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
-        conditioning: String,
+        allow_raw: bool,
     },
 }
 
@@ -186,11 +254,76 @@ fn main() {
 
     match cli.command {
         Commands::Scan => commands::scan::run(),
-        Commands::Probe { source_name } => commands::probe::run(&source_name),
         Commands::Bench {
+            source,
             sources,
             conditioning,
-        } => commands::bench::run(sources.as_deref(), &conditioning),
+            profile,
+            samples_per_round,
+            rounds,
+            warmup_rounds,
+            timeout_sec,
+            rank_by,
+            output,
+            no_pool,
+        } => commands::bench::run(commands::bench::BenchCommandConfig {
+            source_filter: sources.as_deref(),
+            conditioning: &conditioning,
+            source: source.as_deref(),
+            profile: &profile,
+            samples_per_round,
+            rounds,
+            warmup_rounds,
+            timeout_sec,
+            rank_by: &rank_by,
+            output_path: output.as_deref(),
+            include_pool_quality: !no_pool,
+        }),
+        Commands::Analyze {
+            sources,
+            samples,
+            output,
+            cross_correlation,
+            no_entropy,
+            conditioning,
+            view,
+        } => commands::analyze::run(
+            sources.as_deref(),
+            output.as_deref(),
+            samples,
+            cross_correlation,
+            !no_entropy,
+            &conditioning,
+            &view,
+        ),
+        Commands::Report {
+            samples,
+            source,
+            output,
+            conditioning,
+        } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
+        Commands::Record {
+            sources,
+            duration,
+            tags,
+            note,
+            output,
+            interval,
+            analyze,
+            conditioning,
+        } => commands::record::run(
+            &sources,
+            duration.as_deref(),
+            &tags,
+            note.as_deref(),
+            output.as_deref(),
+            interval.as_deref(),
+            analyze,
+            &conditioning,
+        ),
+        Commands::Monitor { refresh, sources } => {
+            commands::monitor::run(refresh, sources.as_deref())
+        }
         Commands::Stream {
             format,
             rate,
@@ -204,45 +337,24 @@ fn main() {
             sources,
             conditioning,
         } => commands::device::run(&path, buffer_size, sources.as_deref(), &conditioning),
+        Commands::Sessions {
+            session,
+            dir,
+            analyze,
+            entropy,
+            output,
+        } => commands::sessions::run(
+            session.as_deref(),
+            &dir,
+            analyze,
+            entropy,
+            output.as_deref(),
+        ),
         Commands::Server {
             port,
             host,
             sources,
             allow_raw,
         } => commands::server::run(&host, port, sources.as_deref(), allow_raw),
-        Commands::Record {
-            sources,
-            duration,
-            tags,
-            note,
-            output,
-            interval,
-            conditioning,
-        } => commands::record::run(
-            &sources,
-            duration.as_deref(),
-            &tags,
-            note.as_deref(),
-            output.as_deref(),
-            interval.as_deref(),
-            &conditioning,
-        ),
-        Commands::Monitor { refresh, sources } => {
-            commands::monitor::run(refresh, sources.as_deref())
-        }
-        Commands::Report {
-            samples,
-            source,
-            output,
-            conditioning,
-        } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
-        Commands::Entropy {
-            sources,
-            conditioning,
-        } => commands::entropy::run(sources.as_deref(), &conditioning),
-        Commands::Pool {
-            sources,
-            conditioning,
-        } => commands::pool::run(sources.as_deref(), &conditioning),
     }
 }

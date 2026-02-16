@@ -139,10 +139,14 @@ fn session_recording_from_clock_jitter() {
     // Record for ~2 seconds
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(2) {
-        let names = vec!["clock_jitter".to_string()];
-        pool.collect_enabled_n(&names, 1000);
-        let raw = pool.get_bytes(1000, openentropy_core::ConditioningMode::Raw);
-        writer.write_sample("clock_jitter", &raw).unwrap();
+        let raw = pool
+            .get_source_raw_bytes("clock_jitter", 1000)
+            .unwrap_or_default();
+        let conditioned =
+            openentropy_core::condition(&raw, raw.len(), openentropy_core::ConditioningMode::Raw);
+        writer
+            .write_sample("clock_jitter", &raw, &conditioned)
+            .unwrap();
     }
 
     assert!(
@@ -151,16 +155,24 @@ fn session_recording_from_clock_jitter() {
     );
     let dir = writer.finish().unwrap();
 
-    // Verify all 4 files exist
+    // Verify all files exist
     assert!(dir.join("session.json").exists(), "session.json missing");
     assert!(dir.join("samples.csv").exists(), "samples.csv missing");
     assert!(dir.join("raw.bin").exists(), "raw.bin missing");
     assert!(dir.join("raw_index.csv").exists(), "raw_index.csv missing");
+    assert!(
+        dir.join("conditioned.bin").exists(),
+        "conditioned.bin missing"
+    );
+    assert!(
+        dir.join("conditioned_index.csv").exists(),
+        "conditioned_index.csv missing"
+    );
 
     // Verify session.json is valid
     let json_str = std::fs::read_to_string(dir.join("session.json")).unwrap();
     let meta: openentropy_core::SessionMeta = serde_json::from_str(&json_str).unwrap();
-    assert_eq!(meta.version, 1);
+    assert_eq!(meta.version, 2);
     assert_eq!(meta.sources, vec!["clock_jitter"]);
     assert!(meta.total_samples > 0);
     assert!(meta.duration_ms >= 1000); // at least ~1s (allowing some margin)
@@ -172,7 +184,7 @@ fn session_recording_from_clock_jitter() {
     assert!(lines.len() > 1, "CSV should have header + data");
     assert_eq!(
         lines[0],
-        "timestamp_ns,source,value_hex,shannon,min_entropy"
+        "timestamp_ns,source,raw_hex,conditioned_hex,raw_shannon,raw_min_entropy,conditioned_shannon,conditioned_min_entropy"
     );
     assert!(lines[1].contains("clock_jitter"));
 

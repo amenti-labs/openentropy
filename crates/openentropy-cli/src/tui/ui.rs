@@ -122,12 +122,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let rate = app.refresh_rate_secs();
-    let spin = if app.is_paused() {
-        " PAUSED"
+    // Keep a fixed-width activity marker so the title doesn't shift.
+    // While recording, keep it static to avoid visual jitter near the REC badge.
+    let activity = if app.is_paused() {
+        "⏸"
+    } else if app.is_recording() {
+        "●"
     } else if snap.collecting {
-        " ⟳"
+        "⟳"
     } else {
-        ""
+        "·"
     };
 
     let active_label = app.active_name().unwrap_or("none");
@@ -162,7 +166,10 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             format!(" @{rate_str}"),
             Style::default().bold().fg(Color::Magenta),
         ),
-        Span::styled(format!("{spin} "), Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!(" {activity} "),
+            Style::default().fg(Color::DarkGray),
+        ),
     ]);
 
     if app.is_recording() {
@@ -171,9 +178,15 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             .map(|d| format!("{:.0}s", d.as_secs_f64()))
             .unwrap_or_default();
         title_spans.push(Span::styled(
-            format!(" REC {} {}smp ", rec_elapsed, app.recording_samples()),
+            format!(" REC {} {}smp ", rec_elapsed, snap.recording_samples),
             Style::default().bold().fg(Color::White).bg(Color::Red),
         ));
+        if let Some(path) = app.recording_path() {
+            title_spans.push(Span::styled(
+                format!(" {} ", path.display()),
+                Style::default().fg(Color::Red),
+            ));
+        }
     }
 
     if let Some(path) = &snap.last_export {
@@ -374,18 +387,34 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let mode = app.chart_mode();
     let name = app.active_name().unwrap_or("—");
 
+    // Split area: chart on top, description below
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(6), Constraint::Length(4)])
+        .split(area);
+    let chart_area = parts[0];
+    let desc_area = parts[1];
+
     if mode == ChartMode::ByteDistribution {
-        draw_byte_dist(f, area, snap, name);
+        draw_byte_dist(f, chart_area, snap, name);
+        draw_description(f, desc_area, mode);
+        return;
+    }
+
+    if mode == ChartMode::RandomWalk {
+        draw_random_walk(f, chart_area, snap, name);
+        draw_description(f, desc_area, mode);
         return;
     }
 
     if snap.active_history.is_empty() {
         draw_placeholder(
             f,
-            area,
+            chart_area,
             format!(" {name} — select a source "),
             "Press space on a source to start watching",
         );
+        draw_description(f, desc_area, mode);
         return;
     }
 
@@ -395,10 +424,11 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     if values.is_empty() {
         draw_placeholder(
             f,
-            area,
+            chart_area,
             format!(" {name} — collecting... "),
             "Waiting for data...",
         );
+        draw_description(f, desc_area, mode);
         return;
     }
 
@@ -457,7 +487,7 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .title_bottom(Line::from(format!(" {} ", mode.description())).dark_gray()),
+                .title_bottom(Line::from(format!(" {} ", mode.summary())).dark_gray()),
         )
         .x_axis(
             Axis::default()
@@ -475,7 +505,22 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
                 ]),
         );
 
-    f.render_widget(chart, area);
+    f.render_widget(chart, chart_area);
+    draw_description(f, desc_area, mode);
+}
+
+// ---------------------------------------------------------------------------
+// Chart description panel
+// ---------------------------------------------------------------------------
+
+fn draw_description(f: &mut Frame, area: Rect, mode: ChartMode) {
+    let desc = mode.description();
+    let lines: Vec<Line> = desc
+        .iter()
+        .map(|&s| Line::from(Span::styled(s, Style::default().fg(Color::DarkGray))))
+        .collect();
+    let p = Paragraph::new(lines).wrap(Wrap { trim: true });
+    f.render_widget(p, area);
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +567,7 @@ fn draw_byte_dist(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
         .borders(Borders::ALL)
         .title(title)
         .title_bottom(
-            Line::from(format!(" {} ", ChartMode::ByteDistribution.description())).dark_gray(),
+            Line::from(format!(" {} ", ChartMode::ByteDistribution.summary())).dark_gray(),
         );
 
     let sparkline = Sparkline::default()
@@ -532,6 +577,89 @@ fn draw_byte_dist(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
         .style(Style::default().fg(Color::Cyan));
 
     f.render_widget(sparkline, area);
+}
+
+/// Draw a random walk (cumulative sum) that grows over time.
+///
+/// Each collection cycle appends new steps. The walk accumulates across
+/// refreshes so you can watch it evolve like a live seismograph.
+///
+/// What the shape tells you:
+/// - **Random data** → Brownian motion (wandering, no trend)
+/// - **Biased data** → steady drift up or down
+/// - **Correlated data** → smooth, sweeping curves
+/// - **Stuck/broken** → flat line or extreme runaway
+fn draw_random_walk(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
+    if snap.walk.is_empty() {
+        draw_placeholder(
+            f,
+            area,
+            format!(" {name} — [g] Random walk — collecting... "),
+            "Waiting for data...",
+        );
+        return;
+    }
+
+    let walk = &snap.walk;
+    let n = walk.len();
+
+    // Convert to chart points
+    let data: Vec<(f64, f64)> = walk
+        .iter()
+        .enumerate()
+        .map(|(i, &y)| (i as f64, y))
+        .collect();
+
+    // Stats
+    let current = *walk.last().unwrap_or(&0.0);
+    let min_y = walk.iter().copied().fold(f64::MAX, f64::min);
+    let max_y = walk.iter().copied().fold(f64::MIN, f64::max);
+    let title = format!(
+        " {name}  [g] Random walk  {n} steps  now={current:+.0}  range=[{min_y:.0}, {max_y:.0}] "
+    );
+
+    // Y bounds: symmetric around 0, or track the actual range if it's drifted
+    let y_center = (min_y + max_y) / 2.0;
+    let y_range = (max_y - min_y).max(100.0) * 1.2;
+    let y_lo = y_center - y_range / 2.0;
+    let y_hi = y_center + y_range / 2.0;
+
+    let dataset = Dataset::default()
+        .name(format!("{current:+.0}"))
+        .marker(symbols::Marker::Braille)
+        .style(Style::default().fg(Color::Cyan))
+        .data(&data);
+
+    // Zero line reference points (draw a flat line at y=0)
+    let zero_line: Vec<(f64, f64)> = vec![(0.0, 0.0), (n as f64, 0.0)];
+    let zero_dataset = Dataset::default()
+        .name("0")
+        .marker(symbols::Marker::Dot)
+        .style(Style::default().fg(Color::DarkGray))
+        .data(&zero_line);
+
+    let chart = Chart::new(vec![dataset, zero_dataset])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .title_bottom(
+                    Line::from(format!(" {} ", ChartMode::RandomWalk.summary())).dark_gray(),
+                ),
+        )
+        .x_axis(
+            Axis::default()
+                .title("steps".dark_gray())
+                .bounds([0.0, (n as f64).max(10.0)])
+                .labels(vec![Line::from("0"), Line::from(format!("{n}"))]),
+        )
+        .y_axis(Axis::default().bounds([y_lo, y_hi]).labels(vec![
+            Line::from(format!("{y_lo:.0}")),
+            Line::from(format!("{:.0}", (y_lo + y_hi) / 2.0)),
+            Line::from(format!("{y_hi:.0}")),
+        ]));
+
+    f.render_widget(chart, area);
 }
 
 // ---------------------------------------------------------------------------

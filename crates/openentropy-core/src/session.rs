@@ -8,11 +8,13 @@
 //!
 //! Each session is a directory containing:
 //! - `session.json` — metadata (sources, timing, machine info, tags)
-//! - `samples.csv` — per-sample metrics (timestamp, source, entropy stats)
+//! - `samples.csv` — per-sample metrics (raw + conditioned entropy stats)
 //! - `raw.bin` — concatenated raw bytes
 //! - `raw_index.csv` — byte offset index into raw.bin
+//! - `conditioned.bin` — concatenated conditioned bytes
+//! - `conditioned_index.csv` — byte offset index into conditioned.bin
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -21,6 +23,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::analysis;
 use crate::conditioning::{ConditioningMode, quick_min_entropy, quick_shannon};
 
 // ---------------------------------------------------------------------------
@@ -112,6 +115,109 @@ fn detect_chip() -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Per-source analysis summary (embedded in session.json)
+// ---------------------------------------------------------------------------
+
+/// Compact analysis summary for a single source, embedded in session metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSourceAnalysis {
+    pub autocorrelation_max: f64,
+    pub autocorrelation_violations: usize,
+    pub spectral_flatness: f64,
+    pub spectral_dominant_freq: f64,
+    pub bit_bias_max: f64,
+    pub bit_bias_has_significant: bool,
+    pub distribution_ks_p: f64,
+    pub distribution_mean: f64,
+    pub distribution_std: f64,
+    pub stationarity_f_stat: f64,
+    pub stationarity_is_stationary: bool,
+    pub runs_longest: usize,
+    pub runs_total: usize,
+}
+
+impl SessionSourceAnalysis {
+    /// Build a compact summary from a full `SourceAnalysis`.
+    fn from_full(sa: &analysis::SourceAnalysis) -> Self {
+        Self {
+            autocorrelation_max: sa.autocorrelation.max_abs_correlation,
+            autocorrelation_violations: sa.autocorrelation.violations,
+            spectral_flatness: sa.spectral.flatness,
+            spectral_dominant_freq: sa.spectral.dominant_frequency,
+            bit_bias_max: sa.bit_bias.overall_bias,
+            bit_bias_has_significant: sa.bit_bias.has_significant_bias,
+            distribution_ks_p: sa.distribution.ks_p_value,
+            distribution_mean: sa.distribution.mean,
+            distribution_std: sa.distribution.std_dev,
+            stationarity_f_stat: sa.stationarity.f_statistic,
+            stationarity_is_stationary: sa.stationarity.is_stationary,
+            runs_longest: sa.runs.longest_run,
+            runs_total: sa.runs.total_runs,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Analysis buffer (retains last N bytes per source for end-of-session analysis)
+// ---------------------------------------------------------------------------
+
+/// Circular buffer that retains the last `capacity` bytes per source.
+struct AnalysisBuffer {
+    data: HashMap<String, VecDeque<u8>>,
+    capacity: usize,
+}
+
+impl AnalysisBuffer {
+    fn new(sources: &[String], capacity: usize) -> Self {
+        let data = sources
+            .iter()
+            .map(|s| (s.clone(), VecDeque::with_capacity(capacity)))
+            .collect();
+        Self { data, capacity }
+    }
+
+    fn push(&mut self, source: &str, bytes: &[u8]) {
+        if self.capacity == 0 || bytes.is_empty() {
+            return;
+        }
+
+        let buf = self
+            .data
+            .entry(source.to_string())
+            .or_insert_with(|| VecDeque::with_capacity(self.capacity));
+
+        if bytes.len() >= self.capacity {
+            buf.clear();
+            buf.extend(bytes[bytes.len() - self.capacity..].iter().copied());
+            return;
+        }
+
+        let overflow = buf.len() + bytes.len();
+        if overflow > self.capacity {
+            let to_drop = overflow - self.capacity;
+            for _ in 0..to_drop {
+                let _ = buf.pop_front();
+            }
+        }
+
+        buf.extend(bytes.iter().copied());
+    }
+
+    /// Run analysis on each source buffer and return the summary map.
+    fn analyze(&self) -> HashMap<String, SessionSourceAnalysis> {
+        self.data
+            .iter()
+            .filter(|(_, buf)| buf.len() >= 100) // Need minimum data for meaningful analysis
+            .map(|(name, buf)| {
+                let contiguous: Vec<u8> = buf.iter().copied().collect();
+                let full = analysis::full_analysis(name, &contiguous);
+                (name.clone(), SessionSourceAnalysis::from_full(&full))
+            })
+            .collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Session metadata (session.json)
 // ---------------------------------------------------------------------------
 
@@ -132,6 +238,8 @@ pub struct SessionMeta {
     pub tags: HashMap<String, String>,
     pub note: Option<String>,
     pub openentropy_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<HashMap<String, SessionSourceAnalysis>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +257,7 @@ pub struct SessionConfig {
     pub note: Option<String>,
     pub duration: Option<Duration>,
     pub sample_size: usize,
+    pub include_analysis: bool,
 }
 
 impl Default for SessionConfig {
@@ -162,6 +271,7 @@ impl Default for SessionConfig {
             note: None,
             duration: None,
             sample_size: 1000,
+            include_analysis: false,
         }
     }
 }
@@ -182,8 +292,11 @@ pub struct SessionWriter {
     session_dir: PathBuf,
     csv_writer: BufWriter<File>,
     raw_writer: BufWriter<File>,
+    conditioned_writer: BufWriter<File>,
     index_writer: BufWriter<File>,
+    conditioned_index_writer: BufWriter<File>,
     raw_offset: u64,
+    conditioned_offset: u64,
     total_samples: u64,
     samples_per_source: HashMap<String, u64>,
     started_at: SystemTime,
@@ -191,6 +304,8 @@ pub struct SessionWriter {
     session_id: String,
     config: SessionConfig,
     machine: MachineInfo,
+    /// Retains last 128 KiB per source for optional end-of-session analysis.
+    analysis_buffer: Option<AnalysisBuffer>,
     /// Set to true after `finish()` succeeds so `Drop` doesn't double-write.
     finished: bool,
 }
@@ -220,7 +335,7 @@ impl SessionWriter {
         let mut csv_writer = BufWriter::new(csv_file);
         writeln!(
             csv_writer,
-            "timestamp_ns,source,value_hex,shannon,min_entropy"
+            "timestamp_ns,source,raw_hex,conditioned_hex,raw_shannon,raw_min_entropy,conditioned_shannon,conditioned_min_entropy"
         )?;
         csv_writer.flush()?;
 
@@ -228,21 +343,42 @@ impl SessionWriter {
         let raw_file = File::create(session_dir.join("raw.bin"))?;
         let raw_writer = BufWriter::new(raw_file);
 
+        // Create conditioned.bin
+        let conditioned_file = File::create(session_dir.join("conditioned.bin"))?;
+        let conditioned_writer = BufWriter::new(conditioned_file);
+
         // Create raw_index.csv with header
         let index_file = File::create(session_dir.join("raw_index.csv"))?;
         let mut index_writer = BufWriter::new(index_file);
         writeln!(index_writer, "offset,length,timestamp_ns,source")?;
         index_writer.flush()?;
 
+        // Create conditioned_index.csv with header
+        let conditioned_index_file = File::create(session_dir.join("conditioned_index.csv"))?;
+        let mut conditioned_index_writer = BufWriter::new(conditioned_index_file);
+        writeln!(
+            conditioned_index_writer,
+            "offset,length,timestamp_ns,source"
+        )?;
+        conditioned_index_writer.flush()?;
+
         let samples_per_source: HashMap<String, u64> =
             config.sources.iter().map(|s| (s.clone(), 0)).collect();
+        let analysis_buffer = if config.include_analysis {
+            Some(AnalysisBuffer::new(&config.sources, 128 * 1024))
+        } else {
+            None
+        };
 
         Ok(Self {
             session_dir,
             csv_writer,
             raw_writer,
+            conditioned_writer,
             index_writer,
+            conditioned_index_writer,
             raw_offset: 0,
+            conditioned_offset: 0,
             total_samples: 0,
             samples_per_source,
             started_at,
@@ -250,6 +386,7 @@ impl SessionWriter {
             session_id,
             config,
             machine,
+            analysis_buffer,
             finished: false,
         })
     }
@@ -263,7 +400,12 @@ impl SessionWriter {
     /// # Errors
     ///
     /// Returns an error if writing to any of the output files fails.
-    pub fn write_sample(&mut self, source: &str, raw_bytes: &[u8]) -> std::io::Result<()> {
+    pub fn write_sample(
+        &mut self,
+        source: &str,
+        raw_bytes: &[u8],
+        conditioned_bytes: &[u8],
+    ) -> std::io::Result<()> {
         if raw_bytes.is_empty() {
             return Ok(());
         }
@@ -274,19 +416,23 @@ impl SessionWriter {
             .unwrap_or_default()
             .as_nanos() as u64;
 
-        let shannon = quick_shannon(raw_bytes);
+        let raw_shannon = quick_shannon(raw_bytes);
         // Clamp to 0.0 to avoid displaying "-0.00" in CSV
-        let min_entropy = quick_min_entropy(raw_bytes).max(0.0);
-        let value_hex = hex_encode(raw_bytes);
+        let raw_min_entropy = quick_min_entropy(raw_bytes).max(0.0);
+        let conditioned_shannon = quick_shannon(conditioned_bytes);
+        let conditioned_min_entropy = quick_min_entropy(conditioned_bytes).max(0.0);
+        let raw_hex = hex_encode(raw_bytes);
+        let conditioned_hex = hex_encode(conditioned_bytes);
 
         // Write CSV row
         writeln!(
             self.csv_writer,
-            "{timestamp_ns},{source},{value_hex},{shannon:.2},{min_entropy:.2}",
+            "{timestamp_ns},{source},{raw_hex},{conditioned_hex},{raw_shannon:.2},{raw_min_entropy:.2},{conditioned_shannon:.2},{conditioned_min_entropy:.2}",
         )?;
 
         // Write raw bytes
         self.raw_writer.write_all(raw_bytes)?;
+        self.conditioned_writer.write_all(conditioned_bytes)?;
 
         // Write index row
         writeln!(
@@ -295,9 +441,19 @@ impl SessionWriter {
             self.raw_offset,
             raw_bytes.len(),
         )?;
+        writeln!(
+            self.conditioned_index_writer,
+            "{},{},{timestamp_ns},{source}",
+            self.conditioned_offset,
+            conditioned_bytes.len(),
+        )?;
 
         self.raw_offset += raw_bytes.len() as u64;
+        self.conditioned_offset += conditioned_bytes.len() as u64;
         self.total_samples += 1;
+        if let Some(buffer) = &mut self.analysis_buffer {
+            buffer.push(source, raw_bytes);
+        }
         *self
             .samples_per_source
             .entry(source.to_string())
@@ -315,7 +471,9 @@ impl SessionWriter {
     fn flush_all(&mut self) -> std::io::Result<()> {
         self.csv_writer.flush()?;
         self.raw_writer.flush()?;
+        self.conditioned_writer.flush()?;
         self.index_writer.flush()?;
+        self.conditioned_index_writer.flush()?;
         Ok(())
     }
 
@@ -325,8 +483,17 @@ impl SessionWriter {
         let ended_at = SystemTime::now();
         let duration = self.started_instant.elapsed();
 
+        let analysis = self.analysis_buffer.as_ref().and_then(|buffer| {
+            let analysis_map = buffer.analyze();
+            if analysis_map.is_empty() {
+                None
+            } else {
+                Some(analysis_map)
+            }
+        });
+
         SessionMeta {
-            version: 1,
+            version: 2,
             id: self.session_id.clone(),
             started_at: format_iso8601(
                 self.started_at
@@ -344,6 +511,7 @@ impl SessionWriter {
             tags: self.config.tags.clone(),
             note: self.config.note.clone(),
             openentropy_version: crate::VERSION.to_string(),
+            analysis,
         }
     }
 
@@ -553,6 +721,8 @@ mod tests {
         assert!(dir.join("samples.csv").exists());
         assert!(dir.join("raw.bin").exists());
         assert!(dir.join("raw_index.csv").exists());
+        assert!(dir.join("conditioned.bin").exists());
+        assert!(dir.join("conditioned_index.csv").exists());
 
         // Finish and verify session.json
         let result_dir = writer.finish().unwrap();
@@ -570,8 +740,8 @@ mod tests {
 
         let mut writer = SessionWriter::new(config).unwrap();
         let data = vec![0xAA; 100];
-        writer.write_sample("mock_source", &data).unwrap();
-        writer.write_sample("mock_source", &data).unwrap();
+        writer.write_sample("mock_source", &data, &data).unwrap();
+        writer.write_sample("mock_source", &data, &data).unwrap();
 
         let dir = writer.session_dir().to_path_buf();
         let result_dir = writer.finish().unwrap();
@@ -581,7 +751,7 @@ mod tests {
         let lines: Vec<&str> = csv.lines().collect();
         assert_eq!(
             lines[0],
-            "timestamp_ns,source,value_hex,shannon,min_entropy"
+            "timestamp_ns,source,raw_hex,conditioned_hex,raw_shannon,raw_min_entropy,conditioned_shannon,conditioned_min_entropy"
         );
         assert_eq!(lines.len(), 3); // header + 2 samples
         assert!(lines[1].contains("mock_source"));
@@ -597,10 +767,19 @@ mod tests {
         assert!(idx_lines[1].starts_with("0,100,")); // first entry at offset 0
         assert!(idx_lines[2].starts_with("100,100,")); // second at offset 100
 
+        // Check conditioned.bin/index
+        let conditioned = std::fs::read(dir.join("conditioned.bin")).unwrap();
+        assert_eq!(conditioned.len(), 200);
+        let conditioned_index = std::fs::read_to_string(dir.join("conditioned_index.csv")).unwrap();
+        let cidx_lines: Vec<&str> = conditioned_index.lines().collect();
+        assert_eq!(cidx_lines.len(), 3);
+        assert!(cidx_lines[1].starts_with("0,100,"));
+        assert!(cidx_lines[2].starts_with("100,100,"));
+
         // Check session.json
         let json_str = std::fs::read_to_string(result_dir.join("session.json")).unwrap();
         let meta: SessionMeta = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(meta.version, 1);
+        assert_eq!(meta.version, 2);
         assert_eq!(meta.total_samples, 2);
         assert_eq!(meta.sources, vec!["mock_source"]);
         assert_eq!(*meta.samples_per_source.get("mock_source").unwrap(), 2);
@@ -617,9 +796,9 @@ mod tests {
         };
 
         let mut writer = SessionWriter::new(config).unwrap();
-        writer.write_sample("source_a", &[1; 50]).unwrap();
-        writer.write_sample("source_b", &[2; 75]).unwrap();
-        writer.write_sample("source_a", &[3; 50]).unwrap();
+        writer.write_sample("source_a", &[1; 50], &[4; 50]).unwrap();
+        writer.write_sample("source_b", &[2; 75], &[5; 75]).unwrap();
+        writer.write_sample("source_a", &[3; 50], &[6; 50]).unwrap();
 
         assert_eq!(writer.total_samples(), 3);
         assert_eq!(*writer.samples_per_source().get("source_a").unwrap(), 2);
@@ -661,7 +840,7 @@ mod tests {
     #[test]
     fn test_session_meta_serialization_roundtrip() {
         let meta = SessionMeta {
-            version: 1,
+            version: 2,
             id: "test-id".to_string(),
             started_at: "2026-01-01T00:00:00Z".to_string(),
             ended_at: "2026-01-01T00:05:00Z".to_string(),
@@ -683,12 +862,13 @@ mod tests {
             },
             tags: HashMap::new(),
             note: None,
-            openentropy_version: "0.4.1".to_string(),
+            openentropy_version: "0.5.0".to_string(),
+            analysis: None,
         };
 
         let json = serde_json::to_string_pretty(&meta).unwrap();
         let parsed: SessionMeta = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.version, 1);
+        assert_eq!(parsed.version, 2);
         assert_eq!(parsed.id, "test-id");
         assert_eq!(parsed.total_samples, 3000);
         assert_eq!(parsed.duration_ms, 300000);
@@ -709,7 +889,9 @@ mod tests {
 
         let mut writer = SessionWriter::new(config).unwrap();
         let dir = writer.session_dir().to_path_buf();
-        writer.write_sample("drop_test", &[42; 100]).unwrap();
+        writer
+            .write_sample("drop_test", &[42; 100], &[24; 100])
+            .unwrap();
         // Drop without calling finish()
         drop(writer);
 
@@ -752,7 +934,7 @@ mod tests {
         };
 
         let mut writer = SessionWriter::new(config).unwrap();
-        writer.write_sample("test", &[]).unwrap();
+        writer.write_sample("test", &[], &[]).unwrap();
         assert_eq!(writer.total_samples(), 0);
         let _ = writer.finish().unwrap();
     }
@@ -768,7 +950,9 @@ mod tests {
 
         let mut writer = SessionWriter::new(config).unwrap();
         // All-same bytes produce near-zero min-entropy that could display as -0.00
-        writer.write_sample("test", &[0xAA; 100]).unwrap();
+        writer
+            .write_sample("test", &[0xAA; 100], &[0xAA; 100])
+            .unwrap();
         let dir = writer.session_dir().to_path_buf();
         let _ = writer.finish().unwrap();
 

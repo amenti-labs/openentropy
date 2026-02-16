@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-44 sources across 12 categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+47 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -42,6 +42,17 @@
 | 37 | `dvfs_race` | Microarch | Cross-core DVFS frequency race | ~500 b/s | All |
 | 38 | `cas_contention` | Microarch | Multi-thread atomic CAS arbitration | ~200 b/s | All |
 | 39 | `keychain_timing` | IPC | macOS Keychain Services API timing | ~300 b/s | macOS |
+| 40 | `denormal_timing` | Thermal | Denormal FPU micropower thermal noise | ~3000 b/s | All |
+| 41 | `audio_pll_timing` | Thermal | Audio PLL clock drift (independent crystal) | ~4000 b/s | macOS |
+| 42 | `usb_timing` | IO | USB bus transaction timing jitter | ~2000 b/s | macOS |
+| 43 | `counter_beat` | Thermal | Two-oscillator beat: CPU 24 MHz vs audio PLL | ~2000 b/s | macOS (ARM) |
+| 44 | `gpu_divergence` | GPU | GPU warp/SIMD divergence timing variance | ~500 b/s | macOS (Metal) |
+| 45 | `iosurface_crossing` | GPU | IOSurface CPU↔GPU memory domain crossing | ~500 b/s | macOS |
+| 46 | `fsync_journal` | IO | APFS journal commit timing (full storage stack) | ~200 b/s | All |
+| 47 | `nvme_latency` | IO | NVMe command submission/completion timing | ~3000 b/s | macOS |
+| 48 | `pdn_resonance` | Thermal | Power delivery network LC resonance noise | ~3000 b/s | All (ARM) |
+| 49 | `display_pll` | Thermal | Display PLL phase noise (~533 MHz pixel clock) | ~2500 b/s | macOS (ARM) |
+| 50 | `pcie_pll` | Thermal | PCIe PHY PLL jitter (Thunderbolt/PCIe clock domains) | ~2000 b/s | macOS (ARM) |
 
 ---
 
@@ -570,16 +581,183 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 **Implementation:** Performs Keychain API queries (searching for non-existent items) and measures the round-trip timing through the Security framework.
 
+### 40. `denormal_timing`
+
+**Category:** Thermal
+**Struct:** `DenormalTimingSource`
+**Platform:** All (best on ARM)
+**Estimated Rate:** ~3000 b/s
+
+**Physics:** Forces the FPU to process denormalized floating-point numbers (values below the normal minimum, ~2⁻¹⁰²² for f64). Denormals require microcode-assisted handling with variable power draw, creating thermal-dependent timing variation. The timing captures transistor-level thermal noise in the FPU execution units — not scheduling or OS noise, but actual silicon-level thermal fluctuation.
+
+**What makes it unique:** Only source that exploits **FPU micropower variation**. The entropy comes from the physical power consumed by the denormal microcode path varying with transistor temperature. Low Shannon H (~1.0) makes it ideal for anomaly detection research — subtle perturbations are easier to detect in a low-entropy signal.
+
+---
+
+### 41. `audio_pll_timing`
+
+**Category:** Thermal
+**Struct:** `AudioPLLTimingSource`
+**Platform:** macOS (requires audio output device)
+**Estimated Rate:** ~4000 b/s
+
+**Physics:** The audio subsystem has its own Phase-Locked Loop generating sample clocks from an independent crystal oscillator. CoreAudio property queries (sample rate, latency) cross from the CPU clock domain into the audio PLL domain. Phase noise arises from VCO transistor Johnson-Nyquist noise, charge pump shot noise, and reference oscillator crystal jitter.
+
+**What makes it unique:** Taps the **audio PLL crystal** — a physically separate oscillator from the CPU's 24 MHz crystal. The audio crystal runs at 48 kHz base frequency. Unlike `counter_beat` which measures the beat *between* CPU and audio clocks, this source measures the timing *within* the audio PLL domain crossing itself.
+
+---
+
+### 42. `usb_timing`
+
+**Category:** IO
+**Struct:** `USBTimingSource`
+**Platform:** macOS
+**Estimated Rate:** ~2000 b/s
+
+**Physics:** USB bus transactions involve the XHCI host controller (which has its own clock domain), PHY signaling with bit-level timing recovery, and kernel driver overhead. IOKit lookups of USB device properties traverse the full USB stack, crossing clock domains between CPU, USB controller, and potentially downstream hubs.
+
+**What makes it unique:** Exercises the **USB XHCI clock domain** — a separate clock recovery PLL from CPU, audio, display, and PCIe. The USB PHY has its own oscillator for high-speed signaling.
+
+---
+
+### 43. `counter_beat`
+
+**Category:** Thermal
+**Struct:** `CounterBeatSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~2000 b/s
+
+**Physics:** Reads CNTVCT_EL0 (ARM generic timer, driven by the CPU's **24 MHz crystal**) immediately before and after a CoreAudio property query that forces synchronization with the **audio PLL crystal**. The query duration in counter ticks is modulated by the instantaneous phase relationship between these two independent oscillators. Entropy arises from uncorrelated Johnson-Nyquist thermal noise in each crystal's sustaining amplifier.
+
+**What makes it unique:** The **primary two-oscillator beat** — directly measures the phase difference between two independent crystal oscillators. This is the closest consumer-hardware analog to oscillator-based hardware random number generators. Low min-entropy (H∞ ~1–3) is intentional: preserves the raw physical beat signal for research.
+
+**Key distinction from `audio_pll_timing`:** `audio_pll_timing` measures timing jitter *within* CoreAudio calls. `counter_beat` measures the *beat frequency* between the CPU crystal and audio crystal — a fundamentally different signal that encodes the instantaneous phase relationship.
+
+---
+
+### 44. `gpu_divergence`
+
+**Category:** GPU
+**Struct:** `GPUDivergenceSource`
+**Platform:** macOS (Metal)
+**Estimated Rate:** ~500 b/s
+
+**Physics:** Dispatches Metal compute shaders where threads within a SIMD group (warp) take different execution paths based on thread index. When threads diverge, the GPU must serialize execution across the divergent paths. The timing of this serialization depends on GPU scheduler state, thermal throttling, and power management — all nondeterministic.
+
+**What makes it unique:** Only source exploiting **GPU SIMD lane divergence**. Unlike `gpu_timing` (measures dispatch scheduling overhead), this source forces intra-warp thread divergence and measures the timing cost. The GPU's internal scheduling decisions for divergent warps are not deterministic.
+
+---
+
+### 45. `iosurface_crossing`
+
+**Category:** GPU
+**Struct:** `IOSurfaceCrossingSource`
+**Platform:** macOS
+**Estimated Rate:** ~500 b/s
+
+**Physics:** IOSurface is Apple's cross-domain shared memory primitive for GPU↔CPU coherence. Creating, mapping, and destroying IOSurfaces forces cache coherence protocol operations between the CPU and GPU memory controllers. The timing of these coherence operations depends on cache state, memory controller arbitration, and bus contention — all nondeterministic.
+
+**What makes it unique:** Only source exploiting **GPU↔CPU memory coherence protocol timing**. Unlike `gpu_timing`/`gpu_divergence` (compute dispatch), this source measures the cost of crossing the CPU-GPU memory boundary itself.
+
+---
+
+### 46. `fsync_journal`
+
+**Category:** IO
+**Struct:** `FsyncJournalSource`
+**Platform:** All
+**Estimated Rate:** ~200 b/s
+
+**Physics:** `fsync()` forces a full flush through the storage stack: filesystem journal commit (APFS on macOS), block layer queueing, NVMe command submission, and NAND flash write with wear-leveling. The timing traverses the entire I/O path from userspace to physical media.
+
+**What makes it unique:** The **deepest I/O path** of any source — touches every layer from VFS to NAND flash. Slower than other IO sources but captures noise from the full storage stack, including APFS journal commit decisions and NVMe controller firmware timing.
+
+---
+
+### 47. `nvme_latency`
+
+**Category:** IO
+**Struct:** `NVMeLatencySource`
+**Platform:** macOS
+**Estimated Rate:** ~3000 b/s
+
+**Physics:** NVMe controllers have their own firmware and clock domain. IOKit property reads traverse the NVMe driver stack, crossing from the CPU domain into the NVMe controller's firmware. Timing depends on NVMe queue depth, command scheduling, NAND cell access patterns, and wear-leveling state.
+
+**What makes it unique:** Targets the **NVMe controller's independent clock domain** specifically, without going through the full filesystem stack (unlike `fsync_journal`). Faster and more direct.
+
+---
+
+### 48. `pdn_resonance`
+
+**Category:** Thermal
+**Struct:** `PDNResonanceSource`
+**Platform:** All (ARM, best on Apple Silicon)
+**Estimated Rate:** ~3000 b/s
+
+**Physics:** The power delivery network (PDN) is an LC circuit (inductors + capacitors) that filters voltage to the CPU cores. When computation patterns change rapidly, the PDN's LC network rings at its resonant frequency. By alternating between heavy computation (AMX matrix ops or FPU-intensive work) and idle, the source excites PDN resonance and captures the resulting voltage fluctuation through timing variation.
+
+**What makes it unique:** Only source exploiting **power delivery network analog resonance**. The PDN is a passive analog circuit — its ringing behavior depends on physical component values (inductor ESR, capacitor ESR, PCB trace impedance) that vary with temperature. Very low Shannon H (~0.86) makes it excellent for anomaly detection.
+
+---
+
+### 49. `display_pll`
+
+**Category:** Thermal
+**Struct:** `DisplayPllSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~2500 b/s
+
+**Physics:** The display subsystem uses an independent PLL to generate the pixel clock (~533 MHz on Mac Mini M4). CoreGraphics display property queries (mode, refresh rate, dimensions) cross from the CPU clock domain into the display PLL domain. Reading CNTVCT_EL0 before and after captures the beat between the CPU crystal and display PLL.
+
+**What makes it unique:** Taps the **third independent oscillator** on the SoC — separate from both the CPU crystal (24 MHz) and audio PLL (48 kHz). The display PLL runs at ~533 MHz, providing a different frequency ratio and noise characteristic. No audio hardware required.
+
+**Key distinction from other oscillator sources:**
+- `counter_beat` → CPU crystal vs **audio PLL** (48 kHz base)
+- `display_pll` → CPU crystal vs **display PLL** (~533 MHz)
+- `pcie_pll` → CPU crystal vs **PCIe PHY PLLs** (various)
+
+---
+
+### 50. `pcie_pll`
+
+**Category:** Thermal
+**Struct:** `PciePllSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~2000 b/s
+
+**Physics:** Apple Silicon has multiple independent PLLs for the PCIe/Thunderbolt physical layer (CIO3PLL, AUSPLL, ACIOPHY_PLL visible in IORegistry). IOKit property reads from PCIe/Thunderbolt services cross into these PLL clock domains. The timing captures the beat between the CPU crystal and PCIe PHY oscillators. PCIe may also use spread-spectrum clocking (SSC), which intentionally modulates the clock frequency — adding an extra noise dimension.
+
+**What makes it unique:** Taps the **fourth independent oscillator domain** — PCIe PHY PLLs are electrically separate from CPU, audio, and display oscillators. Cycles through 5 IOKit service classes (ThunderboltHAL, IOPCIDevice, IOThunderboltController, IONVMeController, USBHostController) to exercise different PCIe clock recovery PLLs.
+
+**Key distinction:** While `nvme_latency` times NVMe-specific operations, `pcie_pll` targets the underlying PCIe PHY clock domain that *all* PCIe devices share — a lower-level, more fundamental oscillator source.
+
+---
+
+## Oscillator Independence Map
+
+The thermal/oscillator sources each tap a **physically independent** noise source. This table clarifies what makes each one unique:
+
+| Source | Oscillator Probed | Frequency | How Probed | Independent From |
+|--------|-------------------|-----------|------------|------------------|
+| `counter_beat` | Audio PLL crystal | ~48 kHz | CoreAudio property query | CPU, Display, PCIe |
+| `audio_pll_timing` | Audio PLL crystal | ~48 kHz | CoreAudio property timing | CPU, Display, PCIe |
+| `display_pll` | Display PLL | ~533 MHz | CoreGraphics mode query | CPU, Audio, PCIe |
+| `pcie_pll` | PCIe PHY PLLs | Various | IOKit service property reads | CPU, Audio, Display |
+| `denormal_timing` | *(none — FPU thermal)* | N/A | Denormal FPU computation | All oscillators |
+| `pdn_resonance` | *(none — PDN analog)* | LC resonant | Computation burst/idle | All oscillators |
+
+All oscillator sources use **CNTVCT_EL0** (CPU's 24 MHz crystal) as the timing reference. The entropy comes from the *other* oscillator's independent thermal noise — not from the CPU crystal itself.
+
 ---
 
 ## Platform Availability
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **36/36** | Full suite -- WiFi, BLE, camera, mic, all sensors |
-| **Mac Mini/Studio/Pro** | 31-33/36 | Most sources -- no built-in camera or mic on some models |
-| **Intel Mac** | ~18/36 | Timing, system, network, disk sources work; some silicon sources are ARM-specific |
-| **Linux** | 10-15/36 | Timing, network, disk, process, silicon sources work; no macOS-specific sources |
+| **MacBook (M-series)** | **47/47** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
+| **Mac Mini/Studio/Pro** | 44-45/47 | Most sources — no built-in camera or mic on some models |
+| **Intel Mac** | ~20/47 | Timing, system, network, disk sources work; ARM-specific sources unavailable |
+| **Linux** | ~12/47 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
 
 The package gracefully detects available hardware via `detect_available_sources()` and only activates sources that pass `is_available()`. MacBooks provide the richest entropy because they pack the most sensors into one device.
 

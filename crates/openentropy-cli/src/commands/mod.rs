@@ -1,13 +1,12 @@
+pub mod analyze;
 pub mod bench;
 pub mod device;
-pub mod entropy;
 pub mod monitor;
-pub mod pool;
-pub mod probe;
 pub mod record;
 pub mod report;
 pub mod scan;
 pub mod server;
+pub mod sessions;
 pub mod stream;
 
 use openentropy_core::EntropyPool;
@@ -47,6 +46,13 @@ const FAST_SOURCES: &[&str] = &[
     // Unprecedented entropy sources (fast ones only)
     "nvme_latency",
     "pdn_resonance",
+    // Independent oscillator sources
+    "counter_beat",
+    "display_pll",
+    "pcie_pll",
+    // GPU sources (moderate speed)
+    "gpu_divergence",
+    "iosurface_crossing",
 ];
 
 /// Build an EntropyPool, optionally filtering sources by name.

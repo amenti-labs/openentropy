@@ -18,7 +18,9 @@
 //! ├── dvfs_race.rs        ← cross-core DVFS frequency race
 //! ├── cas_contention.rs   ← CAS atomic contention timing
 //! ├── keychain_timing.rs  ← Keychain/securityd round-trip timing
-//! └── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
+//! ├── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
+//! ├── display_pll.rs      ← Display PLL phase noise from pixel clock domain crossing
+//! └── pcie_pll.rs         ← PCIe PHY PLL jitter from IOKit clock domain crossings
 //! ```
 //!
 //! Each source measures a single, independent physical entropy domain.
@@ -39,6 +41,7 @@ mod audio_pll_timing;
 mod cas_contention;
 mod counter_beat;
 mod denormal_timing;
+mod display_pll;
 mod dvfs_race;
 mod fsync_journal;
 mod gpu_divergence;
@@ -47,6 +50,7 @@ mod keychain_timing;
 mod kqueue_events;
 mod mach_ipc;
 mod nvme_latency;
+mod pcie_pll;
 mod pdn_resonance;
 mod pipe_buffer;
 mod thread_lifecycle;
@@ -59,6 +63,7 @@ pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
 pub use counter_beat::CounterBeatSource;
 pub use denormal_timing::DenormalTimingSource;
+pub use display_pll::DisplayPllSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
 pub use gpu_divergence::GPUDivergenceSource;
@@ -67,6 +72,7 @@ pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use nvme_latency::NVMeLatencySource;
+pub use pcie_pll::PciePllSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use thread_lifecycle::ThreadLifecycleSource;
@@ -214,6 +220,8 @@ mod tests {
             Box::new(IOSurfaceCrossingSource),
             Box::new(FsyncJournalSource),
             Box::new(CounterBeatSource),
+            Box::new(DisplayPllSource),
+            Box::new(PciePllSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

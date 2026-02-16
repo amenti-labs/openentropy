@@ -37,3 +37,8 @@ target/
 tmp/
 venv/
 research/internal/
+
+# Local session/snapshot artifacts
+sessions/
+openentropy-snapshot-*.json
+session_analysis_integration.md

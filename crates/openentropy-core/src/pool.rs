@@ -9,8 +9,9 @@
 //! 6. Graceful degradation when sources fail
 //! 7. Thread-safe for concurrent access
 
-use std::sync::Mutex;
-use std::time::Instant;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
@@ -19,11 +20,14 @@ use crate::source::{EntropySource, SourceState};
 
 /// Thread-safe multi-source entropy pool.
 pub struct EntropyPool {
-    sources: Vec<Mutex<SourceState>>,
+    sources: Vec<Arc<Mutex<SourceState>>>,
     buffer: Mutex<Vec<u8>>,
     state: Mutex<[u8; 32]>,
     counter: Mutex<u64>,
     total_output: Mutex<u64>,
+    // Per-source collection coordination for timeout-safe parallel collection.
+    in_flight: Arc<Mutex<HashSet<usize>>>,
+    backoff_until: Arc<Mutex<HashMap<usize, Instant>>>,
 }
 
 impl EntropyPool {
@@ -49,6 +53,8 @@ impl EntropyPool {
             state: Mutex::new(initial_state),
             counter: Mutex::new(0),
             total_output: Mutex::new(0),
+            in_flight: Arc::new(Mutex::new(HashSet::new())),
+            backoff_until: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -64,7 +70,7 @@ impl EntropyPool {
     /// Register an entropy source.
     pub fn add_source(&mut self, source: Box<dyn EntropySource>, weight: f64) {
         self.sources
-            .push(Mutex::new(SourceState::new(source, weight)));
+            .push(Arc::new(Mutex::new(SourceState::new(source, weight))));
     }
 
     /// Number of registered sources.
@@ -72,44 +78,122 @@ impl EntropyPool {
         self.sources.len()
     }
 
-    /// Collect entropy from every registered source (serial).
-    /// Collect entropy from every registered source in parallel with per-source
-    /// timeout (10s default). Sources that exceed the timeout are skipped.
+    /// Collect entropy from every registered source in parallel.
+    ///
+    /// Uses a 10s collection timeout per cycle. Slow sources are skipped and
+    /// temporarily backed off to keep callers responsive.
     pub fn collect_all(&self) -> usize {
-        self.collect_all_parallel(10.0)
+        self.collect_all_parallel_n(10.0, 1000)
     }
 
-    /// Collect entropy from all sources in parallel using threads.
+    /// Collect entropy from all sources in parallel using detached worker threads.
+    ///
+    /// Slow or hung sources are skipped after `timeout_secs`. Timed-out sources
+    /// enter a backoff window to avoid thread buildup on repeated calls.
     pub fn collect_all_parallel(&self, timeout_secs: f64) -> usize {
-        use std::sync::Arc;
-        let results: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-        let deadline = Instant::now() + std::time::Duration::from_secs_f64(timeout_secs);
+        self.collect_all_parallel_n(timeout_secs, 1000)
+    }
 
-        std::thread::scope(|s| {
-            let handles: Vec<_> = self
-                .sources
-                .iter()
-                .map(|ss_mutex| {
-                    let results = Arc::clone(&results);
-                    s.spawn(move || {
-                        let data = Self::collect_one(ss_mutex);
-                        if !data.is_empty() {
-                            results.lock().unwrap().extend_from_slice(&data);
-                        }
-                    })
-                })
-                .collect();
+    /// Collect entropy from all sources in parallel using detached worker threads.
+    ///
+    /// - `timeout_secs`: max wall-clock time to wait for a collection cycle.
+    /// - `n_samples`: samples requested from each source in this cycle.
+    ///
+    /// Slow or hung sources are skipped after `timeout_secs`. Timed-out sources
+    /// enter a backoff window to avoid thread buildup on repeated calls.
+    pub fn collect_all_parallel_n(&self, timeout_secs: f64, n_samples: usize) -> usize {
+        let timeout = Duration::from_secs_f64(timeout_secs.max(0.0));
+        if timeout.is_zero() || n_samples == 0 {
+            return 0;
+        }
 
-            for handle in handles {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    break;
-                }
-                let _ = handle.join();
+        let (tx, rx) = std::sync::mpsc::channel::<(usize, Vec<u8>)>();
+        let now = Instant::now();
+        let mut scheduled: Vec<usize> = Vec::new();
+
+        for (idx, ss_mutex) in self.sources.iter().enumerate() {
+            // Skip sources still in backoff.
+            let in_backoff = {
+                let backoff = self.backoff_until.lock().unwrap();
+                backoff.get(&idx).is_some_and(|until| now < *until)
+            };
+            if in_backoff {
+                continue;
             }
-        });
 
-        let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+            // Skip sources with an in-flight worker from a prior timeout.
+            {
+                let mut in_flight = self.in_flight.lock().unwrap();
+                if in_flight.contains(&idx) {
+                    continue;
+                }
+                in_flight.insert(idx);
+            }
+
+            scheduled.push(idx);
+
+            let tx = tx.clone();
+            let src = Arc::clone(ss_mutex);
+            let in_flight = Arc::clone(&self.in_flight);
+            let backoff = Arc::clone(&self.backoff_until);
+
+            std::thread::spawn(move || {
+                let data = Self::collect_one_n(&src, n_samples);
+                {
+                    let mut in_flight = in_flight.lock().unwrap();
+                    in_flight.remove(&idx);
+                }
+                let mut bo = backoff.lock().unwrap();
+                bo.remove(&idx);
+                let _ = tx.send((idx, data));
+            });
+        }
+        drop(tx);
+
+        if scheduled.is_empty() {
+            return 0;
+        }
+
+        let deadline = Instant::now() + timeout;
+        let mut received = HashSet::new();
+        let mut results = Vec::new();
+
+        while received.len() < scheduled.len() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(remaining) {
+                Ok((idx, data)) => {
+                    received.insert(idx);
+                    if !data.is_empty() {
+                        results.extend_from_slice(&data);
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        // Back off any sources that did not respond in time.
+        let backoff_for = Duration::from_secs(30);
+        let timeout_mark = Instant::now() + backoff_for;
+        for idx in scheduled {
+            if received.contains(&idx) {
+                continue;
+            }
+
+            {
+                let mut bo = self.backoff_until.lock().unwrap();
+                bo.insert(idx, timeout_mark);
+            }
+
+            if let Ok(mut ss) = self.sources[idx].try_lock() {
+                ss.failures += 1;
+                ss.healthy = false;
+            }
+        }
+
         let n = results.len();
         self.buffer.lock().unwrap().extend_from_slice(&results);
         n
@@ -157,11 +241,7 @@ impl EntropyPool {
         n
     }
 
-    fn collect_one(ss_mutex: &Mutex<SourceState>) -> Vec<u8> {
-        Self::collect_one_n(ss_mutex, 1000)
-    }
-
-    fn collect_one_n(ss_mutex: &Mutex<SourceState>, n_samples: usize) -> Vec<u8> {
+    fn collect_one_n(ss_mutex: &Arc<Mutex<SourceState>>, n_samples: usize) -> Vec<u8> {
         let mut ss = ss_mutex.lock().unwrap();
         let t0 = Instant::now();
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -190,31 +270,38 @@ impl EntropyPool {
         }
     }
 
-    /// Return `n_bytes` of raw, unconditioned entropy (XOR-combined only).
+    /// Return up to `n_bytes` of raw, unconditioned entropy (XOR-combined only).
     ///
     /// No SHA-256, no DRBG, no whitening. Preserves the raw hardware noise
     /// signal for researchers studying actual device entropy characteristics.
+    ///
+    /// If sources cannot provide enough bytes after several collection rounds,
+    /// this returns the available bytes rather than blocking indefinitely.
     pub fn get_raw_bytes(&self, n_bytes: usize) -> Vec<u8> {
-        // Auto-collect if buffer is low
-        {
-            let buf = self.buffer.lock().unwrap();
-            if buf.len() < n_bytes {
-                drop(buf);
-                self.collect_all();
+        const MAX_COLLECTION_ROUNDS: usize = 8;
+
+        let mut rounds = 0usize;
+        loop {
+            let ready = { self.buffer.lock().unwrap().len() >= n_bytes };
+            if ready || rounds >= MAX_COLLECTION_ROUNDS {
+                break;
+            }
+
+            let n = self.collect_all();
+            rounds += 1;
+            if n == 0 {
+                std::thread::sleep(Duration::from_millis(1));
             }
         }
 
         let mut buf = self.buffer.lock().unwrap();
-        // If we still don't have enough, collect more rounds
-        while buf.len() < n_bytes {
-            drop(buf);
-            self.collect_all();
-            buf = self.buffer.lock().unwrap();
+        let take = n_bytes.min(buf.len());
+        if take == 0 {
+            return Vec::new();
         }
-
-        let output: Vec<u8> = buf.drain(..n_bytes).collect();
+        let output: Vec<u8> = buf.drain(..take).collect();
         drop(buf);
-        *self.total_output.lock().unwrap() += n_bytes as u64;
+        *self.total_output.lock().unwrap() += take as u64;
         output
     }
 
@@ -351,6 +438,62 @@ impl EntropyPool {
                 s.name, ok, s.bytes, s.entropy, s.min_entropy, s.time, s.failures
             );
         }
+    }
+
+    /// Collect entropy from a single named source and return conditioned bytes.
+    ///
+    /// Returns `None` if the source name doesn't match any registered source.
+    pub fn get_source_bytes(
+        &self,
+        source_name: &str,
+        n_bytes: usize,
+        mode: crate::conditioning::ConditioningMode,
+    ) -> Option<Vec<u8>> {
+        if n_bytes == 0 {
+            return Some(Vec::new());
+        }
+
+        let ss_mutex = self
+            .sources
+            .iter()
+            .find(|ss_mutex| {
+                let ss = ss_mutex.lock().unwrap();
+                ss.source.info().name == source_name
+            })
+            .cloned()?;
+
+        let n_samples = match mode {
+            crate::conditioning::ConditioningMode::Raw => n_bytes,
+            crate::conditioning::ConditioningMode::VonNeumann => n_bytes * 6,
+            crate::conditioning::ConditioningMode::Sha256 => n_bytes * 4 + 64,
+        };
+        let raw = Self::collect_one_n(&ss_mutex, n_samples);
+        let output = crate::conditioning::condition(&raw, n_bytes, mode);
+        Some(output)
+    }
+
+    /// Collect raw bytes from a single named source.
+    ///
+    /// Returns `None` if no source matches the name.
+    pub fn get_source_raw_bytes(&self, source_name: &str, n_samples: usize) -> Option<Vec<u8>> {
+        let ss_mutex = self.sources.iter().find(|ss_mutex| {
+            let ss = ss_mutex.lock().unwrap();
+            ss.source.info().name == source_name
+        })?;
+
+        let raw = Self::collect_one_n(ss_mutex, n_samples);
+        Some(raw)
+    }
+
+    /// List all registered source names.
+    pub fn source_names(&self) -> Vec<String> {
+        self.sources
+            .iter()
+            .map(|ss_mutex| {
+                let ss = ss_mutex.lock().unwrap();
+                ss.source.info().name.to_string()
+            })
+            .collect()
     }
 
     /// Get source info for each registered source.

@@ -23,7 +23,9 @@ use ratatui::prelude::*;
 use ratatui::widgets::TableState;
 
 use openentropy_core::ConditioningMode;
+use openentropy_core::conditioning::condition;
 use openentropy_core::pool::{EntropyPool, SourceHealth};
+use openentropy_core::session::{SessionConfig, SessionWriter};
 
 // ---------------------------------------------------------------------------
 // ChartMode
@@ -37,6 +39,7 @@ pub enum ChartMode {
     MinEntropy,
     CollectTime,
     OutputValue,
+    RandomWalk,
     ByteDistribution,
     Autocorrelation,
 }
@@ -47,7 +50,8 @@ impl ChartMode {
             Self::Shannon => Self::MinEntropy,
             Self::MinEntropy => Self::CollectTime,
             Self::CollectTime => Self::OutputValue,
-            Self::OutputValue => Self::ByteDistribution,
+            Self::OutputValue => Self::RandomWalk,
+            Self::RandomWalk => Self::ByteDistribution,
             Self::ByteDistribution => Self::Autocorrelation,
             Self::Autocorrelation => Self::Shannon,
         }
@@ -59,6 +63,7 @@ impl ChartMode {
             Self::MinEntropy => "Min-entropy",
             Self::CollectTime => "Collect time",
             Self::OutputValue => "Output value",
+            Self::RandomWalk => "Random walk",
             Self::ByteDistribution => "Byte dist",
             Self::Autocorrelation => "Autocorrelation",
         }
@@ -69,21 +74,70 @@ impl ChartMode {
             Self::Shannon | Self::MinEntropy => "bits/byte",
             Self::CollectTime => "ms",
             Self::OutputValue => "[0, 1]",
+            Self::RandomWalk => "sum",
             Self::ByteDistribution => "count",
             Self::Autocorrelation => "r",
         }
     }
 
-    pub fn description(self) -> &'static str {
+    /// Short one-line summary for the chart title bar.
+    pub fn summary(self) -> &'static str {
         match self {
-            Self::Shannon => "Shannon entropy of 1kB raw sample (8.0 = ideal)",
-            Self::MinEntropy => "NIST SP 800-90B conservative lower bound",
-            Self::CollectTime => "Source collection latency per cycle",
-            Self::OutputValue => "First 8 conditioned bytes mapped to [0,1] — uniform = random",
-            Self::ByteDistribution => "Byte value frequency — flat = uniform, spikes = bias",
-            Self::Autocorrelation => {
-                "Lag-1 correlation of output values — near 0 = independent (good)"
-            }
+            Self::Shannon => "Information content per byte (8.0 = maximum)",
+            Self::MinEntropy => "Worst-case guessability per byte (NIST MCV)",
+            Self::CollectTime => "Hardware collection latency",
+            Self::OutputValue => "Per-sample uniformity check",
+            Self::RandomWalk => "Cumulative bias detector",
+            Self::ByteDistribution => "Byte value histogram",
+            Self::Autocorrelation => "Sequential independence check",
+        }
+    }
+
+    /// Multi-line description explaining what this chart shows and how to read it.
+    pub fn description(self) -> &'static [&'static str] {
+        match self {
+            Self::Shannon => &[
+                "Shannon entropy measures how unpredictable each byte is.",
+                "8.0 bits/byte = perfectly random (every byte equally likely).",
+                "Below 7.0 = significant patterns. Below 4.0 = mostly predictable.",
+                "This is an upper bound — real randomness quality may be lower.",
+            ],
+            Self::MinEntropy => &[
+                "Min-entropy measures how easy the most common byte is to guess.",
+                "Uses the NIST SP 800-90B Most Common Value estimator with 99% CI.",
+                "Always <= Shannon. This is what matters for cryptographic security.",
+                "Below 6.0 = an attacker has a meaningful advantage guessing bytes.",
+            ],
+            Self::CollectTime => &[
+                "Time taken by the hardware source to produce each sample.",
+                "Natural jitter in collection time is expected and healthy —",
+                "it reflects real physical processes (bus contention, scheduling).",
+                "Flat line = suspicious (source may not be doing real work).",
+            ],
+            Self::OutputValue => &[
+                "Each collection's conditioned bytes are folded into a single",
+                "number between 0 and 1. For a good source, these should scatter",
+                "uniformly across the range with no visible pattern or clustering.",
+                "Bands or gaps suggest the source has structural bias.",
+            ],
+            Self::RandomWalk => &[
+                "Each conditioned byte adds (byte - 128) to a running total.",
+                "Good randomness wanders like Brownian motion (no trend).",
+                "Steady upward/downward drift = byte bias (too many high/low values).",
+                "Smooth waves = correlated output. Flat line = stuck source.",
+            ],
+            Self::ByteDistribution => &[
+                "Counts how often each byte value (0-255) appears across all samples.",
+                "A good source produces a flat, even histogram (uniform distribution).",
+                "Spikes = certain values appear far more often than expected.",
+                "chi2 in the title measures overall deviation from uniform.",
+            ],
+            Self::Autocorrelation => &[
+                "Measures whether each output value predicts the next one.",
+                "r near 0 = each sample is independent of the previous (good).",
+                "|r| above 0.3 = concerning dependency between consecutive samples.",
+                "Persistent non-zero correlation = the source has memory/structure.",
+            ],
         }
     }
 
@@ -94,7 +148,7 @@ impl ChartMode {
             Self::MinEntropy => s.min_entropy,
             Self::CollectTime => s.collect_time_ms,
             Self::OutputValue => s.output_value,
-            Self::ByteDistribution | Self::Autocorrelation => 0.0,
+            Self::RandomWalk | Self::ByteDistribution | Self::Autocorrelation => 0.0,
         }
     }
 
@@ -106,6 +160,10 @@ impl ChartMode {
             }
             Self::CollectTime => (0.0, (max_val * 1.2).max(1.0)),
             Self::OutputValue => (0.0, 1.0),
+            Self::RandomWalk => {
+                let bound = min_val.abs().max(max_val.abs()).max(10.0) * 1.1;
+                (-bound, bound)
+            }
             Self::Autocorrelation => {
                 let bound = (min_val.abs().max(max_val.abs()) + 0.1).min(1.0);
                 (-bound, bound)
@@ -124,10 +182,6 @@ pub const SAMPLE_SIZES: [usize; 4] = [16, 32, 64, 128];
 
 /// Maximum samples retained per source.
 const MAX_HISTORY: usize = 120;
-
-/// Per-collection timeout in seconds. Sources slower than this are skipped
-/// in the TUI to keep the UI responsive.
-const COLLECT_TIMEOUT_SECS: u64 = 5;
 
 // ---------------------------------------------------------------------------
 // Utility functions
@@ -158,12 +212,20 @@ pub fn rolling_autocorr(values: &[f64], window: usize) -> Vec<f64> {
     result
 }
 
-/// Convert the first 8 bytes of a slice to a uniform f64 in [0, 1].
+/// Convert a byte slice to a uniform f64 in [0, 1] using all bytes.
+///
+/// XOR-folds the entire slice into 8 bytes, then maps to [0, 1].
+/// This uses all collected bytes (not just the first 8) so the output
+/// reflects the full sample regardless of sample size.
 pub fn bytes_to_uniform(bytes: &[u8]) -> f64 {
-    let mut buf = [0u8; 8];
-    let n = bytes.len().min(8);
-    buf[..n].copy_from_slice(&bytes[..n]);
-    u64::from_le_bytes(buf) as f64 / u64::MAX as f64
+    if bytes.is_empty() {
+        return 0.0;
+    }
+    let mut folded = [0u8; 8];
+    for (i, &b) in bytes.iter().enumerate() {
+        folded[i % 8] ^= b;
+    }
+    u64::from_le_bytes(folded) as f64 / u64::MAX as f64
 }
 
 /// Format a byte slice as space-separated hex.
@@ -218,6 +280,9 @@ pub struct Snapshot {
     pub source_stats: HashMap<String, SourceHealth>,
     pub active_history: Vec<Sample>,
     pub compare_history: Vec<Sample>,
+    pub recording_samples: u64,
+    /// Accumulated random walk values (cumulative sum across collections).
+    pub walk: Vec<f64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +300,11 @@ struct SharedState {
     last_ms: u64,
     last_export: Option<PathBuf>,
     byte_freq: [u64; 256],
+    /// Accumulated random walk: cumulative sum of (byte - 128) across all collections.
+    /// Keyed by source name so switching sources shows different walks.
+    walk: HashMap<String, Vec<f64>>,
+    /// Session writer for TUI recording. Created when 'r' is pressed, dropped on stop.
+    session_writer: Option<SessionWriter>,
 }
 
 // ---------------------------------------------------------------------------
@@ -261,8 +331,8 @@ pub struct App {
     recording: bool,
     /// When recording started (for elapsed display).
     recording_since: Option<Instant>,
-    /// Number of samples recorded in this TUI recording session.
-    recording_samples: u64,
+    /// Path of the session directory while recording, or last finished session.
+    recording_path: Option<PathBuf>,
 }
 
 impl App {
@@ -290,6 +360,8 @@ impl App {
                 last_ms: 0,
                 last_export: None,
                 byte_freq: [0u64; 256],
+                walk: HashMap::new(),
+                session_writer: None,
             })),
             collector_flag: Arc::new(AtomicBool::new(false)),
             conditioning_mode: ConditioningMode::default(),
@@ -300,7 +372,7 @@ impl App {
             table_state: TableState::default().with_selected(Some(0)),
             recording: false,
             recording_since: None,
-            recording_samples: 0,
+            recording_path: None,
         }
     }
 
@@ -329,6 +401,17 @@ impl App {
             LeaveAlternateScreen,
             crossterm::cursor::Show
         )?;
+
+        // Stop any active recording when quitting
+        if self.recording {
+            self.stop_recording();
+        }
+
+        // Print session path after terminal is restored so the user can see it
+        if let Some(path) = &self.recording_path {
+            println!("Session saved to {}", path.display());
+        }
+
         result
     }
 
@@ -389,16 +472,18 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.recording = !self.recording;
                 if self.recording {
-                    self.recording_since = Some(Instant::now());
-                    self.recording_samples = 0;
+                    self.stop_recording();
                 } else {
-                    self.recording_since = None;
+                    self.start_recording();
                 }
             }
             KeyCode::Char('c') => {
                 self.conditioning_mode = next_conditioning(self.conditioning_mode);
+                // Reset random walks — walk shape depends on conditioning mode
+                if let Ok(mut s) = self.shared.lock() {
+                    s.walk.clear();
+                }
                 self.kick_collect();
             }
             KeyCode::Char('g') => self.chart_mode = self.chart_mode.next(),
@@ -430,6 +515,42 @@ impl App {
         }
     }
 
+    fn start_recording(&mut self) {
+        let config = SessionConfig {
+            // Keep metadata stable even if the user switches active source while recording.
+            sources: self.source_names.clone(),
+            conditioning: self.conditioning_mode,
+            output_dir: PathBuf::from("sessions"),
+            ..Default::default()
+        };
+
+        match SessionWriter::new(config) {
+            Ok(writer) => {
+                self.recording_path = Some(writer.session_dir().to_path_buf());
+                self.shared.lock().unwrap().session_writer = Some(writer);
+                self.recording = true;
+                self.recording_since = Some(Instant::now());
+            }
+            Err(_) => {
+                // Silently fail — we're in TUI mode, can't easily show errors
+                // The recording indicator won't appear so the user knows it didn't start
+            }
+        }
+    }
+
+    fn stop_recording(&mut self) {
+        self.recording = false;
+        self.recording_since = None;
+
+        // Take the writer out and finish it
+        let writer = self.shared.lock().unwrap().session_writer.take();
+        if let Some(writer) = writer
+            && let Ok(path) = writer.finish()
+        {
+            self.recording_path = Some(path);
+        }
+    }
+
     fn kick_collect(&self) {
         if self.collector_flag.load(Ordering::Relaxed) {
             return;
@@ -450,37 +571,11 @@ impl App {
         thread::spawn(move || {
             shared.lock().unwrap().collecting = true;
 
-            // Run collection on a detached thread with a channel-based timeout
-            // so slow sources don't freeze the TUI.
-            let (tx, rx) = std::sync::mpsc::channel();
-            let pool2 = Arc::clone(&pool);
-            let name2 = active_name.clone();
-            // Collect only what we need (sample_size) instead of the default
-            // 1000, keeping collection fast for all sources.
-            let collect_n = sample_size;
-            thread::spawn(move || {
-                pool2.collect_enabled_n(std::slice::from_ref(&name2), collect_n);
-                let _ = tx.send(());
-            });
-
-            if rx
-                .recv_timeout(Duration::from_secs(COLLECT_TIMEOUT_SECS))
-                .is_err()
-            {
-                // Timed out — the collection thread is still running in the
-                // background and will deposit bytes into the pool buffer
-                // eventually, which is harmless. Unblock the TUI now.
-                let mut s = shared.lock().unwrap();
-                s.collecting = false;
-                drop(s);
-                flag.store(false, Ordering::Relaxed);
-                return;
-            }
-
-            // Collection finished in time — read results.
             let inner = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let raw_bytes = pool.get_raw_bytes(sample_size);
-                let cond_bytes = pool.get_bytes(sample_size, mode);
+                let raw_bytes = pool
+                    .get_source_raw_bytes(&active_name, sample_size)
+                    .unwrap_or_default();
+                let cond_bytes = condition(&raw_bytes, sample_size, mode);
                 let health = pool.health_report();
 
                 let mut s = shared.lock().unwrap();
@@ -488,25 +583,46 @@ impl App {
                 s.cycle_count += 1;
                 s.raw_hex = format_hex(&raw_bytes);
                 s.rng_hex = format_hex(&cond_bytes);
+
+                // Extend the random walk for the active source
+                {
+                    let walk = s.walk.entry(active_name.clone()).or_default();
+                    let mut sum = walk.last().copied().unwrap_or(0.0);
+                    for &b in &cond_bytes {
+                        sum += b as f64 - 128.0;
+                        walk.push(sum);
+                    }
+                    // Cap at 8192 points — trim from front to keep the latest
+                    const MAX_WALK: usize = 8192;
+                    if walk.len() > MAX_WALK {
+                        let excess = walk.len() - MAX_WALK;
+                        walk.drain(..excess);
+                    }
+                }
                 for &b in &cond_bytes {
                     s.byte_freq[b as usize] += 1;
                 }
                 s.collecting = false;
 
+                // Write to session if recording
+                if let Some(ref mut writer) = s.session_writer {
+                    let _ = writer.write_sample(&active_name, &raw_bytes, &cond_bytes);
+                }
+
                 for src in &health.sources {
                     s.source_stats.insert(src.name.clone(), src.clone());
                     if src.name == active_name {
                         s.last_ms = (src.time * 1000.0) as u64;
-                    }
-                    let hist = s.source_history.entry(src.name.clone()).or_default();
-                    hist.push_back(Sample {
-                        shannon: src.entropy,
-                        min_entropy: src.min_entropy,
-                        collect_time_ms: src.time * 1000.0,
-                        output_value: bytes_to_uniform(&cond_bytes),
-                    });
-                    if hist.len() > MAX_HISTORY {
-                        hist.pop_front();
+                        let hist = s.source_history.entry(src.name.clone()).or_default();
+                        hist.push_back(Sample {
+                            shannon: src.entropy,
+                            min_entropy: src.min_entropy,
+                            collect_time_ms: src.time * 1000.0,
+                            output_value: bytes_to_uniform(&cond_bytes),
+                        });
+                        if hist.len() > MAX_HISTORY {
+                            hist.pop_front();
+                        }
                     }
                 }
             }));
@@ -615,8 +731,8 @@ impl App {
         self.recording_since.map(|t| t.elapsed())
     }
 
-    pub fn recording_samples(&self) -> u64 {
-        self.recording_samples
+    pub fn recording_path(&self) -> Option<&PathBuf> {
+        self.recording_path.as_ref()
     }
 
     pub fn active_name(&self) -> Option<&str> {
@@ -642,6 +758,10 @@ impl App {
                 .map(|d| d.iter().copied().collect())
                 .unwrap_or_default()
         };
+
+        // Update recording sample count from the writer
+        let rec_samples = s.session_writer.as_ref().map_or(0, |w| w.total_samples());
+
         Snapshot {
             raw_hex: s.raw_hex.clone(),
             rng_hex: s.rng_hex.clone(),
@@ -654,6 +774,12 @@ impl App {
             source_stats: s.source_stats.clone(),
             active_history: history_for(self.active_name()),
             compare_history: history_for(self.compare_name()),
+            recording_samples: rec_samples,
+            walk: self
+                .active_name()
+                .and_then(|n| s.walk.get(n))
+                .cloned()
+                .unwrap_or_default(),
         }
     }
 }
@@ -676,6 +802,8 @@ mod tests {
         let mode = mode.next();
         assert_eq!(mode, ChartMode::OutputValue);
         let mode = mode.next();
+        assert_eq!(mode, ChartMode::RandomWalk);
+        let mode = mode.next();
         assert_eq!(mode, ChartMode::ByteDistribution);
         let mode = mode.next();
         assert_eq!(mode, ChartMode::Autocorrelation);
@@ -694,6 +822,7 @@ mod tests {
         assert_eq!(ChartMode::MinEntropy.label(), "Min-entropy");
         assert_eq!(ChartMode::CollectTime.label(), "Collect time");
         assert_eq!(ChartMode::OutputValue.label(), "Output value");
+        assert_eq!(ChartMode::RandomWalk.label(), "Random walk");
         assert_eq!(ChartMode::ByteDistribution.label(), "Byte dist");
         assert_eq!(ChartMode::Autocorrelation.label(), "Autocorrelation");
     }
@@ -705,6 +834,7 @@ mod tests {
             ChartMode::MinEntropy,
             ChartMode::CollectTime,
             ChartMode::OutputValue,
+            ChartMode::RandomWalk,
             ChartMode::ByteDistribution,
             ChartMode::Autocorrelation,
         ] {
@@ -721,6 +851,7 @@ mod tests {
         assert_eq!(ChartMode::MinEntropy.y_label(), "bits/byte");
         assert_eq!(ChartMode::CollectTime.y_label(), "ms");
         assert_eq!(ChartMode::OutputValue.y_label(), "[0, 1]");
+        assert_eq!(ChartMode::RandomWalk.y_label(), "sum");
         assert_eq!(ChartMode::ByteDistribution.y_label(), "count");
         assert_eq!(ChartMode::Autocorrelation.y_label(), "r");
     }
@@ -730,12 +861,12 @@ mod tests {
         let s = Sample {
             shannon: 7.5,
             min_entropy: 6.2,
-            collect_time_ms: 3.14,
+            collect_time_ms: 3.125,
             output_value: 0.42,
         };
         assert_eq!(ChartMode::Shannon.value_from(&s), 7.5);
         assert_eq!(ChartMode::MinEntropy.value_from(&s), 6.2);
-        assert_eq!(ChartMode::CollectTime.value_from(&s), 3.14);
+        assert_eq!(ChartMode::CollectTime.value_from(&s), 3.125);
         assert_eq!(ChartMode::OutputValue.value_from(&s), 0.42);
         assert_eq!(ChartMode::ByteDistribution.value_from(&s), 0.0);
         assert_eq!(ChartMode::Autocorrelation.value_from(&s), 0.0);
@@ -793,6 +924,19 @@ mod tests {
             val > 0.0 && val < 0.01,
             "short input should be small, got {val}"
         );
+    }
+
+    #[test]
+    fn bytes_to_uniform_uses_all_bytes() {
+        // With XOR-fold, changing any byte in the input should change the output
+        let a = bytes_to_uniform(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        let b = bytes_to_uniform(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 99]);
+        assert_ne!(a, b, "changing byte 10 should affect the output");
+    }
+
+    #[test]
+    fn bytes_to_uniform_empty() {
+        assert_eq!(bytes_to_uniform(&[]), 0.0);
     }
 
     #[test]

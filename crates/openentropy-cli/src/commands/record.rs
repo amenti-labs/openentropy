@@ -12,7 +12,7 @@ use openentropy_core::session::{SessionConfig, SessionWriter};
 use super::make_pool;
 
 /// Run the record command.
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn run(
     sources_filter: &str,
     duration: Option<&str>,
@@ -20,6 +20,7 @@ pub fn run(
     note: Option<&str>,
     output: Option<&str>,
     interval: Option<&str>,
+    analyze: bool,
     conditioning: &str,
 ) {
     // Parse conditioning mode
@@ -63,6 +64,7 @@ pub fn run(
         note: note.map(str::to_string),
         duration: max_duration,
         sample_size: 1000,
+        include_analysis: analyze,
     };
 
     // Create session writer
@@ -97,6 +99,10 @@ pub fn run(
     } else {
         println!("  Interval:  continuous");
     }
+    println!(
+        "  Analysis:  {}",
+        if analyze { "enabled" } else { "disabled" }
+    );
     println!("  Output:    {}", session_dir.display());
     println!();
 
@@ -112,27 +118,23 @@ pub fn run(
             break;
         }
 
-        // Collect from each source individually.
-        // We use collect_enabled_n to collect from one source at a time, then
-        // drain exactly those bytes from the pool buffer. This prevents bytes
-        // from different sources being mixed in the shared buffer. Conditioning
-        // is applied per-source after draining.
+        // Collect from each source individually, bypassing the shared pool buffer
+        // so raw/conditioned streams are always tied to the same sample.
         for source_name in &available {
             if !running.load(Ordering::SeqCst) {
                 break 'outer;
             }
 
-            let n_collected =
-                pool.collect_enabled_n(std::slice::from_ref(source_name), 1000);
-            if n_collected == 0 {
+            let raw = pool
+                .get_source_raw_bytes(source_name, 1000)
+                .unwrap_or_default();
+            if raw.is_empty() {
                 continue;
             }
 
-            // Drain exactly the bytes this source produced, then condition
-            let raw = pool.get_raw_bytes(n_collected);
             let conditioned = condition(&raw, raw.len(), mode);
 
-            if let Err(e) = writer.write_sample(source_name, &conditioned) {
+            if let Err(e) = writer.write_sample(source_name, &raw, &conditioned) {
                 eprintln!("\nError writing sample: {e}");
                 had_write_error = true;
                 break 'outer;
@@ -168,10 +170,12 @@ pub fn run(
     match writer.finish() {
         Ok(dir) => {
             println!("Session saved to {}", dir.display());
-            println!("  session.json  — metadata");
-            println!("  samples.csv   — per-sample metrics");
-            println!("  raw.bin       — raw entropy bytes");
-            println!("  raw_index.csv — byte offset index");
+            println!("  session.json          — metadata");
+            println!("  samples.csv           — per-sample raw/conditioned metrics");
+            println!("  raw.bin               — raw entropy bytes");
+            println!("  raw_index.csv         — byte offset index for raw.bin");
+            println!("  conditioned.bin       — conditioned entropy bytes");
+            println!("  conditioned_index.csv — byte offset index for conditioned.bin");
         }
         Err(e) => {
             eprintln!("Error finalizing session: {e}");

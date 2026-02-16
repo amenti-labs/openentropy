@@ -37,7 +37,7 @@ pub struct USBTimingSource;
 /// IOKit FFI for USB device enumeration and property reads.
 #[cfg(target_os = "macos")]
 mod iokit {
-    use std::ffi::c_void;
+    use std::ffi::{c_char, c_void};
 
     // IOKit types
     pub type IOReturn = i32;
@@ -51,7 +51,7 @@ mod iokit {
             existing: *mut u32,
         ) -> IOReturn;
 
-        pub fn IOServiceMatching(name: *const u8) -> *const c_void;
+        pub fn IOServiceMatching(name: *const c_char) -> *mut c_void;
 
         pub fn IOIteratorNext(iterator: u32) -> u32;
 
@@ -103,7 +103,7 @@ mod iokit {
         let mut devices = Vec::new();
         // SAFETY: IOServiceMatching returns a CFDictionary matching USB host devices.
         // The returned dictionary is consumed by IOServiceGetMatchingServices.
-        let matching = unsafe { IOServiceMatching(c"IOUSBHostDevice".as_ptr() as *const u8) };
+        let matching = unsafe { IOServiceMatching(c"IOUSBHostDevice".as_ptr()) };
         if matching.is_null() {
             return devices;
         }

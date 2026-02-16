@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0 — 2026-02-16
+
+### Changed
+
+- Major CLI UX update:
+  - `bench` is now profile-driven (`quick`, `standard`, `deep`) with explicit configurability for rounds, warmup, timeout, and samples per round
+  - `bench` now includes a pool-quality section by default (`--no-pool` to skip) and supports JSON output for automation
+  - `analyze` now defaults to a verdict-driven summary view with `GOOD/WARNING/CRITICAL` status, top findings, and actionable recommendations
+  - `analyze` defaults updated to `--samples 50000`, `--conditioning raw`, and min-entropy breakdown enabled by default (`--no-entropy` to skip)
+- Session recording/analysis pipeline improvements:
+  - session format v2 now stores both `raw.bin` and `conditioned.bin` streams with separate indexes and expanded `samples.csv` metrics
+  - source-isolated recording path ensures conditioned data is derived from the exact raw sample it is paired with
+- Entropy collection robustness improvements:
+  - timeout-aware parallel collection with in-flight/backoff coordination to avoid repeated scheduling pressure from slow/hung sources
+  - bounded raw-byte collection retries to prevent unbounded waiting
+
+### Fixed
+
+- TUI active-source sampling no longer contaminates history/recording with data from non-active sources.
+- Unknown `source` parameter in server random endpoint now returns HTTP 400 with structured error.
+- Statistical reporting language clarified to avoid overclaiming strict NIST compliance where heuristics are used.
+
 ## 0.4.1 — 2026-02-15
 
 ### Fixed

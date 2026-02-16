@@ -114,6 +114,33 @@ pub fn run_command_raw(program: &str, args: &[&str]) -> Option<Vec<u8>> {
 }
 
 // ---------------------------------------------------------------------------
+// ARM counter (CNTVCT_EL0)
+// ---------------------------------------------------------------------------
+
+/// Read the ARM generic timer counter (CNTVCT_EL0) directly.
+///
+/// Returns the raw hardware counter driven by the CPU's 24 MHz crystal oscillator,
+/// independent of any OS abstraction layer. Used by frontier sources that measure
+/// clock domain crossings against independent PLLs (audio, display, PCIe).
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[inline(always)]
+pub fn read_cntvct() -> u64 {
+    let val: u64;
+    // SAFETY: CNTVCT_EL0 is always readable from EL0 on Apple Silicon.
+    // Read-only system register, no side effects.
+    unsafe {
+        std::arch::asm!("mrs {}, cntvct_el0", out(reg) val, options(nostack, nomem));
+    }
+    val
+}
+
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+#[inline(always)]
+pub fn read_cntvct() -> u64 {
+    0
+}
+
+// ---------------------------------------------------------------------------
 // XOR-fold
 // ---------------------------------------------------------------------------
 

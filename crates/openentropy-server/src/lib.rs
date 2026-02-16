@@ -8,6 +8,7 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::{Query, State},
+    http::StatusCode,
     response::Json,
     routing::get,
 };
@@ -32,6 +33,8 @@ struct RandomParams {
     raw: Option<bool>,
     /// Conditioning mode: raw, vonneumann, sha256 (overrides `raw` flag).
     conditioning: Option<String>,
+    /// Request entropy from a specific source by name.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -43,6 +46,12 @@ struct RandomResponse {
     success: bool,
     /// Whether this output was conditioned (SHA-256) or raw.
     conditioned: bool,
+    /// Which source was queried (null if mixed pool).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    /// Error message if request failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -73,7 +82,7 @@ struct SourceEntry {
 async fn handle_random(
     State(state): State<Arc<AppState>>,
     Query(params): Query<RandomParams>,
-) -> Json<RandomResponse> {
+) -> (StatusCode, Json<RandomResponse>) {
     let length = params.length.unwrap_or(1024).clamp(1, 65536);
     let data_type = params.data_type.unwrap_or_else(|| "hex16".to_string());
 
@@ -92,7 +101,28 @@ async fn handle_random(
     };
 
     let pool = state.pool.lock().await;
-    let raw = pool.get_bytes(length, mode);
+    let raw = if let Some(ref source_name) = params.source {
+        match pool.get_source_bytes(source_name, length, mode) {
+            Some(bytes) => bytes,
+            None => {
+                let err_msg = format!(
+                    "Unknown source: {source_name}. Use /sources to list available sources."
+                );
+                return Json(RandomResponse {
+                    data_type,
+                    length: 0,
+                    data: serde_json::Value::Array(vec![]),
+                    success: false,
+                    conditioned: mode != ConditioningMode::Raw,
+                    source: Some(source_name.clone()),
+                    error: Some(err_msg),
+                })
+                .with_status(StatusCode::BAD_REQUEST);
+            }
+        }
+    } else {
+        pool.get_bytes(length, mode)
+    };
     let use_raw = mode == ConditioningMode::Raw;
 
     let data = match data_type.as_str() {
@@ -128,13 +158,28 @@ async fn handle_random(
         _ => length,
     };
 
-    Json(RandomResponse {
-        data_type,
-        length: len,
-        data,
-        success: true,
-        conditioned: !use_raw,
-    })
+    (
+        StatusCode::OK,
+        Json(RandomResponse {
+            data_type,
+            length: len,
+            data,
+            success: true,
+            conditioned: !use_raw,
+            source: params.source,
+            error: None,
+        }),
+    )
+}
+
+trait JsonWithStatus<T> {
+    fn with_status(self, status: StatusCode) -> (StatusCode, Json<T>);
+}
+
+impl<T> JsonWithStatus<T> for Json<T> {
+    fn with_status(self, status: StatusCode) -> (StatusCode, Json<T>) {
+        (status, self)
+    }
 }
 
 async fn handle_health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
@@ -192,6 +237,39 @@ async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_js
     }))
 }
 
+async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let pool = state.pool.lock().await;
+    let source_names = pool.source_names();
+    drop(pool);
+
+    Json(serde_json::json!({
+        "name": "OpenEntropy Server",
+        "version": openentropy_core::VERSION,
+        "sources": source_names.len(),
+        "endpoints": {
+            "/": "This API index",
+            "/api/v1/random": {
+                "method": "GET",
+                "description": "Get random entropy bytes",
+                "params": {
+                    "length": "Number of bytes (1-65536, default: 1024)",
+                    "type": "Output format: hex16, uint8, uint16 (default: hex16)",
+                    "source": format!("Request from a specific source by name. Available: {}", source_names.join(", ")),
+                    "conditioning": "Conditioning mode: sha256 (default), vonneumann, raw",
+                }
+            },
+            "/sources": "List all active entropy sources with health metrics",
+            "/pool/status": "Detailed pool status",
+            "/health": "Health check",
+        },
+        "examples": {
+            "mixed_pool": "/api/v1/random?length=32&type=uint8",
+            "single_source": format!("/api/v1/random?length=32&source={}", source_names.first().map(|s| s.as_str()).unwrap_or("clock_jitter")),
+            "raw_output": "/api/v1/random?length=32&conditioning=raw",
+        }
+    }))
+}
+
 /// Build the axum router.
 fn build_router(pool: EntropyPool, allow_raw: bool) -> Router {
     let state = Arc::new(AppState {
@@ -200,6 +278,7 @@ fn build_router(pool: EntropyPool, allow_raw: bool) -> Router {
     });
 
     Router::new()
+        .route("/", get(handle_index))
         .route("/api/v1/random", get(handle_random))
         .route("/health", get(handle_health))
         .route("/sources", get(handle_sources))

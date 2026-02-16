@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*45 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*47 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -81,7 +81,7 @@ Raw mode enables:
 
 Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy continuously harvests **real physical noise** from your hardware:
 
-- **Thermal noise** — denormal FPU micropower, audio PLL drift, power delivery network resonance
+- **Thermal noise** — four independent oscillator beats (CPU crystal vs audio PLL, display PLL, PCIe PHY PLLs), denormal FPU micropower, power delivery network resonance
 - **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, cache contention, speculative execution variance, TLB shootdowns, DVFS races
 - **I/O and IPC** — disk and NVMe latency, USB timing, Mach port IPC, pipe buffer allocation, kqueue event multiplexing
 - **GPU and compute** — GPU dispatch scheduling, warp divergence, IOSurface cross-domain timing
@@ -109,7 +109,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 45 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 47 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -123,16 +123,20 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-45 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+47 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
-### Thermal (4)
+### Thermal (6)
+
+Each source taps a **physically independent** noise mechanism. The oscillator sources are especially noteworthy: they beat the CPU's 24 MHz crystal against other independent oscillators on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise from separate crystal sustaining amplifiers or PLL VCO transistors.
 
 | Source | Shannon H | Time | Description |
 |--------|:---------:|-----:|-------------|
 | `denormal_timing` | 1.031 | <0.01s | Denormal FPU micropower thermal noise |
 | `audio_pll_timing` | 7.795 | 0.08s | Audio PLL clock drift from thermal perturbation |
 | `pdn_resonance` | 0.861 | <0.01s | Power delivery network LC resonance noise |
-| `counter_beat` | 7.796 | 0.39s | Two-oscillator beat: CPU counter vs audio PLL crystal |
+| `counter_beat` | 7.796 | 0.09s | Two-oscillator beat: CPU crystal (24 MHz) vs audio PLL crystal |
+| `display_pll` | 7.809 | 0.07s | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
+| `pcie_pll` | 7.769 | 0.10s | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
 ### Timing (7)
 
@@ -245,9 +249,13 @@ openentropy scan
 ### `bench` — Benchmark sources
 
 ```bash
-openentropy bench                    # fast sources (~1s)
+openentropy bench                    # standard profile on fast sources
+openentropy bench --profile quick    # faster confidence pass
+openentropy bench --profile deep     # higher-confidence benchmark
 openentropy bench --sources all      # all sources
 openentropy bench --sources silicon  # filter by name
+openentropy bench --rank-by throughput
+openentropy bench --output bench.json
 ```
 
 ### `stream` — Continuous output
@@ -274,16 +282,17 @@ openentropy monitor
 | r | Force refresh |
 | q | Quit |
 
-### `probe` — Test a single source
+### `bench --source` — Test a single source
 
 ```bash
-openentropy probe mach_timing
+openentropy bench --source mach_timing
 ```
 
-### `pool` — Pool health metrics
+### `bench` pool quality section
 
 ```bash
-openentropy pool
+openentropy bench                    # includes pool quality by default
+openentropy bench --no-pool          # skip pool section
 ```
 
 ### `device` — Named pipe (FIFO)
@@ -305,11 +314,13 @@ curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
 curl "http://localhost:8080/health"
 ```
 
-### `entropy` — Deep min-entropy analysis
+### `analyze` — Statistical source analysis
 
 ```bash
-openentropy entropy
-openentropy entropy --sources mach_timing
+openentropy analyze                          # summary view, raw, entropy on
+openentropy analyze --view detailed
+openentropy analyze --sources mach_timing --no-entropy
+openentropy analyze --cross-correlation --output analysis.json
 ```
 
 ### `report` — NIST test battery
@@ -325,7 +336,7 @@ openentropy report --source mach_timing --samples 50000
 
 ```toml
 [dependencies]
-openentropy-core = "0.4"
+openentropy-core = "0.5"
 ```
 
 ```rust
@@ -352,7 +363,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (47) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -367,7 +378,7 @@ Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **45/45** | Full suite — WiFi, BLE, camera, mic |
+| **MacBook (M-series)** | **47/47** | Full suite — WiFi, BLE, camera, mic |
 | **Mac Mini / Studio / Pro** | 39–41 | No built-in camera, mic on some models |
 | **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
 | **Linux** | 10–15 | Timing, network, disk, process sources |

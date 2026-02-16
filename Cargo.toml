@@ -10,13 +10,13 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 authors = ["Amenti Labs"]
 repository = "https://github.com/amenti-labs/openentropy"
 homepage = "https://github.com/amenti-labs/openentropy"
-description = "Harvest real entropy from 44 hardware noise sources — conditioned for crypto, raw for research"
+description = "Harvest real entropy from 47 hardware noise sources — conditioned for crypto, raw for research"
 rust-version = "1.85"
 keywords = ["entropy", "randomness", "hardware", "TRNG", "security"]
 categories = ["cryptography", "hardware-support", "os"]
@@ -59,6 +59,6 @@ statrs = "0.18"
 rustfft = "6"
 
 # Internal
-openentropy-core = { path = "crates/openentropy-core", version = "0.4.1" }
-openentropy-server = { path = "crates/openentropy-server", version = "0.4.1" }
-openentropy-tests = { path = "crates/openentropy-tests", version = "0.4.1" }
+openentropy-core = { path = "crates/openentropy-core", version = "0.5.0" }
+openentropy-server = { path = "crates/openentropy-server", version = "0.5.0" }
+openentropy-tests = { path = "crates/openentropy-tests", version = "0.5.0" }
