@@ -14,7 +14,6 @@
 //! process spawning. Each dispatch completes in microseconds.
 //!
 
-
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time, xor_fold_u64};
 

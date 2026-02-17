@@ -85,11 +85,7 @@ mod coreaudio {
                 &mut device as *mut u32 as *mut std::ffi::c_void,
             )
         };
-        if status == 0 {
-            device
-        } else {
-            0
-        }
+        if status == 0 { device } else { 0 }
     }
 
     /// Query a device property and return the elapsed duration.
