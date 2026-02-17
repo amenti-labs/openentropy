@@ -45,8 +45,6 @@ pub struct KeychainTimingConfig {
 /// The round-trip through XPC IPC, securityd scheduling, and database I/O
 /// aggregates jitter from multiple independent domains in a single measurement.
 ///
-
-///
 /// # Caveats
 /// - High autocorrelation at lag-1 (~0.43): variance extraction mitigates this
 /// - Warm-up effect: first ~500 reads are slower due to securityd cold caches
