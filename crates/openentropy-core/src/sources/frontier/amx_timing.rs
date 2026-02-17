@@ -1,10 +1,10 @@
 //! AMX coprocessor timing — entropy from the Apple Matrix eXtensions unit.
 
-#![cfg(target_os = "macos")]
-
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use super::extract_timing_entropy_debiased;
 
 /// Configuration for AMX timing entropy collection.
@@ -124,90 +124,100 @@ impl EntropySource for AMXTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let debias = self.config.von_neumann_debias;
-        let raw_count = if debias {
-            n_samples * 8 + 128
-        } else {
-            n_samples * 4 + 64
-        };
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
-
-        let sizes = &self.config.matrix_sizes;
-        if sizes.is_empty() {
-            return Vec::new();
-        }
-        let mut lcg: u64 = mach_time() | 1;
-
-        let interleave = self.config.interleave_memory_ops;
-        let mut scratch = if interleave {
-            vec![0u8; 65536]
-        } else {
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        {
+            let _ = n_samples;
             Vec::new()
-        };
-
-        // Pre-allocate matrices at the maximum size to avoid per-iteration allocation.
-        let max_n = *sizes.iter().max().unwrap_or(&128);
-        let max_len = max_n * max_n;
-        let mut a = vec![0.0f32; max_len];
-        let mut b = vec![0.0f32; max_len];
-        let mut c = vec![0.0f32; max_len];
-
-        for i in 0..raw_count {
-            let n = sizes[i % sizes.len()];
-            let len = n * n;
-
-            for val in a[..len].iter_mut().chain(b[..len].iter_mut()) {
-                lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
-                *val = (lcg >> 32) as f32 / u32::MAX as f32;
-            }
-
-            if interleave && !scratch.is_empty() {
-                lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let idx = (lcg >> 32) as usize % scratch.len();
-                unsafe {
-                    let ptr = scratch.as_mut_ptr().add(idx);
-                    std::ptr::write_volatile(ptr, std::ptr::read_volatile(ptr).wrapping_add(1));
-                }
-            }
-
-            let t0 = mach_time();
-            let trans_b = if i % 3 == 1 { 112 } else { 111 }; // CblasTrans vs CblasNoTrans
-
-            // SAFETY: cblas_sgemm is a well-defined C function from the Accelerate
-            // framework. On Apple Silicon, this dispatches to the AMX coprocessor.
-            unsafe {
-                cblas_sgemm(
-                    101, // CblasRowMajor
-                    111, // CblasNoTrans
-                    trans_b,
-                    n as i32,
-                    n as i32,
-                    n as i32,
-                    1.0,
-                    a.as_ptr(),
-                    n as i32,
-                    b.as_ptr(),
-                    n as i32,
-                    0.0,
-                    c.as_mut_ptr(),
-                    n as i32,
-                );
-            }
-
-            let t1 = mach_time();
-            std::hint::black_box(&c);
-            timings.push(t1.wrapping_sub(t0));
         }
 
-        if debias {
-            extract_timing_entropy_debiased(&timings, n_samples)
-        } else {
-            extract_timing_entropy(&timings, n_samples)
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            let debias = self.config.von_neumann_debias;
+            let raw_count = if debias {
+                n_samples * 8 + 128
+            } else {
+                n_samples * 4 + 64
+            };
+            let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
+
+            let sizes = &self.config.matrix_sizes;
+            if sizes.is_empty() {
+                return Vec::new();
+            }
+            let mut lcg: u64 = mach_time() | 1;
+
+            let interleave = self.config.interleave_memory_ops;
+            let mut scratch = if interleave {
+                vec![0u8; 65536]
+            } else {
+                Vec::new()
+            };
+
+            // Pre-allocate matrices at the maximum size to avoid per-iteration allocation.
+            let max_n = *sizes.iter().max().unwrap_or(&128);
+            let max_len = max_n * max_n;
+            let mut a = vec![0.0f32; max_len];
+            let mut b = vec![0.0f32; max_len];
+            let mut c = vec![0.0f32; max_len];
+
+            for i in 0..raw_count {
+                let n = sizes[i % sizes.len()];
+                let len = n * n;
+
+                for val in a[..len].iter_mut().chain(b[..len].iter_mut()) {
+                    lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    *val = (lcg >> 32) as f32 / u32::MAX as f32;
+                }
+
+                if interleave && !scratch.is_empty() {
+                    lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    let idx = (lcg >> 32) as usize % scratch.len();
+                    unsafe {
+                        let ptr = scratch.as_mut_ptr().add(idx);
+                        std::ptr::write_volatile(ptr, std::ptr::read_volatile(ptr).wrapping_add(1));
+                    }
+                }
+
+                let t0 = mach_time();
+                let trans_b = if i % 3 == 1 { 112 } else { 111 }; // CblasTrans vs CblasNoTrans
+
+                // SAFETY: cblas_sgemm is a well-defined C function from the Accelerate
+                // framework. On Apple Silicon, this dispatches to the AMX coprocessor.
+                unsafe {
+                    cblas_sgemm(
+                        101, // CblasRowMajor
+                        111, // CblasNoTrans
+                        trans_b,
+                        n as i32,
+                        n as i32,
+                        n as i32,
+                        1.0,
+                        a.as_ptr(),
+                        n as i32,
+                        b.as_ptr(),
+                        n as i32,
+                        0.0,
+                        c.as_mut_ptr(),
+                        n as i32,
+                    );
+                }
+
+                let t1 = mach_time();
+                std::hint::black_box(&c);
+                timings.push(t1.wrapping_sub(t0));
+            }
+
+            if debias {
+                extract_timing_entropy_debiased(&timings, n_samples)
+            } else {
+                extract_timing_entropy(&timings, n_samples)
+            }
         }
     }
 }
 
 // Accelerate framework CBLAS binding (Apple-provided, always available on macOS).
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn cblas_sgemm(
         order: i32,

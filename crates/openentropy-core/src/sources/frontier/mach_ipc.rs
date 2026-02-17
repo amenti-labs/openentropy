@@ -1,12 +1,14 @@
 //! Mach IPC timing — entropy from complex Mach messages with OOL descriptors.
 
-#![cfg(target_os = "macos")]
-
+#[cfg(target_os = "macos")]
 use std::sync::Arc;
+#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "macos")]
 use std::thread;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 /// Configuration for Mach IPC entropy collection.
@@ -119,122 +121,134 @@ impl EntropySource for MachIPCSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let raw_count = n_samples * 4 + 64;
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = n_samples;
+            Vec::new()
+        }
 
-        // SAFETY: mach_task_self() returns the current task port (always valid).
-        let task = unsafe { mach_task_self() };
-        let num_ports = self.config.num_ports.max(1);
+        #[cfg(target_os = "macos")]
+        {
+            let raw_count = n_samples * 4 + 64;
+            let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
-        let mut ports: Vec<u32> = Vec::with_capacity(num_ports);
-        for _ in 0..num_ports {
-            let mut port: u32 = 0;
-            // SAFETY: mach_port_allocate allocates a receive right.
-            let kr = unsafe {
-                mach_port_allocate(task, 1 /* MACH_PORT_RIGHT_RECEIVE */, &mut port)
-            };
-            if kr == 0 {
-                // SAFETY: port is a valid receive right we just allocated.
-                let kr2 = unsafe {
-                    mach_port_insert_right(task, port, port, 20 /* MACH_MSG_TYPE_MAKE_SEND */)
+            // SAFETY: mach_task_self() returns the current task port (always valid).
+            let task = unsafe { mach_task_self() };
+            let num_ports = self.config.num_ports.max(1);
+
+            let mut ports: Vec<u32> = Vec::with_capacity(num_ports);
+            for _ in 0..num_ports {
+                let mut port: u32 = 0;
+                // SAFETY: mach_port_allocate allocates a receive right.
+                let kr = unsafe {
+                    mach_port_allocate(task, 1 /* MACH_PORT_RIGHT_RECEIVE */, &mut port)
                 };
-                if kr2 == 0 {
-                    ports.push(port);
-                } else {
-                    unsafe {
-                        mach_port_mod_refs(task, port, 1, -1);
-                    }
-                }
-            }
-        }
-
-        if ports.is_empty() {
-            return self.collect_simple(n_samples);
-        }
-
-        if self.config.use_complex_messages {
-            let ool_size = self.config.ool_size.max(1);
-            let ool_buf = vec![0xBEu8; ool_size];
-
-            let stop = Arc::new(AtomicBool::new(false));
-            let stop2 = stop.clone();
-            let recv_ports = ports.clone();
-            let receiver = thread::spawn(move || {
-                let mut recv_buf = vec![0u8; 1024 + ool_size * 2];
-                while !stop2.load(Ordering::Relaxed) {
-                    for &port in &recv_ports {
-                        // SAFETY: recv_buf is large enough. Non-blocking receive.
+                if kr == 0 {
+                    // SAFETY: port is a valid receive right we just allocated.
+                    let kr2 = unsafe {
+                        mach_port_insert_right(
+                            task, port, port, 20, /* MACH_MSG_TYPE_MAKE_SEND */
+                        )
+                    };
+                    if kr2 == 0 {
+                        ports.push(port);
+                    } else {
                         unsafe {
-                            let hdr = recv_buf.as_mut_ptr() as *mut MachMsgHeader;
-                            (*hdr).msgh_local_port = port;
-                            (*hdr).msgh_size = recv_buf.len() as u32;
-                            mach_msg(hdr, 2 | 0x100, 0, recv_buf.len() as u32, port, 0, 0);
+                            mach_port_mod_refs(task, port, 1, -1);
                         }
                     }
-                    std::thread::yield_now();
                 }
-            });
-
-            for i in 0..raw_count {
-                let port = ports[i % ports.len()];
-
-                let mut msg = MachMsgOOL::zeroed();
-                msg.header.msgh_bits = 0x80000000 | 17; // COMPLEX | COPY_SEND
-                msg.header.msgh_size = std::mem::size_of::<MachMsgOOL>() as u32;
-                msg.header.msgh_remote_port = port;
-                msg.header.msgh_local_port = 0;
-                msg.header.msgh_id = i as i32;
-                msg.body.msgh_descriptor_count = 1;
-                msg.ool.address = ool_buf.as_ptr() as *mut _;
-                msg.ool.size = ool_size as u32;
-                msg.ool.deallocate = 0;
-                msg.ool.copy = 1; // MACH_MSG_VIRTUAL_COPY
-                msg.ool.ool_type = 1; // MACH_MSG_OOL_DESCRIPTOR
-
-                let t0 = mach_time();
-                // SAFETY: msg is properly initialized. MACH_SEND_TIMEOUT prevents blocking.
-                unsafe {
-                    mach_msg(&mut msg.header, 1 | 0x80, msg.header.msgh_size, 0, 0, 10, 0);
-                }
-                let t1 = mach_time();
-                timings.push(t1.wrapping_sub(t0));
             }
 
-            stop.store(true, Ordering::Relaxed);
-            let _ = receiver.join();
-        } else {
-            for i in 0..raw_count {
-                let t0 = mach_time();
-                let base_port = ports[i % ports.len()];
+            if ports.is_empty() {
+                return self.collect_simple(n_samples);
+            }
 
-                let mut new_port: u32 = 0;
-                // SAFETY: standard Mach port operations.
-                let kr = unsafe { mach_port_allocate(task, 1, &mut new_port) };
-                if kr == 0 {
-                    unsafe {
-                        mach_port_deallocate(task, new_port);
-                        mach_port_mod_refs(task, new_port, 1, -1);
+            if self.config.use_complex_messages {
+                let ool_size = self.config.ool_size.max(1);
+                let ool_buf = vec![0xBEu8; ool_size];
+
+                let stop = Arc::new(AtomicBool::new(false));
+                let stop2 = stop.clone();
+                let recv_ports = ports.clone();
+                let receiver = thread::spawn(move || {
+                    let mut recv_buf = vec![0u8; 1024 + ool_size * 2];
+                    while !stop2.load(Ordering::Relaxed) {
+                        for &port in &recv_ports {
+                            // SAFETY: recv_buf is large enough. Non-blocking receive.
+                            unsafe {
+                                let hdr = recv_buf.as_mut_ptr() as *mut MachMsgHeader;
+                                (*hdr).msgh_local_port = port;
+                                (*hdr).msgh_size = recv_buf.len() as u32;
+                                mach_msg(hdr, 2 | 0x100, 0, recv_buf.len() as u32, port, 0, 0);
+                            }
+                        }
+                        std::thread::yield_now();
                     }
+                });
+
+                for i in 0..raw_count {
+                    let port = ports[i % ports.len()];
+
+                    let mut msg = MachMsgOOL::zeroed();
+                    msg.header.msgh_bits = 0x80000000 | 17; // COMPLEX | COPY_SEND
+                    msg.header.msgh_size = std::mem::size_of::<MachMsgOOL>() as u32;
+                    msg.header.msgh_remote_port = port;
+                    msg.header.msgh_local_port = 0;
+                    msg.header.msgh_id = i as i32;
+                    msg.body.msgh_descriptor_count = 1;
+                    msg.ool.address = ool_buf.as_ptr() as *mut _;
+                    msg.ool.size = ool_size as u32;
+                    msg.ool.deallocate = 0;
+                    msg.ool.copy = 1; // MACH_MSG_VIRTUAL_COPY
+                    msg.ool.ool_type = 1; // MACH_MSG_OOL_DESCRIPTOR
+
+                    let t0 = mach_time();
+                    // SAFETY: msg is properly initialized. MACH_SEND_TIMEOUT prevents blocking.
+                    unsafe {
+                        mach_msg(&mut msg.header, 1 | 0x80, msg.header.msgh_size, 0, 0, 10, 0);
+                    }
+                    let t1 = mach_time();
+                    timings.push(t1.wrapping_sub(t0));
                 }
+
+                stop.store(true, Ordering::Relaxed);
+                let _ = receiver.join();
+            } else {
+                for i in 0..raw_count {
+                    let t0 = mach_time();
+                    let base_port = ports[i % ports.len()];
+
+                    let mut new_port: u32 = 0;
+                    // SAFETY: standard Mach port operations.
+                    let kr = unsafe { mach_port_allocate(task, 1, &mut new_port) };
+                    if kr == 0 {
+                        unsafe {
+                            mach_port_deallocate(task, new_port);
+                            mach_port_mod_refs(task, new_port, 1, -1);
+                        }
+                    }
+                    unsafe {
+                        let mut ptype: u32 = 0;
+                        mach_port_type(task, base_port, &mut ptype);
+                    }
+                    let t1 = mach_time();
+                    timings.push(t1.wrapping_sub(t0));
+                }
+            }
+
+            for &port in &ports {
                 unsafe {
-                    let mut ptype: u32 = 0;
-                    mach_port_type(task, base_port, &mut ptype);
+                    mach_port_mod_refs(task, port, 1, -1);
                 }
-                let t1 = mach_time();
-                timings.push(t1.wrapping_sub(t0));
             }
-        }
 
-        for &port in &ports {
-            unsafe {
-                mach_port_mod_refs(task, port, 1, -1);
-            }
+            extract_timing_entropy(&timings, n_samples)
         }
-
-        extract_timing_entropy(&timings, n_samples)
     }
 }
 
+#[cfg(target_os = "macos")]
 impl MachIPCSource {
     fn collect_simple(&self, n_samples: usize) -> Vec<u8> {
         let raw_count = n_samples * 4 + 64;
@@ -259,6 +273,7 @@ impl MachIPCSource {
 }
 
 // Mach message structures for complex OOL messages.
+#[cfg(target_os = "macos")]
 #[repr(C)]
 struct MachMsgHeader {
     msgh_bits: u32,
@@ -269,11 +284,13 @@ struct MachMsgHeader {
     msgh_id: i32,
 }
 
+#[cfg(target_os = "macos")]
 #[repr(C)]
 struct MachMsgBody {
     msgh_descriptor_count: u32,
 }
 
+#[cfg(target_os = "macos")]
 #[repr(C)]
 struct MachMsgOOLDescriptor {
     address: *mut u8,
@@ -284,6 +301,7 @@ struct MachMsgOOLDescriptor {
     size: u32,
 }
 
+#[cfg(target_os = "macos")]
 #[repr(C)]
 struct MachMsgOOL {
     header: MachMsgHeader,
@@ -293,8 +311,10 @@ struct MachMsgOOL {
 
 // SAFETY: MachMsgOOL contains a raw pointer (ool.address), but we only use it
 // within a single thread's send operation where the pointed-to buffer is alive.
+#[cfg(target_os = "macos")]
 unsafe impl Send for MachMsgOOL {}
 
+#[cfg(target_os = "macos")]
 impl MachMsgOOL {
     fn zeroed() -> Self {
         // SAFETY: All-zeros is valid for this repr(C) struct.
@@ -302,6 +322,7 @@ impl MachMsgOOL {
     }
 }
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn mach_task_self() -> u32;
     fn mach_port_allocate(task: u32, right: i32, name: *mut u32) -> i32;
