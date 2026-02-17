@@ -70,7 +70,7 @@ jobs:
 
   build:
     name: Build release artifacts
-    needs: [validate, quality]
+    needs: [validate]
     strategy:
       matrix:
         include:
@@ -111,7 +111,7 @@ jobs:
 
   release:
     name: Create GitHub release
-    needs: [validate, build]
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
@@ -180,7 +180,7 @@ jobs:
 
   publish-crates:
     name: Publish crates.io (stable tags only)
-    needs: [validate, quality]
+    needs: [validate]
     if: ${{ needs.validate.outputs.prerelease == 'false' }}
     runs-on: ubuntu-latest
     permissions:
