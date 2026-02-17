@@ -11,6 +11,7 @@
 //!
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::extract_timing_entropy;
 
 static USB_TIMING_INFO: SourceInfo = SourceInfo {

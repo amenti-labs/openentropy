@@ -39,7 +39,9 @@
 //! genuinely independent second clock domain, validated by `audio_pll_timing`'s
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
-use crate::sources::helpers::{read_cntvct, xor_fold_u64};
+#[cfg(target_os = "macos")]
+use crate::sources::helpers::read_cntvct;
+use crate::sources::helpers::xor_fold_u64;
 
 static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
     name: "counter_beat",
@@ -121,7 +123,11 @@ mod coreaudio {
                 &mut device as *mut u32 as *mut std::ffi::c_void,
             )
         };
-        if status == 0 { device } else { 0 }
+        if status == 0 {
+            device
+        } else {
+            0
+        }
     }
 
     /// Force a clock domain crossing by querying an audio device property.

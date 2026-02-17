@@ -11,6 +11,7 @@
 //!
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::extract_timing_entropy;
 
 static AUDIO_PLL_TIMING_INFO: SourceInfo = SourceInfo {
@@ -85,7 +86,11 @@ mod coreaudio {
                 &mut device as *mut u32 as *mut std::ffi::c_void,
             )
         };
-        if status == 0 { device } else { 0 }
+        if status == 0 {
+            device
+        } else {
+            0
+        }
     }
 
     /// Query a device property and return the elapsed duration.

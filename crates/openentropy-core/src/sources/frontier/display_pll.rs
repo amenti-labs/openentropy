@@ -31,6 +31,7 @@
 //! We oversample and extract timing deltas to recover usable entropy density.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::{extract_timing_entropy, read_cntvct};
 
 static DISPLAY_PLL_INFO: SourceInfo = SourceInfo {

@@ -15,7 +15,9 @@
 //!
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
-use crate::sources::helpers::{extract_timing_entropy, mach_time, xor_fold_u64};
+#[cfg(target_os = "macos")]
+use crate::sources::helpers::extract_timing_entropy;
+use crate::sources::helpers::{mach_time, xor_fold_u64};
 
 static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
     name: "gpu_divergence",

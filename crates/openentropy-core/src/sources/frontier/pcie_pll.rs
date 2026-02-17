@@ -28,7 +28,8 @@
 //!   simple syscalls
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
-use crate::sources::helpers::{extract_timing_entropy, read_cntvct};
+#[cfg(target_os = "macos")]
+use crate::sources::helpers::extract_timing_entropy;
 
 static PCIE_PLL_INFO: SourceInfo = SourceInfo {
     name: "pcie_pll",
@@ -53,7 +54,8 @@ pub struct PciePllSource;
 /// IOKit FFI for reading PCIe/Thunderbolt service properties.
 #[cfg(target_os = "macos")]
 mod iokit {
-    use std::ffi::{CString, c_char, c_void};
+    use crate::sources::helpers::read_cntvct;
+    use std::ffi::{c_char, c_void, CString};
 
     type IOReturn = i32;
 
@@ -120,19 +122,20 @@ mod iokit {
 
     /// Probe an IOKit service matching the given class name.
     /// Returns the time (in CNTVCT ticks) spent traversing IOKit.
+    #[cfg(target_os = "macos")]
     pub fn probe_service(class_name: &str) -> u64 {
         let c_name = match CString::new(class_name) {
             Ok(s) => s,
             Err(_) => return 0,
         };
 
-        let counter_before = super::read_cntvct();
+        let counter_before = read_cntvct();
 
         // SAFETY: IOServiceMatching creates a matching dictionary from a class name.
         // The returned dictionary is consumed by IOServiceGetMatchingServices.
         let matching = unsafe { IOServiceMatching(c_name.as_ptr()) };
         if matching.is_null() {
-            return super::read_cntvct().wrapping_sub(counter_before);
+            return read_cntvct().wrapping_sub(counter_before);
         }
 
         let mut iterator: io_iterator_t = 0;
@@ -143,7 +146,7 @@ mod iokit {
         };
 
         if kr != 0 {
-            return super::read_cntvct().wrapping_sub(counter_before);
+            return read_cntvct().wrapping_sub(counter_before);
         }
 
         // Get first matching service.
@@ -195,7 +198,12 @@ mod iokit {
             IOObjectRelease(iterator);
         }
 
-        super::read_cntvct().wrapping_sub(counter_before)
+        read_cntvct().wrapping_sub(counter_before)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn probe_service(_class_name: &str) -> u64 {
+        0
     }
 
     /// Check if any PCIe services are reachable.

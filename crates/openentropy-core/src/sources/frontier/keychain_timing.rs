@@ -84,10 +84,18 @@ impl EntropySource for KeychainTimingSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        if self.config.use_write_path {
-            collect_write_path(n_samples)
-        } else {
-            collect_read_path(n_samples)
+        #[cfg(target_os = "macos")]
+        {
+            if self.config.use_write_path {
+                collect_write_path(n_samples)
+            } else {
+                collect_read_path(n_samples)
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = n_samples;
+            Vec::new()
         }
     }
 }
@@ -97,6 +105,7 @@ const WARMUP_SAMPLES: usize = 100;
 
 /// Collect entropy via the keychain read path (SecItemCopyMatching).
 /// Faster (~0.6ms/sample) with excellent entropy (H∞ ≈ 6.5–7.0).
+#[cfg(target_os = "macos")]
 fn collect_read_path(n_samples: usize) -> Vec<u8> {
     // Bind Security framework symbols.
     #[link(name = "Security", kind = "framework")]
@@ -249,6 +258,7 @@ fn collect_read_path(n_samples: usize) -> Vec<u8> {
 
 /// Collect entropy via the keychain write path (SecItemAdd/Delete).
 /// Slower (~5ms/sample) but highest entropy (H∞ ≈ 7.4).
+#[cfg(target_os = "macos")]
 fn collect_write_path(n_samples: usize) -> Vec<u8> {
     #[link(name = "Security", kind = "framework")]
     unsafe extern "C" {
