@@ -1,7 +1,7 @@
 //! Kqueue event timing — entropy from BSD kernel event notification multiplexing.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};

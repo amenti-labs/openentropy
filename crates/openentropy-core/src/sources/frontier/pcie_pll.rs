@@ -55,7 +55,7 @@ pub struct PciePllSource;
 #[cfg(target_os = "macos")]
 mod iokit {
     use crate::sources::helpers::read_cntvct;
-    use std::ffi::{c_char, c_void, CString};
+    use std::ffi::{CString, c_char, c_void};
 
     type IOReturn = i32;
 
