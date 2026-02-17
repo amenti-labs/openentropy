@@ -1,11 +1,42 @@
 //! Kqueue event timing — entropy from BSD kernel event notification multiplexing.
 
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::sync::Arc;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::thread;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
-use crate::sources::helpers::{extract_timing_entropy, mach_time};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use crate::sources::helpers::extract_timing_entropy;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use crate::sources::helpers::mach_time;
 
 /// Configuration for kqueue events entropy collection.
 ///

@@ -41,6 +41,7 @@
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 #[cfg(target_os = "macos")]
 use crate::sources::helpers::read_cntvct;
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::xor_fold_u64;
 
 static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
@@ -175,7 +176,7 @@ impl EntropySource for CounterBeatSource {
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
             let _ = n_samples;
-            return Vec::new();
+            Vec::new()
         }
 
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

@@ -137,7 +137,7 @@ impl EntropySource for AudioPLLTimingSource {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = n_samples;
-            return Vec::new();
+            Vec::new()
         }
 
         #[cfg(target_os = "macos")]

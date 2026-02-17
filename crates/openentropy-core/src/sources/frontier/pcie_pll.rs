@@ -259,7 +259,7 @@ impl EntropySource for PciePllSource {
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
             let _ = n_samples;
-            return Vec::new();
+            Vec::new()
         }
 
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

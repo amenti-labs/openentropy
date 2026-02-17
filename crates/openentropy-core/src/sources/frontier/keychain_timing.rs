@@ -2,8 +2,10 @@
 //! multi-domain round-trip through securityd, SEP, and APFS.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::mach_time;
 
+#[cfg(target_os = "macos")]
 use super::extract_timing_entropy_variance;
 
 /// Configuration for keychain timing entropy collection.
@@ -100,7 +102,7 @@ impl EntropySource for KeychainTimingSource {
     }
 }
 
-/// Number of warm-up samples to discard (securityd cold cache transient).
+#[cfg(target_os = "macos")]
 const WARMUP_SAMPLES: usize = 100;
 
 /// Collect entropy via the keychain read path (SecItemCopyMatching).

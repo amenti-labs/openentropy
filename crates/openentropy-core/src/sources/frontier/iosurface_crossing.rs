@@ -14,6 +14,7 @@
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 #[cfg(target_os = "macos")]
 use crate::sources::helpers::extract_timing_entropy;
+#[cfg(target_os = "macos")]
 use crate::sources::helpers::mach_time;
 
 static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
@@ -238,7 +239,7 @@ impl EntropySource for IOSurfaceCrossingSource {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = n_samples;
-            return Vec::new();
+            Vec::new()
         }
 
         #[cfg(target_os = "macos")]
