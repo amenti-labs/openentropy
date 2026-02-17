@@ -148,6 +148,28 @@ impl EntropySource for YourSource {
 - Use full paths for system binaries: `/usr/sbin/ioreg`, `/usr/sbin/sysctl`
 - Zero clippy warnings: run `cargo clippy -- -D warnings` before submitting
 
+## Releases (Tag-Driven via GitHub Actions)
+
+Releases are managed by `.github/workflows/release.yml` and triggered by tags.
+
+1. Update `Cargo.toml` workspace version and add a matching `CHANGELOG.md` entry:
+   - Header format must be: `## X.Y.Z — YYYY-MM-DD`
+2. Commit and merge to your release branch.
+3. Create and push a tag:
+   - Stable: `vX.Y.Z`
+   - Pre-release: `vX.Y.Z-rc.1`
+4. The release workflow will:
+   - validate tag format and ensure tag version matches workspace version
+   - verify the changelog contains that version header
+   - run quality gates (`fmt`, `clippy -D warnings`, `test`)
+   - build signed/checksummed release binaries and create a GitHub Release
+
+Optional crates.io publish:
+- Set repository secret `CARGO_REGISTRY_TOKEN`.
+- Set repository variable `RELEASE_TAGGER` to the only GitHub username allowed to run tag releases.
+- Stable tags (`vX.Y.Z`) publish crates automatically in dependency order.
+- Pre-release tags skip crates.io publish.
+
 ## Commit Style
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`

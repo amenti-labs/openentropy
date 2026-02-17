@@ -188,6 +188,12 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             ));
         }
     }
+    if let Some(err) = app.recording_error() {
+        title_spans.push(Span::styled(
+            format!(" REC ERROR: {} ", truncate_message(err, 72)),
+            Style::default().fg(Color::White).bg(Color::Red),
+        ));
+    }
 
     if let Some(path) = &snap.last_export {
         title_spans.push(Span::styled(
@@ -223,6 +229,18 @@ fn draw_main(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
 
     draw_info(f, right[0], app, snap);
     draw_chart(f, right[1], app, snap);
+}
+
+fn truncate_message(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        return s.to_string();
+    }
+    let mut out = s
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
+    out.push('…');
+    out
 }
 
 // ---------------------------------------------------------------------------

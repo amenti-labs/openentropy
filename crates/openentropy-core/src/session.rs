@@ -321,11 +321,11 @@ impl SessionWriter {
         let session_id = Uuid::new_v4().to_string();
         let started_at = SystemTime::now();
 
-        // Build directory name: {timestamp}-{source_names}
+        // Build directory name: bounded and filesystem-safe to avoid ENAMETOOLONG
+        // when many sources are recorded.
         let ts = started_at.duration_since(UNIX_EPOCH).unwrap_or_default();
         let dt = format_iso8601_compact(ts);
-        let sources_slug = config.sources.join("-");
-        let dir_name = format!("{dt}-{sources_slug}");
+        let dir_name = build_session_dir_name(&dt, &config.sources, &session_id);
 
         let session_dir = config.output_dir.join(&dir_name);
         fs::create_dir_all(&session_dir)?;
@@ -644,6 +644,43 @@ fn is_leap(year: u64) -> bool {
     (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
+/// Build a compact, filesystem-safe session directory name.
+///
+/// Format: `{timestamp}-{source-label}-{id8}`
+/// Examples:
+/// - `2026-02-17T193000Z-clock_jitter-a1b2c3d4`
+/// - `2026-02-17T193000Z-clock_jitter-plus34-a1b2c3d4`
+fn build_session_dir_name(timestamp: &str, sources: &[String], session_id: &str) -> String {
+    let first = sources.first().map(String::as_str).unwrap_or("unknown");
+    let first = sanitize_for_path(first);
+    let label = if sources.len() <= 1 {
+        truncate_for_path(&first, 48)
+    } else {
+        let base = truncate_for_path(&first, 36);
+        format!("{base}-plus{}", sources.len() - 1)
+    };
+    let id8 = session_id.chars().take(8).collect::<String>();
+    format!("{timestamp}-{label}-{id8}")
+}
+
+/// Replace non path-safe characters with `_`.
+fn sanitize_for_path(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Truncate by character count (ASCII-safe output from sanitize_for_path).
+fn truncate_for_path(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -727,6 +764,31 @@ mod tests {
         // Finish and verify session.json
         let result_dir = writer.finish().unwrap();
         assert!(result_dir.join("session.json").exists());
+    }
+
+    #[test]
+    fn test_build_session_dir_name_is_compact() {
+        let sources: Vec<String> = (0..40)
+            .map(|i| format!("very_long_source_name_number_{i}_with_extra_detail"))
+            .collect();
+        let name = build_session_dir_name("2026-02-17T010203Z", &sources, "12345678-aaaa-bbbb");
+        assert!(name.len() < 128, "dir name too long: {} chars", name.len());
+        assert!(name.contains("plus39"));
+    }
+
+    #[test]
+    fn test_session_writer_with_many_sources_does_not_fail() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sources: Vec<String> = (0..40)
+            .map(|i| format!("very_long_source_name_number_{i}_with_extra_detail"))
+            .collect();
+        let config = SessionConfig {
+            sources,
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+        let writer = SessionWriter::new(config).expect("SessionWriter should handle many sources");
+        assert!(writer.session_dir().exists());
     }
 
     #[test]

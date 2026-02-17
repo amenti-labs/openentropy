@@ -333,6 +333,8 @@ pub struct App {
     recording_since: Option<Instant>,
     /// Path of the session directory while recording, or last finished session.
     recording_path: Option<PathBuf>,
+    /// Last start/stop recording error to surface in the TUI.
+    recording_error: Option<String>,
 }
 
 impl App {
@@ -373,6 +375,7 @@ impl App {
             recording: false,
             recording_since: None,
             recording_path: None,
+            recording_error: None,
         }
     }
 
@@ -471,7 +474,7 @@ impl App {
                     self.kick_collect();
                 }
             }
-            KeyCode::Char('r') => {
+            KeyCode::Char('r') | KeyCode::Char('R') => {
                 if self.recording {
                     self.stop_recording();
                 } else {
@@ -530,10 +533,10 @@ impl App {
                 self.shared.lock().unwrap().session_writer = Some(writer);
                 self.recording = true;
                 self.recording_since = Some(Instant::now());
+                self.recording_error = None;
             }
-            Err(_) => {
-                // Silently fail — we're in TUI mode, can't easily show errors
-                // The recording indicator won't appear so the user knows it didn't start
+            Err(e) => {
+                self.recording_error = Some(e.to_string());
             }
         }
     }
@@ -544,10 +547,16 @@ impl App {
 
         // Take the writer out and finish it
         let writer = self.shared.lock().unwrap().session_writer.take();
-        if let Some(writer) = writer
-            && let Ok(path) = writer.finish()
-        {
-            self.recording_path = Some(path);
+        if let Some(writer) = writer {
+            match writer.finish() {
+                Ok(path) => {
+                    self.recording_path = Some(path);
+                    self.recording_error = None;
+                }
+                Err(e) => {
+                    self.recording_error = Some(e.to_string());
+                }
+            }
         }
     }
 
@@ -733,6 +742,10 @@ impl App {
 
     pub fn recording_path(&self) -> Option<&PathBuf> {
         self.recording_path.as_ref()
+    }
+
+    pub fn recording_error(&self) -> Option<&str> {
+        self.recording_error.as_deref()
     }
 
     pub fn active_name(&self) -> Option<&str> {
