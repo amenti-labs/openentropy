@@ -1,5 +1,7 @@
 //! AMX coprocessor timing — entropy from the Apple Matrix eXtensions unit.
 
+#![cfg(target_os = "macos")]
+
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
 

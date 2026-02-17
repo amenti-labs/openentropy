@@ -1,5 +1,7 @@
 //! Mach IPC timing — entropy from complex Mach messages with OOL descriptors.
 
+#![cfg(target_os = "macos")]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
