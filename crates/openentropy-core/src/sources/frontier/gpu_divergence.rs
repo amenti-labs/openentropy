@@ -13,7 +13,7 @@
 //! Uses direct Metal framework FFI via Objective-C runtime — no external
 //! process spawning. Each dispatch completes in microseconds.
 //!
-//! PoC measured H∞ ≈ 7.97 bits/byte for memory divergence — near perfect.
+
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time, xor_fold_u64};
@@ -26,8 +26,7 @@ static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
               nondeterminism from: SIMD group divergence on conditional branches, memory \
               coalescing failures, L2 cache bank conflicts, thermal-dependent GPU clock \
               frequency variation, and warp scheduler arbitration. Each dispatch produces \
-              a different execution ordering due to physical nondeterminism in the GPU. \
-              PoC measured H\u{221e} \u{2248} 7.97 bits/byte \u{2014} near perfect entropy.",
+              a different execution ordering due to physical nondeterminism in the GPU.",
     category: SourceCategory::GPU,
     platform: Platform::MacOS,
     requirements: &[Requirement::Metal],

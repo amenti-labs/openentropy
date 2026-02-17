@@ -129,112 +129,112 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 Each source taps a **physically independent** noise mechanism. The oscillator sources are especially noteworthy: they beat the CPU's 24 MHz crystal against other independent oscillators on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise from separate crystal sustaining amplifiers or PLL VCO transistors.
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `denormal_timing` | 1.031 | <0.01s | Denormal FPU micropower thermal noise |
-| `audio_pll_timing` | 7.795 | 0.08s | Audio PLL clock drift from thermal perturbation |
-| `pdn_resonance` | 0.861 | <0.01s | Power delivery network LC resonance noise |
-| `counter_beat` | 7.796 | 0.09s | Two-oscillator beat: CPU crystal (24 MHz) vs audio PLL crystal |
-| `display_pll` | 7.809 | 0.07s | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
-| `pcie_pll` | 7.769 | 0.10s | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `denormal_timing` | <0.01s | Denormal FPU micropower thermal noise |
+| `audio_pll_timing` | 0.08s | Audio PLL clock drift from thermal perturbation |
+| `pdn_resonance` | <0.01s | Power delivery network LC resonance noise |
+| `counter_beat` | 0.09s | Two-oscillator beat: CPU crystal (24 MHz) vs audio PLL crystal |
+| `display_pll` | 0.07s | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
+| `pcie_pll` | 0.10s | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
 ### Timing (7)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `clock_jitter` | 6.507 | 0.00s | Phase noise between performance counter and monotonic clocks |
-| `mach_timing` | 7.832 | 0.00s | Mach absolute time LSB jitter |
-| `memory_timing` | 5.056 | 0.01s | DRAM access timing variations |
-| `dram_row_buffer` | 7.959 | 0.00s | DRAM row buffer conflict timing |
-| `cache_contention` | 7.960 | 0.01s | CPU cache line contention noise |
-| `page_fault_timing` | 7.967 | 0.01s | Virtual memory page fault latency |
-| `vm_page_timing` | 7.963 | 0.07s | Mach VM page allocation timing |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `clock_jitter` | 0.00s | Phase noise between performance counter and monotonic clocks |
+| `mach_timing` | 0.00s | Mach absolute time LSB jitter |
+| `memory_timing` | 0.01s | DRAM access timing variations |
+| `dram_row_buffer` | 0.00s | DRAM row buffer conflict timing |
+| `cache_contention` | 0.01s | CPU cache line contention noise |
+| `page_fault_timing` | 0.01s | Virtual memory page fault latency |
+| `vm_page_timing` | 0.07s | Mach VM page allocation timing |
 
 ### Scheduling (3)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `sleep_jitter` | 7.963 | 0.00s | Scheduling jitter in nanosleep() calls |
-| `dispatch_queue` | 6.688 | 0.09s | GCD dispatch queue scheduling jitter |
-| `thread_lifecycle` | 6.788 | 0.08s | pthread create/join cycle timing |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `sleep_jitter` | 0.00s | Scheduling jitter in nanosleep() calls |
+| `dispatch_queue` | 0.09s | GCD dispatch queue scheduling jitter |
+| `thread_lifecycle` | 0.08s | pthread create/join cycle timing |
 
 ### IO (4)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `disk_io` | 7.960 | 0.02s | Block device I/O timing jitter |
-| `nvme_latency` | 5.321 | 0.01s | NVMe command submission/completion timing |
-| `usb_timing` | 7.734 | 0.03s | USB bus transaction timing jitter |
-| `fsync_journal` | 7.796 | 16.69s | fsync journal commit latency noise |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `disk_io` | 0.02s | Block device I/O timing jitter |
+| `nvme_latency` | 0.01s | NVMe command submission/completion timing |
+| `usb_timing` | 0.03s | USB bus transaction timing jitter |
+| `fsync_journal` | 16.69s | fsync journal commit latency noise |
 
 ### IPC (4)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `mach_ipc` | 4.924 | 0.04s | Mach port IPC allocation/deallocation timing |
-| `pipe_buffer` | 3.220 | 0.01s | Kernel zone allocator via pipe lifecycle |
-| `kqueue_events` | 7.489 | 12.25s | BSD kqueue event multiplexing timer/file/socket jitter |
-| `keychain_timing` | 7.543 | 0.02s | macOS Keychain Services API timing jitter |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `mach_ipc` | 0.04s | Mach port IPC allocation/deallocation timing |
+| `pipe_buffer` | 0.01s | Kernel zone allocator via pipe lifecycle |
+| `kqueue_events` | 12.25s | BSD kqueue event multiplexing timer/file/socket jitter |
+| `keychain_timing` | 0.02s | macOS Keychain Services API timing jitter |
 
 ### Microarch (5)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `speculative_execution` | 7.967 | 0.00s | Branch prediction / speculative execution jitter |
-| `dvfs_race` | 7.804 | 0.13s | Cross-core DVFS frequency race (H∞=7.288) |
-| `cas_contention` | 2.352 | <0.01s | Multi-thread atomic CAS arbitration contention |
-| `tlb_shootdown` | 6.456 | 0.03s | mprotect() TLB invalidation IPI latency |
-| `amx_timing` | 5.188 | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `speculative_execution` | 0.00s | Branch prediction / speculative execution jitter |
+| `dvfs_race` | 0.13s | Cross-core DVFS frequency race |
+| `cas_contention` | <0.01s | Multi-thread atomic CAS arbitration contention |
+| `tlb_shootdown` | 0.03s | mprotect() TLB invalidation IPI latency |
+| `amx_timing` | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
 
 ### GPU (3)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `gpu_timing` | 7.966 | 46.96s | GPU compute dispatch scheduling jitter |
-| `gpu_divergence` | 7.837 | 0.76s | GPU warp divergence timing variance |
-| `iosurface_crossing` | 5.048 | 0.08s | IOSurface CPU-GPU cross-domain timing |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `gpu_timing` | 46.96s | GPU compute dispatch scheduling jitter |
+| `gpu_divergence` | 0.76s | GPU warp divergence timing variance |
+| `iosurface_crossing` | 0.08s | IOSurface CPU-GPU cross-domain timing |
 
 ### Network (3)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `dns_timing` | 7.958 | 21.91s | DNS resolution timing jitter |
-| `tcp_connect_timing` | 7.967 | 39.08s | TCP handshake timing variance |
-| `wifi_rssi` | — | — | WiFi received signal strength fluctuations *(requires WiFi)* |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `dns_timing` | 21.91s | DNS resolution timing jitter |
+| `tcp_connect_timing` | 39.08s | TCP handshake timing variance |
+| `wifi_rssi` | — | WiFi received signal strength fluctuations *(requires WiFi)* |
 
 ### System (4)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `sysctl_deltas` | 7.968 | 0.28s | Kernel counter fluctuations across 50+ sysctl keys |
-| `vmstat_deltas` | 7.965 | 0.38s | VM subsystem page fault and swap counters |
-| `process_table` | 7.971 | 1.99s | Process table snapshot entropy |
-| `ioregistry` | 7.964 | 2.15s | IOKit registry value mining |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `sysctl_deltas` | 0.28s | Kernel counter fluctuations across 50+ sysctl keys |
+| `vmstat_deltas` | 0.38s | VM subsystem page fault and swap counters |
+| `process_table` | 1.99s | Process table snapshot entropy |
+| `ioregistry` | 2.15s | IOKit registry value mining |
 
 ### Composite (2)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `cpu_io_beat` | 6.707 | 0.04s | CPU and I/O subsystem beat frequency |
-| `cpu_memory_beat` | 6.256 | 0.00s | CPU and memory controller beat pattern |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `cpu_io_beat` | 0.04s | CPU and I/O subsystem beat frequency |
+| `cpu_memory_beat` | 0.00s | CPU and memory controller beat pattern |
 
 ### Signal (3)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `compression_timing` | 7.966 | 1.02s | zlib compression timing oracle |
-| `hash_timing` | 7.122 | 0.04s | SHA-256 hash timing data-dependency |
-| `spotlight_timing` | 7.969 | 12.91s | Spotlight metadata query timing |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `compression_timing` | 1.02s | zlib compression timing oracle |
+| `hash_timing` | 0.04s | SHA-256 hash timing data-dependency |
+| `spotlight_timing` | 12.91s | Spotlight metadata query timing |
 
 ### Sensor (3)
 
-| Source | Shannon H | Time | Description |
-|--------|:---------:|-----:|-------------|
-| `audio_noise` | — | — | Audio ADC thermal noise floor *(requires mic)* |
-| `camera_noise` | — | — | Image sensor dark current noise *(requires camera)* |
-| `bluetooth_noise` | 7.961 | 10.01s | BLE ambient RF noise |
+| Source | Time | Description |
+|--------|-----:|-------------|
+| `audio_noise` | — | Audio ADC thermal noise floor *(requires mic)* |
+| `camera_noise` | — | Image sensor dark current noise *(requires camera)* |
+| `bluetooth_noise` | 10.01s | BLE ambient RF noise |
 
-Shannon entropy is measured 0–8 bits per byte. Sources scoring ≥ 7.9 are grade A. See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
+Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
 
 ---
 

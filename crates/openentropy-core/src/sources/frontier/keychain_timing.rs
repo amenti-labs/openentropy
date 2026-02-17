@@ -17,8 +17,7 @@ use super::extract_timing_entropy_variance;
 pub struct KeychainTimingConfig {
     /// Use SecItemAdd/Delete (write path) instead of SecItemCopyMatching (read path).
     ///
-    /// Write path has higher entropy (H∞ ≈ 7.4) but is ~6x slower (~5ms vs ~0.8ms).
-    /// Read path still has excellent entropy (H∞ ≈ 7.2) and is much faster.
+
     ///
     /// **Default:** `false` (use read path for speed)
     pub use_write_path: bool,
@@ -46,9 +45,7 @@ pub struct KeychainTimingConfig {
 /// The round-trip through XPC IPC, securityd scheduling, and database I/O
 /// aggregates jitter from multiple independent domains in a single measurement.
 ///
-/// # Measured entropy
-/// - SecItemCopyMatching (read): H∞ ≈ 6.5–7.0 bits/byte, ~0.6ms/sample
-/// - SecItemAdd (write): H∞ ≈ 7.0–7.4 bits/byte, ~5ms/sample
+
 ///
 /// # Caveats
 /// - High autocorrelation at lag-1 (~0.43): variance extraction mitigates this

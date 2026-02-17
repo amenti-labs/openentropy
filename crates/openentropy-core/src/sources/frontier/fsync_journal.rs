@@ -13,7 +13,6 @@
 //! Different from disk_io because this specifically measures the full
 //! journal commit path, not just raw block reads.
 //!
-//! PoC measured H∞ ≈ 7.1 bits/byte for 4KB fsync cycles — excellent.
 
 use std::io::Write;
 
@@ -29,8 +28,7 @@ static FSYNC_JOURNAL_INFO: SourceInfo = SourceInfo {
               (command queuing, arbitration) \u{2192} NAND flash (cell programming, charge \
               injection timing, wear-dependent oxide characteristics) \u{2192} barrier flush \
               (controller firmware scheduling). Every layer contributes independent \
-              timing noise from physically distinct sources. \
-              PoC measured H\u{221e} \u{2248} 7.1 bits/byte.",
+              timing noise from physically distinct sources.",
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],

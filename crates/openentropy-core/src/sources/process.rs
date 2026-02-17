@@ -2,8 +2,7 @@
 //! getpid() timing jitter for entropy.
 //!
 //! **Raw output characteristics:** Mix of timing LSBs and process table byte
-//! deltas. Shannon entropy ~3-5 bits/byte. The timing jitter component has
-//! higher entropy density than the process table bytes.
+//! deltas.
 
 use std::time::Instant;
 

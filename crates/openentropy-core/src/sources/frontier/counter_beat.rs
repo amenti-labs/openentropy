@@ -37,7 +37,6 @@
 //! `mach_absolute_time()` — which on Apple Silicon is the *same* counter, not an
 //! independent oscillator. This version fixes that by using the audio PLL as the
 //! genuinely independent second clock domain, validated by `audio_pll_timing`'s
-//! measured H∞ ≈ 5.4 bits/byte proving clock independence.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{read_cntvct, xor_fold_u64};
@@ -54,7 +53,7 @@ static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
               encodes the phase difference between two independent oscillators. \
               Entropy arises from independent \
               Johnson-Nyquist thermal noise in each crystal's sustaining amplifier. \
-              Expected H∞ ≈ 1–3 bits/byte — low entropy is intentional, preserving the \
+              The raw physical signal is preserved for statistical analysis.
               raw physical signal for statistical analysis.",
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
@@ -122,7 +121,11 @@ mod coreaudio {
                 &mut device as *mut u32 as *mut std::ffi::c_void,
             )
         };
-        if status == 0 { device } else { 0 }
+        if status == 0 {
+            device
+        } else {
+            0
+        }
     }
 
     /// Force a clock domain crossing by querying an audio device property.

@@ -49,18 +49,18 @@
 
 ### New Frontier Sources (39 → 36 total)
 
-- **`dvfs_race`** — Cross-core DVFS frequency race. Spawns two threads on different CPU cores running tight counting loops; the difference in iteration counts captures physical frequency jitter from independent DVFS controllers. PoC measured H∞ = 7.288 bits/byte — the highest of any discovered source.
-- **`cas_contention`** — Multi-thread atomic CAS arbitration. 4 threads race on compare-and-swap operations targeting shared cache lines. Hardware coherence engine arbitration timing is physically nondeterministic. PoC measured H∞ = 2.463 bits/byte.
+- **`dvfs_race`** — Cross-core DVFS frequency race. Spawns two threads on different CPU cores running tight counting loops; the difference in iteration counts captures physical frequency jitter from independent DVFS controllers.
+- **`cas_contention`** — Multi-thread atomic CAS arbitration. 4 threads race on compare-and-swap operations targeting shared cache lines. Hardware coherence engine arbitration timing is physically nondeterministic.
 
 ### Research
 
 - **6 proof-of-concept experiments** documented in `docs/findings/deep_research_2026-02-13.md`:
-  - DRAM refresh interference timing (H∞ = 0.949 — too low)
-  - P-core vs E-core frequency drift / software ring oscillator (**H∞ = 7.288 — promoted**)
-  - Cache coherence fabric ICE timing (H∞ = 0.991 — too deterministic)
-  - Mach thread QoS scheduling (H∞ = 0.567 — scheduler too quantized)
-  - GPU/Accelerate framework timing (H∞ = 3.573 — overlaps amx_timing)
-  - Atomic CAS contention (**H∞ = 2.619 — promoted**)
+  - DRAM refresh interference timing (too low entropy)
+  - P-core vs E-core frequency drift / software ring oscillator (promoted to dvfs_race)
+  - Cache coherence fabric ICE timing (too deterministic)
+  - Mach thread QoS scheduling (scheduler too quantized)
+  - GPU/Accelerate framework timing (overlaps amx_timing)
+  - Atomic CAS contention (promoted to cas_contention)
 
 ### Improvements
 
@@ -68,7 +68,7 @@
 - Comprehensive documentation updates: SOURCE_CATALOG, README, CLAUDE.md, ARCHITECTURE, all docs
 - Version bump to 0.4.0 across workspace, pyproject.toml
 - Removed dead code (vdsp_timing.rs)
-- Quality audit: cut `sensor_noise` (redundant with ioregistry), `dyld_timing` (redundant with spotlight_timing), `multi_domain_beat` (H∞ < 0.5)
+- Quality audit: cut `sensor_noise` (redundant with ioregistry), `dyld_timing` (redundant with spotlight_timing), `multi_domain_beat` (too low entropy)
 - Fixed stale source counts across all documentation and Cargo.toml files
 - `cargo fmt` clean, zero clippy warnings, 212 tests passing
 

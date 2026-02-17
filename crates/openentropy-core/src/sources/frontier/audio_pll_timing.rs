@@ -9,7 +9,6 @@
 //! - Shot noise in charge pump current
 //! - Reference oscillator crystal phase noise
 //!
-//! PoC measured H∞ ≈ 5.4 bits/byte for PLL beat detection queries.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
@@ -22,8 +21,7 @@ static AUDIO_PLL_TIMING_INFO: SourceInfo = SourceInfo {
               PLL has thermally-driven phase noise from VCO transistor Johnson-Nyquist \
               noise, charge pump shot noise, and crystal reference jitter. Each query \
               timing captures the instantaneous phase relationship between these \
-              independent clock domains. \
-              PoC measured H\u{221e} \u{2248} 5.4 bits/byte.",
+              independent clock domains.",
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AudioUnit],
@@ -87,7 +85,11 @@ mod coreaudio {
                 &mut device as *mut u32 as *mut std::ffi::c_void,
             )
         };
-        if status == 0 { device } else { 0 }
+        if status == 0 {
+            device
+        } else {
+            0
+        }
     }
 
     /// Query a device property and return the elapsed duration.

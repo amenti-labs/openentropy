@@ -5,8 +5,8 @@
 //! compression (zlib) and hashing (SHA-256) operations.
 //!
 //! **Raw output characteristics:** XOR-folded timing deltas between successive
-//! operations. Shannon entropy ~5-7 bits/byte. The timing jitter is driven
-//! by branch predictor state, cache contention, and pipeline hazards.
+//! operations. The timing jitter is driven by branch predictor state,
+//! cache contention, and pipeline hazards.
 //!
 //! Note: HashTimingSource uses SHA-256 as its *workload* (the thing being
 //! timed) — this is NOT conditioning. The entropy comes from the timing
@@ -15,8 +15,8 @@
 use std::io::Write;
 use std::time::Instant;
 
-use flate2::Compression;
 use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use sha2::{Digest, Sha256};
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};

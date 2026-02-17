@@ -10,7 +10,6 @@
 //! Uses direct IOSurface framework FFI — no external process spawning.
 //! Each create/lock/write/unlock/destroy cycle completes in microseconds.
 //!
-//! PoC measured H∞ ≈ 7.4 bits/byte for round-trip CPU→GPU→CPU timing.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
@@ -24,8 +23,7 @@ static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
               independent timing noise from cache coherence protocol arbitration, fabric \
               interconnect scheduling, and cross-clock-domain synchronizer metastability. \
               The combined multi-domain crossing creates high entropy from physically \
-              independent noise sources. \
-              PoC measured H\u{221e} \u{2248} 7.4 bits/byte.",
+              independent noise sources.",
     category: SourceCategory::GPU,
     platform: Platform::MacOS,
     requirements: &[Requirement::IOSurface],

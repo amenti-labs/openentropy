@@ -1,8 +1,6 @@
 //! Timing-based entropy sources: clock jitter, mach_absolute_time, and sleep jitter.
 //!
 //! **Raw output characteristics:** LSBs of timing deltas and clock differences.
-//! Shannon entropy ~2-5 bits/byte depending on source. Clock jitter has lowest
-//! entropy rate; mach_timing and sleep_jitter are higher due to pipeline effects.
 
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};

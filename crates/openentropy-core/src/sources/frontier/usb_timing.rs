@@ -9,7 +9,7 @@
 //! - Load capacitance thermal noise
 //! - Oscillator circuit Johnson-Nyquist noise
 //!
-//! PoC measured H∞ ≈ 3.7 bits/byte for USB device property queries.
+
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
@@ -22,8 +22,7 @@ static USB_TIMING_INFO: SourceInfo = SourceInfo {
               CPU clock domain boundary. The USB crystal has thermally-driven phase noise \
               from quartz lattice phonon excitations, load capacitance Johnson-Nyquist noise, \
               and oscillator circuit thermal fluctuations. Timing jitter also includes USB \
-              bus arbitration contention. \
-              PoC measured H\u{221e} \u{2248} 3.7 bits/byte.",
+              bus arbitration contention.",
     category: SourceCategory::IO,
     platform: Platform::MacOS,
     requirements: &[Requirement::Usb, Requirement::IOKit],

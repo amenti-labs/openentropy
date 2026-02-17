@@ -5,7 +5,7 @@
 //! hardware handling differences. This source times blocks of denormal
 //! multiply-accumulate operations and extracts timing jitter.
 //!
-//! PoC measured H∞ ≈ 1.2 bits/byte — marginal but above threshold.
+
 //! On Apple Silicon, denormal handling is fast (no microcode penalty),
 //! but residual pipeline state and cache effects still create jitter.
 
@@ -23,8 +23,7 @@ static DENORMAL_TIMING_INFO: SourceInfo = SourceInfo {
               microcode assists on some architectures, creating data-dependent timing. \
               Even on Apple Silicon where denormal handling is fast in hardware, \
               residual timing jitter comes from FPU pipeline state, cache line \
-              alignment, and memory controller arbitration. \
-              PoC measured H\u{221e} \u{2248} 1.2 bits/byte.",
+              alignment, and memory controller arbitration.",
     category: SourceCategory::Thermal,
     platform: Platform::Any,
     requirements: &[],

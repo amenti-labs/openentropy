@@ -7,7 +7,6 @@
 //! By running a stress workload on background threads while measuring timing
 //! on the current thread, we capture PDN voltage noise from cross-core coupling.
 //!
-//! PoC measured H∞ ≈ 1.6 bits/byte under multi-core stress.
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{extract_timing_entropy, mach_time};
@@ -23,8 +22,7 @@ static PDN_RESONANCE_INFO: SourceInfo = SourceInfo {
               The timing perturbation captures power delivery network (PDN) voltage noise: \
               LC resonances in PCB power planes, voltage droop from bursty current draw, \
               and cross-core power supply coupling. Each measurement thread combination \
-              creates a different current profile exciting different PDN modes. \
-              PoC measured H\u{221e} \u{2248} 1.6 bits/byte.",
+              creates a different current profile exciting different PDN modes.",
     category: SourceCategory::Thermal,
     platform: Platform::Any,
     requirements: &[],

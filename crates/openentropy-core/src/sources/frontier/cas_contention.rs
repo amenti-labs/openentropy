@@ -3,13 +3,12 @@
 //! Multiple threads race on atomic CAS operations targeting shared cache lines.
 //! The hardware coherence engine's arbitration order is physically nondeterministic.
 //!
-//! PoC measured H∞ = 2.463 bits/byte (4-thread XOR combined).
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread;
 
 const NUM_THREADS: usize = 4;
@@ -74,7 +73,7 @@ static CAS_CONTENTION_INFO: SourceInfo = SourceInfo {
               physically nondeterministic due to interconnect fabric latency \
               variations, thermal state, and traffic from other cores/devices. \
               XOR-combining timing measurements from all threads amplifies the \
-              arbitration entropy. PoC measured H\u{221e} = 2.463 bits/byte.",
+              arbitration entropy.",
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],

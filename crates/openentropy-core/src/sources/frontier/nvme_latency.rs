@@ -10,7 +10,6 @@
 //! internal DRAM cache rather than NAND cells. The entropy comes from I/O
 //! stack scheduling nondeterminism, not NAND cell physics.
 //!
-//! PoC measured H∞ ≈ 2.3 bits/byte for multi-offset reads.
 
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::Instant;
@@ -33,8 +32,7 @@ static NVME_LATENCY_INFO: SourceInfo = SourceInfo {
               Timing jitter arises from NVMe command queue arbitration, SSD controller \
               firmware scheduling (garbage collection, wear leveling background tasks), \
               and interrupt delivery latency. Note: freshly-written data typically resides \
-              in SSD DRAM cache, not NAND cells. \
-              PoC measured H\u{221e} \u{2248} 2.3 bits/byte.",
+              in SSD DRAM cache, not NAND cells.",
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],

@@ -5,13 +5,12 @@
 //! independent DVFS (Dynamic Voltage and Frequency Scaling) controllers on
 //! P-core vs E-core clusters.
 //!
-//! PoC measured H∞ = 7.381 bits/byte — the highest of any discovered source.
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::{mach_time, xor_fold_u64};
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread;
 
 /// Cross-core DVFS race entropy source.
@@ -41,8 +40,7 @@ static DVFS_RACE_INFO: SourceInfo = SourceInfo {
               and cross-core pipeline state differences. On Apple Silicon, P-core and \
               E-core clusters have separate frequency domains, but the 2\u{00b5}s window is \
               too short for DVFS transitions (~100\u{00b5}s-1ms); the primary entropy comes \
-              from scheduling and cache-coherence nondeterminism. \
-              PoC measured H\u{221e} = 7.381 bits/byte.",
+              from scheduling and cache-coherence nondeterminism.",
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],

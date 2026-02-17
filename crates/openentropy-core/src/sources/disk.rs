@@ -4,8 +4,7 @@
 //! and extracts LSBs of nanosecond timing deltas as entropy.
 //!
 //! **Raw output characteristics:** LSBs of inter-read timing deltas.
-//! Shannon entropy ~4-6 bits/byte. Biased toward low values due to
-//! clustered read latencies. Use SHA-256 conditioning for uniform output.
+//! Use SHA-256 conditioning for uniform output.
 
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::Instant;

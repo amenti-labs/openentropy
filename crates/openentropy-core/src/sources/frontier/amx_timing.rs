@@ -45,7 +45,7 @@ pub struct AMXTimingConfig {
 
     /// Apply Von Neumann debiasing to raw timing deltas.
     ///
-    /// The AMX timing source has severe bias (Shannon 6.985 but H∞ only 0.379).
+    /// The AMX timing source has severe bias.
     /// Von Neumann debiasing pairs consecutive deltas and discards equal pairs,
     /// emitting one unbiased bit per unequal pair. This costs ~50% of the raw
     /// data but dramatically improves min-entropy.

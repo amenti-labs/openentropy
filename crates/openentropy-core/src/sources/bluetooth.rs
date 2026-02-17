@@ -5,8 +5,6 @@
 //! jitter. Falls back to timing-only entropy if the command hangs or times out.
 //!
 //! **Raw output characteristics:** Mix of RSSI LSBs and timing bytes.
-//! Shannon entropy ~3-5 bits/byte. Timing bytes have higher entropy than
-//! RSSI values which cluster around typical signal strengths.
 
 use std::process::Command;
 use std::time::{Duration, Instant};
