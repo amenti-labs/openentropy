@@ -92,6 +92,7 @@ use super::helpers::xor_fold_u64;
 /// removes bias from the raw timing stream at the cost of ~50% data loss.
 ///
 /// Used by [`AMXTimingSource`] to correct its severe min-entropy bias.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) fn extract_timing_entropy_debiased(timings: &[u64], n_samples: usize) -> Vec<u8> {
     if timings.len() < 4 {
         return Vec::new();
@@ -164,6 +165,7 @@ mod tests {
     use super::*;
 
     // Von Neumann debiasing
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn debiased_extraction_basic() {
         let timings: Vec<u64> = (0..200).map(|i| 100 + (i * 7 + i * i) % 50).collect();
@@ -171,12 +173,14 @@ mod tests {
         assert!(result.len() <= 10);
     }
 
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn debiased_extraction_too_few() {
         assert!(extract_timing_entropy_debiased(&[1, 2, 3], 10).is_empty());
         assert!(extract_timing_entropy_debiased(&[], 10).is_empty());
     }
 
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn debiased_extraction_constant_input() {
         let timings = vec![42u64; 100];
