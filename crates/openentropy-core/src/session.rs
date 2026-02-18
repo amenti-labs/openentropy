@@ -924,7 +924,7 @@ mod tests {
             },
             tags: HashMap::new(),
             note: None,
-            openentropy_version: "0.5.0".to_string(),
+            openentropy_version: env!("CARGO_PKG_VERSION").to_string(),
             analysis: None,
         };
 

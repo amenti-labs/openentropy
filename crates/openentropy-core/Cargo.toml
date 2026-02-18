@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "Core entropy harvesting library — 47 hardware noise sources, raw or SHA-256 conditioned"
+readme = "README.md"
 
 [[example]]
 name = "basic"

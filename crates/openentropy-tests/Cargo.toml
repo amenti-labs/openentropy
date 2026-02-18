@@ -7,6 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "NIST SP 800-22 inspired randomness test battery"
+readme = "README.md"
 
 [dependencies]
 statrs = { workspace = true }

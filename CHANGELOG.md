@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.1 — 2026-02-18
+
+### Changed
+
+- Added a Python source-parity CI check to ensure Python bindings expose the same detected source set as the Rust pool.
+- Added dedicated package metadata docs:
+  - `README.pypi.md` for PyPI
+  - per-crate `README.md` files for crates.io rendering
+
+### Fixed
+
+- Updated release workflow PyPI publish command to valid `maturin publish` arguments.
+- Expanded Python bindings parity with Rust core:
+  - added missing metadata fields in health/source reports
+  - added `source_names`, `get_source_bytes`, `get_source_raw_bytes`
+  - added `platform_info`, `detect_machine_info`, and conditioning/quality helper exports
+  - invalid conditioning mode now raises `ValueError` instead of silently defaulting
+- Refreshed documentation to match current code paths and packaging:
+  - rewritten `docs/PYTHON_SDK.md`
+  - updated `docs/API.md` and `docs/ARCHITECTURE.md`
+  - corrected Python install guidance and source-count references
+
 ## 0.5.0 — 2026-02-16
 
 ### Changed

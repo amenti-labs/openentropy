@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "HTTP entropy server — ANU QRNG API compatible"
+readme = "README.md"
 
 [dependencies]
 openentropy-core = { workspace = true }

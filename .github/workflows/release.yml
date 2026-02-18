@@ -293,3 +293,47 @@ jobs:
           publish_with_retry openentropy-server
           publish_with_retry openentropy-cli
           publish_with_retry openentropy-wasm
+
+  publish-pypi:
+    name: Publish PyPI package (stable tags only)
+    needs: [validate, quality]
+    if: needs.validate.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for PyPI token
+        id: check_token
+        run: |
+          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "PYPI_API_TOKEN not set, skipping PyPI publish"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip if no token
+        if: steps.check_token.outputs.skip == 'true'
+        run: echo "Skipping PyPI publish - no token configured"
+
+      - name: Install Rust toolchain
+        if: steps.check_token.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        if: steps.check_token.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install maturin
+        if: steps.check_token.outputs.skip != 'true'
+        run: pip install --upgrade maturin
+
+      - name: Build and publish to PyPI
+        if: steps.check_token.outputs.skip != 'true'
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: maturin publish --skip-existing --non-interactive -m crates/openentropy-python/Cargo.toml

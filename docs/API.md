@@ -18,6 +18,10 @@ pub use conditioning::{
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
+pub use session::{
+    MachineInfo, SessionConfig, SessionMeta, SessionSourceAnalysis, SessionWriter,
+    detect_machine_info,
+};
 pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -39,9 +43,17 @@ pub fn collect_enabled_n(&self, enabled_names: &[String], n_samples: usize) -> u
 pub fn get_raw_bytes(&self, n_bytes: usize) -> Vec<u8>
 pub fn get_random_bytes(&self, n_bytes: usize) -> Vec<u8>
 pub fn get_bytes(&self, n_bytes: usize, mode: ConditioningMode) -> Vec<u8>
+pub fn get_source_bytes(
+    &self,
+    source_name: &str,
+    n_bytes: usize,
+    mode: ConditioningMode,
+) -> Option<Vec<u8>>
+pub fn get_source_raw_bytes(&self, source_name: &str, n_samples: usize) -> Option<Vec<u8>>
 
 pub fn health_report(&self) -> HealthReport
 pub fn print_health(&self)
+pub fn source_names(&self) -> Vec<String>
 pub fn source_infos(&self) -> Vec<SourceInfoSnapshot>
 ```
 
@@ -147,7 +159,7 @@ pub fn platform_info() -> PlatformInfo
 ```
 
 ```rust
-pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 44 sources
+pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 47 sources
 ```
 
 ## openentropy-tests

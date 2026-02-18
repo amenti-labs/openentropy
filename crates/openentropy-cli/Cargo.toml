@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "CLI for openentropy — your computer is a hardware noise observatory"
+readme = "README.md"
 
 [[bin]]
 name = "openentropy"

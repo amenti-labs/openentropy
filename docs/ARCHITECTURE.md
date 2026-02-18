@@ -4,7 +4,7 @@
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with multiple crates, each with a focused responsibility.
 
-**Version:** 0.5.0
+**Version:** 0.5.1
 **Edition:** Rust 2024
 **License:** MIT
 
@@ -73,9 +73,9 @@ openentropy/
 │       └── src/
 │           └── lib.rs              # PyO3 module: EntropyPool, run_all_tests, etc.
 │
-├── openentropy/               # Pure Python fallback package
+├── openentropy/               # Python package wrapper for compiled extension
 ├── pyproject.toml                  # Python packaging (pip install)
-└── tests/                          # Python integration tests
+└── examples/                       # Rust and Python usage examples
 ```
 
 ## Core Crates
@@ -84,7 +84,7 @@ openentropy/
 
 The foundational library. Contains all 47 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
-**Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `libloading`, `log`
+**Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `log`, `getrandom`
 
 **Public API:**
 - `EntropyPool` -- thread-safe multi-source collector with SHA-256 conditioning
@@ -117,7 +117,7 @@ A self-contained crate implementing 31 statistical tests inspired by the NIST SP
 
 ### 5. openentropy-python
 
-PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` that can be loaded as a native Python extension module. The Python package falls back to a pure-Python implementation if the Rust extension is not available.
+PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` that is loaded as a native Python extension module.
 
 **Key dependencies:** `openentropy-core`, `openentropy-tests`, `pyo3`
 
@@ -133,19 +133,6 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
                                             │
                            each: collect(n_samples) -> Vec<u8>
                                             │
-                            ┌───────────────┴───────────────┐
-                            │  Per-Source Conditioning       │
-                            │  (varies by source)            │
-                            │                                │
-                            │  raw timings                   │
-                            │    -> consecutive deltas        │
-                            │    -> XOR whitening             │
-                            │    -> LSB extraction            │
-                            │    -> SHA-256 block hashing     │
-                            │    -> Von Neumann debiasing     │
-                            └───────────────┬───────────────┘
-                                            │
-                                            ▼
                               ┌──────────────────────┐
                               │     ENTROPY POOL     │
                               │                      │
@@ -180,11 +167,11 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
                  │                   │                   │
                  ▼                   ▼                   ▼
          get_random_bytes()     stream/device        HTTP server
-           (Rust / Python)      (stdout/FIFO)        (axum)
+            (Rust core)         (stdout/FIFO)        (axum)
                  │                                       │
                  ▼                                       ▼
-         NumPy Generator                         ANU QRNG API
-         OpenEntropyBitGenerator                    /api/v1/random
+          Python bindings                         ANU QRNG API
+          (PyO3 extension)                         /api/v1/random
 ```
 
 ## Key Traits and Types
@@ -219,45 +206,45 @@ pub struct SourceInfo {
     pub description: &'static str,                 // Short human description
     pub physics: &'static str,                     // Detailed physics explanation
     pub category: SourceCategory,                  // Category enum
-    pub platform_requirements: &'static [&'static str], // e.g. &["macOS"]
+    pub platform: Platform,                       // e.g. Platform::MacOS
+    pub requirements: &'static [Requirement],     // e.g. &[Requirement::Wifi]
+    pub composite: bool,                          // Whether source combines domains
     pub entropy_rate_estimate: f64,                // Estimated bits/second
 }
 ```
 
 ### `SourceCategory` enum
 
-Eight categories that classify entropy sources by the physical domain they exploit.
+Twelve categories classify entropy sources by physical mechanism.
 
 ```rust
 pub enum SourceCategory {
-    Timing,       // Clock phase noise, scheduler jitter
-    System,       // Kernel counters, process tables
-    Network,      // DNS latency, TCP timing, WiFi RSSI
-    Hardware,     // Disk I/O, memory, GPU, audio, camera
-    Silicon,      // DRAM row buffer, cache, page faults, speculative exec
-    CrossDomain,  // Beat frequencies between clock domains
-    Novel,        // GCD dispatch, VM pages, Spotlight
-    Frontier,     // AMX timing, thread lifecycle, DVFS race, CAS contention, etc.
+    Thermal,
+    Timing,
+    Scheduling,
+    IO,
+    IPC,
+    Microarch,
+    GPU,
+    Network,
+    System,
+    Composite,
+    Signal,
+    Sensor,
 }
 ```
 
 ## Conditioning Pipeline
 
-The system applies conditioning at two levels.
+Conditioning is centralized in `crates/openentropy-core/src/conditioning.rs`.
 
-### Per-Source Conditioning
+The pool can return:
 
-Each source applies its own conditioning suited to the raw signal:
+- `Raw` bytes (`get_raw_bytes`)
+- `VonNeumann` debiased bytes (`get_bytes(..., ConditioningMode::VonNeumann)`)
+- `Sha256` conditioned bytes (`get_random_bytes`, default path)
 
-1. **Timing delta extraction** -- consecutive timestamp differences isolate the jitter component
-2. **XOR whitening** -- adjacent deltas are XORed to decorrelate sequential bias
-3. **LSB extraction** -- only the lowest byte of each delta is kept (highest entropy density)
-4. **SHA-256 block conditioning** -- raw bytes are fed through chained SHA-256 in 64-byte blocks with a monotonic counter to ensure unique output even if raw data repeats
-5. **Von Neumann debiasing** (where applicable) -- removes first-order bias by discarding same-bit pairs
-
-### Pool-Level Conditioning
-
-The `EntropyPool::get_random_bytes()` method applies a second conditioning pass:
+The SHA-256 path used by `EntropyPool::get_random_bytes()` mixes:
 
 ```
 output_block = SHA-256(
@@ -273,12 +260,12 @@ The output digest becomes the new internal state (chaining), and is appended to 
 
 ## Parallel Collection
 
-`EntropyPool` supports two collection modes:
+`EntropyPool` supports timeout-bounded parallel collection and backoff for slow/hung sources:
 
-- **`collect_all()`** -- serial collection from each source in sequence
-- **`collect_all_parallel(timeout_secs)`** -- spawns a scoped thread per source with a deadline; results are merged into the shared buffer under a mutex
+- `collect_all()`
+- `collect_all_parallel(timeout_secs)`
 
-Parallel collection uses `std::thread::scope` to safely share references without `Arc` lifetime complexity.
+Collection workers run in detached threads with in-flight tracking and per-source backoff windows to prevent thread buildup.
 
 ## Thread Safety
 
@@ -313,7 +300,7 @@ Sources that panic during collection are caught via `catch_unwind` and marked un
 
 - **Not a CSPRNG replacement.** This provides entropy *input*, not a complete cryptographic random number generator.
 - SHA-256 conditioning ensures output is computationally indistinguishable from random, even if individual sources are weak or compromised.
-- Every output block mixes 8 bytes from `/dev/urandom` as a safety net. Even if all 36 hardware sources fail simultaneously, the output remains at least as strong as the OS entropy source.
+- Every output block mixes 8 bytes from OS CSPRNG as a safety net. Even if hardware sources fail, output remains at least as strong as the OS entropy source.
 - Health monitoring detects degraded sources and flags them, but never stops producing output.
 - The internal state is chained (each output updates the state), providing forward secrecy: compromising a past state does not reveal future output.
 
@@ -338,15 +325,10 @@ The workspace uses Rust edition 2024. Key version constraints:
 
 ## Python Interop
 
-The Python package (`openentropy`) uses a dual-backend architecture:
+The Python package (`openentropy`) imports symbols from the compiled extension module:
 
 ```python
-try:
-    from openentropy.openentropy import EntropyPool  # Rust (PyO3)
-    __rust_backend__ = True
-except ImportError:
-    from openentropy.pool import EntropyPool              # Pure Python
-    __rust_backend__ = False
+from openentropy.openentropy import EntropyPool
 ```
 
-When the Rust extension is compiled (via maturin), the Python API delegates to native code. When it is not available, the package falls back to the original pure-Python implementation with identical API surface.
+See `docs/PYTHON_SDK.md` for the current Python API surface.

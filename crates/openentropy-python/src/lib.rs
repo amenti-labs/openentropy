@@ -2,10 +2,23 @@
 //!
 //! Provides the same API as the pure-Python package but backed by Rust.
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
+use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::pool::EntropyPool as RustPool;
+
+fn parse_conditioning_mode(conditioning: &str) -> PyResult<ConditioningMode> {
+    match conditioning {
+        "raw" => Ok(ConditioningMode::Raw),
+        "vonneumann" | "vn" | "von_neumann" => Ok(ConditioningMode::VonNeumann),
+        "sha256" => Ok(ConditioningMode::Sha256),
+        _ => Err(PyValueError::new_err(format!(
+            "invalid conditioning mode '{conditioning}'. expected one of: raw, vonneumann|vn|von_neumann, sha256"
+        ))),
+    }
+}
 
 /// Thread-safe multi-source entropy pool.
 #[pyclass(name = "EntropyPool")]
@@ -62,16 +75,10 @@ impl PyEntropyPool {
         py: Python<'py>,
         n_bytes: usize,
         conditioning: &str,
-    ) -> Bound<'py, PyBytes> {
-        let mode = match conditioning {
-            "raw" => openentropy_core::conditioning::ConditioningMode::Raw,
-            "vonneumann" | "vn" | "von_neumann" => {
-                openentropy_core::conditioning::ConditioningMode::VonNeumann
-            }
-            _ => openentropy_core::conditioning::ConditioningMode::Sha256,
-        };
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let mode = parse_conditioning_mode(conditioning)?;
         let data = self.inner.get_bytes(n_bytes, mode);
-        PyBytes::new(py, &data)
+        Ok(PyBytes::new(py, &data))
     }
 
     /// Return n_bytes of raw, unconditioned entropy (XOR-combined only).
@@ -100,6 +107,7 @@ impl PyEntropyPool {
             sd.set_item("healthy", s.healthy)?;
             sd.set_item("bytes", s.bytes)?;
             sd.set_item("entropy", s.entropy)?;
+            sd.set_item("min_entropy", s.min_entropy)?;
             sd.set_item("time", s.time)?;
             sd.set_item("failures", s.failures)?;
             sources.append(sd)?;
@@ -123,10 +131,50 @@ impl PyEntropyPool {
             d.set_item("description", &info.description)?;
             d.set_item("physics", &info.physics)?;
             d.set_item("category", &info.category)?;
+            d.set_item("platform", &info.platform)?;
+            d.set_item("requirements", &info.requirements)?;
             d.set_item("entropy_rate_estimate", info.entropy_rate_estimate)?;
+            d.set_item("composite", info.composite)?;
             list.append(d)?;
         }
         Ok(list)
+    }
+
+    /// List registered source names.
+    fn source_names(&self) -> Vec<String> {
+        self.inner.source_names()
+    }
+
+    /// Collect conditioned bytes from a single named source.
+    ///
+    /// Returns None if no source matches the given name.
+    #[pyo3(signature = (source_name, n_bytes, conditioning="sha256"))]
+    fn get_source_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        source_name: &str,
+        n_bytes: usize,
+        conditioning: &str,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        let mode = parse_conditioning_mode(conditioning)?;
+        Ok(self
+            .inner
+            .get_source_bytes(source_name, n_bytes, mode)
+            .map(|data| PyBytes::new(py, &data)))
+    }
+
+    /// Collect raw bytes from a single named source.
+    ///
+    /// Returns None if no source matches the given name.
+    fn get_source_raw_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        source_name: &str,
+        n_samples: usize,
+    ) -> Option<Bound<'py, PyBytes>> {
+        self.inner
+            .get_source_raw_bytes(source_name, n_samples)
+            .map(|data| PyBytes::new(py, &data))
     }
 }
 
@@ -199,6 +247,93 @@ fn detect_available_sources<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>
     Ok(list)
 }
 
+/// Platform information.
+#[pyfunction]
+fn platform_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let info = openentropy_core::platform_info();
+    let d = PyDict::new(py);
+    d.set_item("system", info.system)?;
+    d.set_item("machine", info.machine)?;
+    d.set_item("family", info.family)?;
+    Ok(d)
+}
+
+/// Detect machine information (best-effort).
+#[pyfunction]
+fn detect_machine_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let info = openentropy_core::detect_machine_info();
+    let d = PyDict::new(py);
+    d.set_item("os", info.os)?;
+    d.set_item("arch", info.arch)?;
+    d.set_item("chip", info.chip)?;
+    d.set_item("cores", info.cores)?;
+    Ok(d)
+}
+
+/// Apply conditioning mode to bytes.
+#[pyfunction]
+#[pyo3(signature = (data, n_output, conditioning="sha256"))]
+fn condition<'py>(
+    py: Python<'py>,
+    data: &[u8],
+    n_output: usize,
+    conditioning: &str,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let mode = parse_conditioning_mode(conditioning)?;
+    let out = openentropy_core::condition(data, n_output, mode);
+    Ok(PyBytes::new(py, &out))
+}
+
+/// Full min-entropy estimator report.
+#[pyfunction]
+fn min_entropy_estimate<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyDict>> {
+    let report = openentropy_core::min_entropy_estimate(data);
+    let d = PyDict::new(py);
+    d.set_item("shannon_entropy", report.shannon_entropy)?;
+    d.set_item("min_entropy", report.min_entropy)?;
+    d.set_item("heuristic_floor", report.heuristic_floor)?;
+    d.set_item("mcv_estimate", report.mcv_estimate)?;
+    d.set_item("mcv_p_upper", report.mcv_p_upper)?;
+    d.set_item("collision_estimate", report.collision_estimate)?;
+    d.set_item("markov_estimate", report.markov_estimate)?;
+    d.set_item("compression_estimate", report.compression_estimate)?;
+    d.set_item("t_tuple_estimate", report.t_tuple_estimate)?;
+    d.set_item("samples", report.samples)?;
+    Ok(d)
+}
+
+/// Fast MCV min-entropy estimate.
+#[pyfunction]
+fn quick_min_entropy(data: &[u8]) -> f64 {
+    openentropy_core::quick_min_entropy(data)
+}
+
+/// Fast Shannon entropy estimate.
+#[pyfunction]
+fn quick_shannon(data: &[u8]) -> f64 {
+    openentropy_core::quick_shannon(data)
+}
+
+/// Grade a source based on min-entropy.
+#[pyfunction]
+fn grade_min_entropy(min_entropy: f64) -> String {
+    openentropy_core::grade_min_entropy(min_entropy).to_string()
+}
+
+/// Quick quality report.
+#[pyfunction]
+fn quick_quality<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyDict>> {
+    let report = openentropy_core::quick_quality(data);
+    let d = PyDict::new(py);
+    d.set_item("samples", report.samples)?;
+    d.set_item("unique_values", report.unique_values)?;
+    d.set_item("shannon_entropy", report.shannon_entropy)?;
+    d.set_item("compression_ratio", report.compression_ratio)?;
+    d.set_item("quality_score", report.quality_score)?;
+    d.set_item("grade", report.grade.to_string())?;
+    Ok(d)
+}
+
 /// Library version.
 #[pyfunction]
 fn version() -> &'static str {
@@ -213,6 +348,14 @@ fn openentropy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_all_tests, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_quality_score, m)?)?;
     m.add_function(wrap_pyfunction!(detect_available_sources, m)?)?;
+    m.add_function(wrap_pyfunction!(platform_info, m)?)?;
+    m.add_function(wrap_pyfunction!(detect_machine_info, m)?)?;
+    m.add_function(wrap_pyfunction!(condition, m)?)?;
+    m.add_function(wrap_pyfunction!(min_entropy_estimate, m)?)?;
+    m.add_function(wrap_pyfunction!(quick_min_entropy, m)?)?;
+    m.add_function(wrap_pyfunction!(quick_shannon, m)?)?;
+    m.add_function(wrap_pyfunction!(grade_min_entropy, m)?)?;
+    m.add_function(wrap_pyfunction!(quick_quality, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     Ok(())
 }

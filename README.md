@@ -46,9 +46,7 @@ openentropy monitor
 ### Python
 
 ```bash
-pip install maturin
-git clone https://github.com/amenti-labs/openentropy.git && cd openentropy
-maturin develop --release
+pip install openentropy
 ```
 
 ```python
@@ -59,6 +57,14 @@ print(f"{len(sources)} entropy sources available")
 
 pool = EntropyPool.auto()
 data = pool.get_random_bytes(256)
+```
+
+Build from source (native extension):
+
+```bash
+git clone https://github.com/amenti-labs/openentropy.git && cd openentropy
+pip install maturin
+maturin develop
 ```
 
 ---
@@ -114,7 +120,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
 | [Integrations](docs/INTEGRATIONS.md) | Named pipe device, HTTP server, piping to other programs |
-| [Python SDK](docs/PYTHON_SDK.md) | PyO3 bindings and NumPy integration |
+| [Python SDK](docs/PYTHON_SDK.md) | PyO3 bindings and Python API reference |
 | [Examples](examples/) | Rust and Python code examples |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes |
 | [Security](SECURITY.md) | Threat model and responsible disclosure |
