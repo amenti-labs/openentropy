@@ -8,6 +8,7 @@ pub mod scan;
 pub mod server;
 pub mod sessions;
 pub mod stream;
+pub mod telemetry;
 
 use openentropy_core::EntropyPool;
 use openentropy_core::conditioning::ConditioningMode;

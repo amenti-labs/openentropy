@@ -16,6 +16,11 @@ pub use conditioning::{
     ConditioningMode, MinEntropyReport, QualityReport, condition, grade_min_entropy,
     min_entropy_estimate, quick_min_entropy, quick_quality, quick_shannon,
 };
+pub use metrics::standard::{EntropyMeasurements, SourceMeasurementRecord, compression_ratio};
+pub use metrics::streams::{
+    SourceRawStreamSample, collect_named_source_stream_samples, collect_source_stream_samples,
+    to_measurement_records, to_named_streams,
+};
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
 pub use session::{
@@ -26,6 +31,44 @@ pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInf
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 ```
+
+### Experimental quantum proxy (`openentropy_core::metrics::experimental::quantum_proxy_v3`)
+
+Re-exported from `openentropy_core` as stable names for the experimental model:
+
+- constants: `QUANTUM_PROXY_MODEL_ID`, `QUANTUM_PROXY_MODEL_VERSION`
+- calibration: `CalibrationRecord`, `PriorCalibration`, `calibrate_priors`, `default_calibration`, `load_calibration_from_path`
+- coupling: `CouplingStats`, `pairwise_coupling_by_source`, `pairwise_coupling_by_source_with_config`, `coupling_penalty`
+- stress: `StressSweepConfig`, `StressSweepReport`, `collect_stress_sweep`, `estimate_stress_sensitivity_from_streams`
+- telemetry confound: `TelemetryConfoundConfig`, `TelemetryConfoundReport`, `telemetry_confound_from_window`, `apply_telemetry_confound`
+- assessment: `QuantumAssessmentConfig`, `QuantumSourceInput`, `QuantumBatchReport`, `assess_batch`, `assess_batch_from_streams`, `assess_batch_from_streams_with_calibration`, `assess_batch_from_streams_with_telemetry`, `assess_batch_from_streams_with_calibration_and_telemetry`
+
+This surface is experimental/versioned and should be consumed by `(model_id, model_version)`.
+
+Preferred explicit import path:
+
+- `openentropy_core::experimental::quantum_proxy_v3`
+
+Notable report fields in `QuantumSourceResult` include:
+
+- raw/null/excess coupling means,
+- coupling significance diagnostics (`coupling_mean_q_*`, `coupling_significant_pair_fraction_*`),
+- per-source uncertainty intervals for `quantum_score`, `quantum_min_entropy_bits`, and `classical_min_entropy_bits`,
+- telemetry-adjusted fields: `stress_sensitivity_effective` and `telemetry_confound_penalty` (when telemetry is applied).
+
+### Experimental telemetry model (`openentropy_core::metrics::telemetry`)
+
+Re-exported from `openentropy_core`:
+
+- constants: `TELEMETRY_MODEL_ID`, `TELEMETRY_MODEL_VERSION`
+- snapshot/report types: `TelemetryMetric`, `TelemetrySnapshot`, `TelemetryMetricDelta`, `TelemetryWindowReport`
+- collection/build functions: `collect_telemetry_snapshot`, `collect_telemetry_window`, `build_telemetry_window`
+
+This surface is experimental/versioned and should be consumed by `(model_id, model_version)`.
+
+Preferred explicit import path:
+
+- `openentropy_core::experimental::telemetry_v1`
 
 ### `EntropyPool` (`openentropy_core::pool`)
 
@@ -194,8 +237,10 @@ HTTP endpoints:
 
 - `GET /api/v1/random?length=N&type=T[&raw=true|&conditioning=...]`
 - `GET /health`
-- `GET /sources`
-- `GET /pool/status`
+- `GET /sources[?experimental=true&telemetry=true&sample_bytes=1024]`
+- `GET /pool/status[?experimental=true&telemetry=true&sample_bytes=1024]`
+
+`experimental` and `telemetry` are independent opt-ins.
 
 ## openentropy-cli
 
@@ -215,3 +260,4 @@ Subcommands:
 - `report`
 - `record`
 - `sessions`
+- `telemetry`

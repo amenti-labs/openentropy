@@ -2,6 +2,11 @@ use std::time::Instant;
 
 use openentropy_core::analysis;
 use openentropy_core::conditioning::{ConditioningMode, condition, min_entropy_estimate};
+use openentropy_core::metrics::experimental::quantum_proxy_v3::{
+    MODEL_ID as QUANTUM_MODEL_ID, QuantumAssessmentConfig, QuantumBatchReport, QuantumSourceInput,
+    TelemetryConfoundConfig, assess_batch_from_streams_with_telemetry,
+    estimate_stress_sensitivity_from_streams, quality_factor_from_analysis,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AnalyzeView {
@@ -23,20 +28,25 @@ struct SourceInterpretation {
     meaning: &'static str,
 }
 
-pub fn run(
-    source_filter: Option<&str>,
-    output_path: Option<&str>,
-    samples: usize,
-    cross_correlation: bool,
-    entropy: bool,
-    conditioning: &str,
-    view: &str,
-) {
-    let all_sources = openentropy_core::platform::detect_available_sources();
-    let mode = super::parse_conditioning(conditioning);
-    let view = AnalyzeView::parse(view);
+pub struct AnalyzeCommandConfig<'a> {
+    pub source_filter: Option<&'a str>,
+    pub output_path: Option<&'a str>,
+    pub samples: usize,
+    pub cross_correlation: bool,
+    pub entropy: bool,
+    pub conditioning: &'a str,
+    pub view: &'a str,
+    pub quantum_ratio: bool,
+    pub include_telemetry: bool,
+}
 
-    let sources: Vec<_> = if let Some(filter) = source_filter {
+pub fn run(cfg: AnalyzeCommandConfig<'_>) {
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
+    let all_sources = openentropy_core::platform::detect_available_sources();
+    let mode = super::parse_conditioning(cfg.conditioning);
+    let view = AnalyzeView::parse(cfg.view);
+
+    let sources: Vec<_> = if let Some(filter) = cfg.source_filter {
         if filter == "all" {
             all_sources
         } else {
@@ -66,19 +76,21 @@ pub fn run(
     println!(
         "Analyzing {} source(s), {} samples each (view: {})...\n",
         sources.len(),
-        samples,
+        cfg.samples,
         view.as_str()
     );
 
     let mut all_results = Vec::new();
+    let need_pair_metrics = cfg.cross_correlation || cfg.quantum_ratio;
     let mut all_data: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut quantum_inputs = Vec::<QuantumSourceInput>::new();
     let mut status_counts = [0usize; 3];
 
     for source in &sources {
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let data = source.collect(samples);
+        let data = source.collect(cfg.samples);
         let collect_time = t0.elapsed();
 
         if data.is_empty() {
@@ -102,7 +114,7 @@ pub fn run(
         }
 
         // Min-entropy breakdown (MCV primary + diagnostic estimators)
-        if entropy {
+        if cfg.entropy {
             // Use the same sampled dataset we just analyzed to keep reports
             // comparable. Conditioning (if selected) is applied to this sample,
             // not to a separately recollected stream.
@@ -114,7 +126,8 @@ pub fn run(
             let report = min_entropy_estimate(&entropy_input);
             let report_str = format!("{report}");
             println!(
-                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {conditioning}, {} bytes)",
+                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {}, {} bytes)",
+                cfg.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
@@ -123,10 +136,31 @@ pub fn run(
             println!("  └─");
         }
 
+        let category = source.info().category;
+        let quality_factor = quality_factor_from_analysis(&result);
+        let min_entropy = if cfg.quantum_ratio {
+            openentropy_core::metrics::standard::EntropyMeasurements::from_bytes(
+                &data,
+                Some(collect_time.as_secs_f64()),
+            )
+            .min_entropy
+        } else {
+            0.0
+        };
         all_results.push(result);
 
-        if cross_correlation {
-            all_data.push((name, data));
+        if need_pair_metrics {
+            all_data.push((name.clone(), data));
+        }
+        if cfg.quantum_ratio {
+            quantum_inputs.push(QuantumSourceInput {
+                name,
+                category: Some(category),
+                min_entropy_bits: min_entropy,
+                quality_factor,
+                stress_sensitivity: 0.0,
+                physics_prior_override: None,
+            });
         }
     }
 
@@ -145,7 +179,7 @@ pub fn run(
     }
 
     // Cross-correlation matrix.
-    if cross_correlation && all_data.len() >= 2 {
+    if cfg.cross_correlation && all_data.len() >= 2 {
         println!("\n{:=<68}", "");
         println!("Cross-Correlation Matrix ({} sources)", all_data.len());
         println!("{:=<68}", "");
@@ -171,17 +205,72 @@ pub fn run(
         }
     }
 
+    let telemetry_report = telemetry.finish();
+    let quantum_report: Option<QuantumBatchReport> = if cfg.quantum_ratio {
+        let qcfg = QuantumAssessmentConfig::default();
+        let stress_map = estimate_stress_sensitivity_from_streams(&all_data, qcfg);
+        for input in &mut quantum_inputs {
+            input.stress_sensitivity = stress_map.get(&input.name).copied().unwrap_or(0.0);
+        }
+        let report = assess_batch_from_streams_with_telemetry(
+            &quantum_inputs,
+            &all_data,
+            qcfg,
+            64,
+            telemetry_report.as_ref(),
+            TelemetryConfoundConfig::default(),
+        );
+        println!("\n{:=<68}", "");
+        println!("Quantum:Classical Contribution Proxy ({QUANTUM_MODEL_ID})");
+        println!("{:=<68}", "");
+        println!(
+            "  Aggregate Q:C = {:.3}:{:.3} (Q fraction {:.1}%)",
+            report.aggregate.quantum_bits,
+            report.aggregate.classical_bits,
+            report.aggregate.quantum_fraction * 100.0
+        );
+        for row in &report.sources {
+            println!(
+                "  {:20} q={:.3} q_bits={:.3} (prior={:.2} quality={:.2} coupling={:.2})",
+                row.name,
+                row.quantum_score,
+                row.quantum_min_entropy_bits,
+                row.physics_prior,
+                row.quality_factor,
+                row.coupling_penalty
+            );
+        }
+        Some(report)
+    } else {
+        None
+    };
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("analyze", window);
+    }
+
     // JSON output.
-    if let Some(path) = output_path {
-        let json = if cross_correlation && all_data.len() >= 2 {
-            let matrix = analysis::cross_correlation_matrix(&all_data);
-            serde_json::json!({
-                "sources": all_results,
-                "cross_correlation": matrix,
-            })
+    if let Some(path) = cfg.output_path {
+        let cross = if cfg.cross_correlation && all_data.len() >= 2 {
+            Some(analysis::cross_correlation_matrix(&all_data))
         } else {
-            serde_json::json!({ "sources": all_results })
+            None
         };
+        let mut experimental = serde_json::Map::new();
+        super::telemetry::insert_quantum_proxy_report(&mut experimental, quantum_report.as_ref());
+        super::telemetry::insert_telemetry_window(&mut experimental, telemetry_report.as_ref());
+
+        let mut root = serde_json::Map::new();
+        root.insert(
+            "standard".to_string(),
+            serde_json::json!({
+                "sources": &all_results,
+                "cross_correlation": &cross,
+            }),
+        );
+        if let Some(exp) = super::telemetry::finalize_experimental(experimental) {
+            root.insert("experimental".to_string(), exp);
+        }
+        let json = serde_json::Value::Object(root);
 
         match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
             Ok(()) => println!("\nResults written to {path}"),

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use openentropy_core::conditioning::condition;
-use openentropy_core::session::{SessionConfig, SessionWriter};
+use openentropy_core::session::{SessionConfig, SessionMeta, SessionWriter};
 
 use super::make_pool;
 
@@ -22,6 +22,7 @@ pub fn run(
     interval: Option<&str>,
     analyze: bool,
     conditioning: &str,
+    include_telemetry: bool,
 ) {
     // Parse conditioning mode
     let mode = super::parse_conditioning(conditioning);
@@ -65,6 +66,7 @@ pub fn run(
         duration: max_duration,
         sample_size: 1000,
         include_analysis: analyze,
+        include_telemetry,
     };
 
     // Create session writer
@@ -102,6 +104,14 @@ pub fn run(
     println!(
         "  Analysis:  {}",
         if analyze { "enabled" } else { "disabled" }
+    );
+    println!(
+        "  Telemetry: {}",
+        if include_telemetry {
+            "enabled (session start/end snapshot)"
+        } else {
+            "disabled"
+        }
     );
     println!("  Output:    {}", session_dir.display());
     println!();
@@ -176,6 +186,20 @@ pub fn run(
             println!("  raw_index.csv         — byte offset index for raw.bin");
             println!("  conditioned.bin       — conditioned entropy bytes");
             println!("  conditioned_index.csv — byte offset index for conditioned.bin");
+            if include_telemetry {
+                let meta_path = dir.join("session.json");
+                if let Ok(raw) = std::fs::read_to_string(&meta_path)
+                    && let Ok(meta) = serde_json::from_str::<SessionMeta>(&raw)
+                    && let Some(t) = meta.telemetry
+                {
+                    println!(
+                        "  telemetry:            {} ({:.1}s, {} metrics)",
+                        t.model_id,
+                        t.elapsed_ms as f64 / 1000.0,
+                        t.end.metrics.len()
+                    );
+                }
+            }
         }
         Err(e) => {
             eprintln!("Error finalizing session: {e}");

@@ -11,18 +11,6 @@ categories.workspace = true
 description = "Core entropy harvesting library — 47 hardware noise sources, raw or SHA-256 conditioned"
 readme = "README.md"
 
-[[example]]
-name = "basic"
-path = "../../examples/rust/basic.rs"
-
-[[example]]
-name = "raw_vs_conditioned"
-path = "../../examples/rust/raw_vs_conditioned.rs"
-
-[[example]]
-name = "stream_to_file"
-path = "../../examples/rust/stream_to_file.rs"
-
 [dependencies]
 sha2 = { workspace = true }
 flate2 = { workspace = true }

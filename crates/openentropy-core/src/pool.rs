@@ -15,12 +15,14 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
-use crate::conditioning::{quick_min_entropy, quick_shannon};
-use crate::source::{EntropySource, SourceState};
+use crate::metrics::standard::EntropyMeasurements;
+use crate::source::{EntropySource, SourceInfo, SourceState};
 
 /// Thread-safe multi-source entropy pool.
 pub struct EntropyPool {
     sources: Vec<Arc<Mutex<SourceState>>>,
+    source_meta: Vec<SourceInfoSnapshot>,
+    last_health_cache: Mutex<HashMap<usize, SourceHealth>>,
     buffer: Mutex<Vec<u8>>,
     state: Mutex<[u8; 32]>,
     counter: Mutex<u64>,
@@ -49,6 +51,8 @@ impl EntropyPool {
 
         Self {
             sources: Vec::new(),
+            source_meta: Vec::new(),
+            last_health_cache: Mutex::new(HashMap::new()),
             buffer: Mutex::new(Vec::new()),
             state: Mutex::new(initial_state),
             counter: Mutex::new(0),
@@ -69,6 +73,21 @@ impl EntropyPool {
 
     /// Register an entropy source.
     pub fn add_source(&mut self, source: Box<dyn EntropySource>, weight: f64) {
+        let snapshot = source_info_to_snapshot(source.info());
+        let idx = self.source_meta.len();
+        self.last_health_cache.lock().unwrap().insert(
+            idx,
+            SourceHealth {
+                name: snapshot.name.clone(),
+                healthy: false,
+                bytes: 0,
+                entropy: 0.0,
+                min_entropy: 0.0,
+                time: 0.0,
+                failures: 0,
+            },
+        );
+        self.source_meta.push(snapshot);
         self.sources
             .push(Arc::new(Mutex::new(SourceState::new(source, weight))));
     }
@@ -209,17 +228,21 @@ impl EntropyPool {
     /// Smaller `n_samples` values are faster — use this for interactive/TUI contexts.
     pub fn collect_enabled_n(&self, enabled_names: &[String], n_samples: usize) -> usize {
         use std::sync::Arc;
+        let enabled: HashSet<&str> = enabled_names.iter().map(|s| s.as_str()).collect();
+        let selected_indices: Vec<usize> = self
+            .source_meta
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, meta)| enabled.contains(meta.name.as_str()).then_some(idx))
+            .collect();
+
         let results: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
 
         std::thread::scope(|s| {
-            let handles: Vec<_> = self
-                .sources
+            let handles: Vec<_> = selected_indices
                 .iter()
-                .filter(|ss_mutex| {
-                    let ss = ss_mutex.lock().unwrap();
-                    enabled_names.iter().any(|n| n == ss.source.info().name)
-                })
-                .map(|ss_mutex| {
+                .map(|idx| {
+                    let ss_mutex = &self.sources[*idx];
                     let results = Arc::clone(&results);
                     s.spawn(move || {
                         let data = Self::collect_one_n(ss_mutex, n_samples);
@@ -250,8 +273,9 @@ impl EntropyPool {
             Ok(data) if !data.is_empty() => {
                 ss.last_collect_time = t0.elapsed();
                 ss.total_bytes += data.len() as u64;
-                ss.last_entropy = quick_shannon(&data);
-                ss.last_min_entropy = quick_min_entropy(&data);
+                let m = EntropyMeasurements::from_bytes(&data, None);
+                ss.last_entropy = m.shannon_entropy;
+                ss.last_min_entropy = m.min_entropy;
                 ss.healthy = ss.last_entropy > 1.0;
                 data
             }
@@ -387,21 +411,54 @@ impl EntropyPool {
         let mut healthy_count = 0;
         let mut total_raw = 0u64;
 
-        for ss_mutex in &self.sources {
-            let ss = ss_mutex.lock().unwrap();
-            if ss.healthy {
-                healthy_count += 1;
+        for (idx, ss_mutex) in self.sources.iter().enumerate() {
+            let meta = &self.source_meta[idx];
+            match ss_mutex.try_lock() {
+                Ok(ss) => {
+                    let row = SourceHealth {
+                        name: meta.name.clone(),
+                        healthy: ss.healthy,
+                        bytes: ss.total_bytes,
+                        entropy: ss.last_entropy,
+                        min_entropy: ss.last_min_entropy,
+                        time: ss.last_collect_time.as_secs_f64(),
+                        failures: ss.failures,
+                    };
+                    if row.healthy {
+                        healthy_count += 1;
+                    }
+                    total_raw += row.bytes;
+                    self.last_health_cache
+                        .lock()
+                        .unwrap()
+                        .insert(idx, row.clone());
+                    sources.push(row);
+                }
+                Err(_) => {
+                    // Source is currently collecting (or wedged). Do not block caller;
+                    // reuse last known health row to avoid presenting false zero metrics.
+                    let fallback = self
+                        .last_health_cache
+                        .lock()
+                        .unwrap()
+                        .get(&idx)
+                        .cloned()
+                        .unwrap_or(SourceHealth {
+                            name: meta.name.clone(),
+                            healthy: false,
+                            bytes: 0,
+                            entropy: 0.0,
+                            min_entropy: 0.0,
+                            time: 0.0,
+                            failures: 0,
+                        });
+                    if fallback.healthy {
+                        healthy_count += 1;
+                    }
+                    total_raw += fallback.bytes;
+                    sources.push(fallback);
+                }
             }
-            total_raw += ss.total_bytes;
-            sources.push(SourceHealth {
-                name: ss.source.name().to_string(),
-                healthy: ss.healthy,
-                bytes: ss.total_bytes,
-                entropy: ss.last_entropy,
-                min_entropy: ss.last_min_entropy,
-                time: ss.last_collect_time.as_secs_f64(),
-                failures: ss.failures,
-            });
         }
 
         HealthReport {
@@ -453,14 +510,8 @@ impl EntropyPool {
             return Some(Vec::new());
         }
 
-        let ss_mutex = self
-            .sources
-            .iter()
-            .find(|ss_mutex| {
-                let ss = ss_mutex.lock().unwrap();
-                ss.source.info().name == source_name
-            })
-            .cloned()?;
+        let source_idx = self.source_index_by_name(source_name)?;
+        let ss_mutex = self.sources.get(source_idx)?.clone();
 
         let n_samples = match mode {
             crate::conditioning::ConditioningMode::Raw => n_bytes,
@@ -476,45 +527,140 @@ impl EntropyPool {
     ///
     /// Returns `None` if no source matches the name.
     pub fn get_source_raw_bytes(&self, source_name: &str, n_samples: usize) -> Option<Vec<u8>> {
-        let ss_mutex = self.sources.iter().find(|ss_mutex| {
-            let ss = ss_mutex.lock().unwrap();
-            ss.source.info().name == source_name
-        })?;
+        let source_idx = self.source_index_by_name(source_name)?;
+        let ss_mutex = self.sources.get(source_idx)?;
 
         let raw = Self::collect_one_n(ss_mutex, n_samples);
         Some(raw)
     }
 
+    /// Collect raw samples from all sources in parallel with timeout/backoff protection.
+    ///
+    /// Returns only sources that produced at least `min_samples` bytes within the timeout.
+    pub fn collect_source_raw_samples_parallel(
+        &self,
+        n_samples: usize,
+        timeout_secs: f64,
+        min_samples: usize,
+    ) -> Vec<SourceRawSampleSnapshot> {
+        let timeout = Duration::from_secs_f64(timeout_secs.max(0.0));
+        let min_samples = min_samples.max(1);
+        if timeout.is_zero() || n_samples == 0 {
+            return Vec::new();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<(usize, Vec<u8>)>();
+        let now = Instant::now();
+        let mut scheduled: Vec<usize> = Vec::new();
+
+        for (idx, ss_mutex) in self.sources.iter().enumerate() {
+            let in_backoff = {
+                let backoff = self.backoff_until.lock().unwrap();
+                backoff.get(&idx).is_some_and(|until| now < *until)
+            };
+            if in_backoff {
+                continue;
+            }
+            {
+                let mut in_flight = self.in_flight.lock().unwrap();
+                if in_flight.contains(&idx) {
+                    continue;
+                }
+                in_flight.insert(idx);
+            }
+            scheduled.push(idx);
+
+            let tx = tx.clone();
+            let src = Arc::clone(ss_mutex);
+            let in_flight = Arc::clone(&self.in_flight);
+            let backoff = Arc::clone(&self.backoff_until);
+
+            std::thread::spawn(move || {
+                let data = Self::collect_one_n(&src, n_samples);
+                {
+                    let mut in_flight = in_flight.lock().unwrap();
+                    in_flight.remove(&idx);
+                }
+                let mut bo = backoff.lock().unwrap();
+                bo.remove(&idx);
+                let _ = tx.send((idx, data));
+            });
+        }
+        drop(tx);
+
+        if scheduled.is_empty() {
+            return Vec::new();
+        }
+
+        let deadline = Instant::now() + timeout;
+        let mut received = HashSet::new();
+        let mut results: HashMap<usize, Vec<u8>> = HashMap::new();
+
+        while received.len() < scheduled.len() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(remaining) {
+                Ok((idx, data)) => {
+                    received.insert(idx);
+                    results.insert(idx, data);
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        let backoff_for = Duration::from_secs(30);
+        let timeout_mark = Instant::now() + backoff_for;
+        for idx in scheduled {
+            if received.contains(&idx) {
+                continue;
+            }
+
+            {
+                let mut bo = self.backoff_until.lock().unwrap();
+                bo.insert(idx, timeout_mark);
+            }
+
+            if let Ok(mut ss) = self.sources[idx].try_lock() {
+                ss.failures += 1;
+                ss.healthy = false;
+            }
+        }
+
+        let mut out = Vec::new();
+        for (idx, data) in results {
+            if data.len() < min_samples {
+                continue;
+            }
+            let ss = self.sources[idx].lock().unwrap();
+            let info = ss.source.info();
+            out.push(SourceRawSampleSnapshot {
+                name: info.name.to_string(),
+                category: info.category.to_string(),
+                data,
+            });
+        }
+
+        out
+    }
+
     /// List all registered source names.
     pub fn source_names(&self) -> Vec<String> {
-        self.sources
+        self.source_meta
             .iter()
-            .map(|ss_mutex| {
-                let ss = ss_mutex.lock().unwrap();
-                ss.source.info().name.to_string()
-            })
+            .map(|meta| meta.name.clone())
             .collect()
     }
 
     /// Get source info for each registered source.
     pub fn source_infos(&self) -> Vec<SourceInfoSnapshot> {
-        self.sources
-            .iter()
-            .map(|ss_mutex| {
-                let ss = ss_mutex.lock().unwrap();
-                let info = ss.source.info();
-                SourceInfoSnapshot {
-                    name: info.name.to_string(),
-                    description: info.description.to_string(),
-                    physics: info.physics.to_string(),
-                    category: info.category.to_string(),
-                    platform: info.platform.to_string(),
-                    requirements: info.requirements.iter().map(|r| r.to_string()).collect(),
-                    entropy_rate_estimate: info.entropy_rate_estimate,
-                    composite: info.composite,
-                }
-            })
-            .collect()
+        self.source_meta.clone()
+    }
+
+    fn source_index_by_name(&self, source_name: &str) -> Option<usize> {
+        self.source_meta.iter().position(|m| m.name == source_name)
     }
 }
 
@@ -525,6 +671,19 @@ impl EntropyPool {
 /// Panics if the OS CSPRNG fails — this indicates a fatal platform issue.
 fn getrandom(buf: &mut [u8]) {
     getrandom::fill(buf).expect("OS CSPRNG failed");
+}
+
+fn source_info_to_snapshot(info: &SourceInfo) -> SourceInfoSnapshot {
+    SourceInfoSnapshot {
+        name: info.name.to_string(),
+        description: info.description.to_string(),
+        physics: info.physics.to_string(),
+        category: info.category.to_string(),
+        platform: info.platform.to_string(),
+        requirements: info.requirements.iter().map(|r| r.to_string()).collect(),
+        entropy_rate_estimate: info.entropy_rate_estimate,
+        composite: info.composite,
+    }
 }
 
 /// Overall health report for the entropy pool.
@@ -582,6 +741,17 @@ pub struct SourceInfoSnapshot {
     pub entropy_rate_estimate: f64,
     /// Whether this is a composite source.
     pub composite: bool,
+}
+
+/// Raw source sample row produced by timeout-safe parallel diagnostics.
+#[derive(Debug, Clone)]
+pub struct SourceRawSampleSnapshot {
+    /// Source name.
+    pub name: String,
+    /// Source category label.
+    pub category: String,
+    /// Raw sampled bytes.
+    pub data: Vec<u8>,
 }
 
 #[cfg(test)]

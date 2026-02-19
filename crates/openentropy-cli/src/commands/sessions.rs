@@ -5,6 +5,12 @@ use std::path::{Path, PathBuf};
 
 use openentropy_core::analysis;
 use openentropy_core::conditioning::min_entropy_estimate;
+use openentropy_core::metrics::experimental::quantum_proxy_v3::{
+    MODEL_ID as QUANTUM_MODEL_ID, QuantumAssessmentConfig, QuantumBatchReport, QuantumSourceInput,
+    TelemetryConfoundConfig, assess_batch_from_streams_with_telemetry,
+    estimate_stress_sensitivity_from_streams, quality_factor_from_analysis,
+};
+use openentropy_core::metrics::standard::{EntropyMeasurements, SourceMeasurementRecord};
 use openentropy_core::session::SessionMeta;
 
 /// Run the sessions command.
@@ -14,6 +20,8 @@ pub fn run(
     do_analyze: bool,
     do_entropy: bool,
     output: Option<&str>,
+    quantum_ratio: bool,
+    include_telemetry: bool,
 ) {
     if let Some(path) = session_path {
         // Single session mode
@@ -26,8 +34,14 @@ pub fn run(
 
         show_session(&session_dir);
 
-        if do_analyze || do_entropy {
-            analyze_session(&session_dir, do_entropy, output);
+        if do_analyze || do_entropy || quantum_ratio {
+            analyze_session(
+                &session_dir,
+                do_entropy,
+                output,
+                quantum_ratio,
+                include_telemetry,
+            );
         }
     } else {
         // List mode
@@ -147,6 +161,14 @@ fn show_session(session_dir: &Path) {
     if let Some(note) = &meta.note {
         println!("  Note:         {note}");
     }
+    if let Some(telemetry) = &meta.telemetry {
+        println!(
+            "  Telemetry:    {} ({:.1}s, {} metrics)",
+            telemetry.model_id,
+            telemetry.elapsed_ms as f64 / 1000.0,
+            telemetry.end.metrics.len()
+        );
+    }
 
     // Per-source sample counts
     if meta.samples_per_source.len() > 1 {
@@ -181,7 +203,14 @@ fn show_session(session_dir: &Path) {
 }
 
 /// Run full analysis on a recorded session's raw data.
-fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
+fn analyze_session(
+    session_dir: &Path,
+    do_entropy: bool,
+    output: Option<&str>,
+    quantum_ratio: bool,
+    include_telemetry: bool,
+) {
+    let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let meta = read_session_meta(session_dir);
 
     // Read raw_index.csv to group bytes by source
@@ -246,8 +275,16 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
         source_bytes.len()
     );
 
+    let category_by_name: HashMap<String, openentropy_core::SourceCategory> =
+        openentropy_core::platform::detect_available_sources()
+            .into_iter()
+            .map(|s| (s.name().to_string(), s.info().category))
+            .collect();
+
     let mut all_results = Vec::new();
     let mut all_data: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut measurements = Vec::<SourceMeasurementRecord>::new();
+    let mut quantum_inputs = Vec::<QuantumSourceInput>::new();
 
     // Sort sources for consistent output
     let mut sources: Vec<(String, Vec<u8>)> = source_bytes.into_iter().collect();
@@ -262,7 +299,15 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
         println!("  {name}: {} bytes", data.len());
 
         let result = analysis::full_analysis(&name, &data);
+        let source_metrics = EntropyMeasurements::from_bytes(&data, None);
+        let quality_factor = quality_factor_from_analysis(&result);
         print_source_report(&result);
+        println!(
+            "    Measurements: H={:.3} H∞={:.3} zlib={:.3}",
+            source_metrics.shannon_entropy,
+            source_metrics.min_entropy,
+            source_metrics.compression_ratio
+        );
 
         if do_entropy {
             let report = min_entropy_estimate(&data);
@@ -274,7 +319,27 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
             println!("  └─");
         }
 
-        all_data.push((name, data));
+        let category = category_by_name
+            .get(&name)
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        measurements.push(SourceMeasurementRecord {
+            name: name.clone(),
+            category,
+            measurements: source_metrics.clone(),
+        });
+        all_data.push((name.clone(), data));
+        if quantum_ratio {
+            let category = category_by_name.get(&name).copied();
+            quantum_inputs.push(QuantumSourceInput {
+                name,
+                category,
+                min_entropy_bits: source_metrics.min_entropy,
+                quality_factor,
+                stress_sensitivity: 0.0,
+                physics_prior_override: None,
+            });
+        }
         all_results.push(result);
     }
 
@@ -305,21 +370,75 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
         }
     }
 
+    let telemetry_report = telemetry.finish();
+    let quantum_report: Option<QuantumBatchReport> = if quantum_ratio && !quantum_inputs.is_empty()
+    {
+        let qcfg = QuantumAssessmentConfig::default();
+        let stress_map = estimate_stress_sensitivity_from_streams(&all_data, qcfg);
+        for input in &mut quantum_inputs {
+            input.stress_sensitivity = stress_map.get(&input.name).copied().unwrap_or(0.0);
+        }
+        let report = assess_batch_from_streams_with_telemetry(
+            &quantum_inputs,
+            &all_data,
+            qcfg,
+            64,
+            telemetry_report.as_ref(),
+            TelemetryConfoundConfig::default(),
+        );
+        println!("\n{:=<68}", "");
+        println!("Quantum:Classical Contribution Proxy ({QUANTUM_MODEL_ID})");
+        println!("{:=<68}", "");
+        println!(
+            "  Aggregate Q:C = {:.3}:{:.3} (Q fraction {:.1}%)",
+            report.aggregate.quantum_bits,
+            report.aggregate.classical_bits,
+            report.aggregate.quantum_fraction * 100.0
+        );
+        for row in &report.sources {
+            println!(
+                "  {:20} q={:.3} q_bits={:.3} (prior={:.2} quality={:.2} coupling={:.2})",
+                row.name,
+                row.quantum_score,
+                row.quantum_min_entropy_bits,
+                row.physics_prior,
+                row.quality_factor,
+                row.coupling_penalty
+            );
+        }
+        Some(report)
+    } else {
+        None
+    };
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("sessions-analyze", window);
+    }
+
     // JSON output
     if let Some(path) = output {
-        let json = if all_data.len() >= 2 {
-            let matrix = analysis::cross_correlation_matrix(&all_data);
-            serde_json::json!({
-                "session": meta.id,
-                "sources": all_results,
-                "cross_correlation": matrix,
-            })
+        let cross = if all_data.len() >= 2 {
+            Some(analysis::cross_correlation_matrix(&all_data))
         } else {
-            serde_json::json!({
-                "session": meta.id,
-                "sources": all_results,
-            })
+            None
         };
+        let mut experimental = serde_json::Map::new();
+        super::telemetry::insert_quantum_proxy_report(&mut experimental, quantum_report.as_ref());
+        super::telemetry::insert_telemetry_window(&mut experimental, telemetry_report.as_ref());
+
+        let mut root = serde_json::Map::new();
+        root.insert("session".to_string(), serde_json::json!(meta.id));
+        root.insert(
+            "standard".to_string(),
+            serde_json::json!({
+                "sources": &all_results,
+                "measurements": &measurements,
+                "cross_correlation": &cross,
+            }),
+        );
+        if let Some(exp) = super::telemetry::finalize_experimental(experimental) {
+            root.insert("experimental".to_string(), exp);
+        }
+        let json = serde_json::Value::Object(root);
 
         match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
             Ok(()) => println!("\nResults written to {path}"),

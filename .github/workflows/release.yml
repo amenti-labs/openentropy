@@ -125,6 +125,8 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
 
     runs-on: ${{ matrix.os }}
 
@@ -223,6 +225,8 @@ jobs:
             release/openentropy-${{ needs.validate.outputs.version }}-aarch64-apple-darwin.sha256
             release/openentropy-${{ needs.validate.outputs.version }}-x86_64-apple-darwin
             release/openentropy-${{ needs.validate.outputs.version }}-x86_64-apple-darwin.sha256
+            release/openentropy-${{ needs.validate.outputs.version }}-x86_64-unknown-linux-gnu
+            release/openentropy-${{ needs.validate.outputs.version }}-x86_64-unknown-linux-gnu.sha256
             release/checksums-sha256.txt
 
   publish-crates:

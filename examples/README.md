@@ -11,9 +11,9 @@
 ### Running Rust Examples
 
 ```bash
-cargo run --example basic
-cargo run --example raw_vs_conditioned
-cargo run --example stream_to_file
+cargo run -p openentropy-core --example basic
+cargo run -p openentropy-core --example raw_vs_conditioned
+cargo run -p openentropy-core --example stream_to_file
 ```
 
 ## Python Examples

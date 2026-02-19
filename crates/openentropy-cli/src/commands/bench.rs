@@ -1,8 +1,20 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use openentropy_core::conditioning::{quick_min_entropy, quick_quality, quick_shannon};
+use openentropy_core::TelemetryWindowReport;
+use openentropy_core::metrics::experimental::quantum_proxy_v3::{
+    MODEL_ID as QUANTUM_MODEL_ID, MODEL_VERSION as QUANTUM_MODEL_VERSION, PriorCalibration,
+    QuantumAssessmentConfig, QuantumBatchReport, QuantumSourceInput, StressSweepConfig,
+    StressSweepReport, TelemetryConfoundConfig,
+    assess_batch_from_streams_with_calibration_and_telemetry, collect_stress_sweep,
+    default_calibration, estimate_stress_sensitivity_from_streams, load_calibration_from_path,
+    parse_source_category, quality_factor_from_analysis,
+};
+use openentropy_core::metrics::standard::EntropyMeasurements;
+use openentropy_core::metrics::streams::{collect_named_source_stream_samples, to_named_streams};
 use openentropy_core::platform::detect_available_sources;
+use openentropy_core::pool::EntropyPool;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug)]
@@ -17,6 +29,7 @@ enum RankBy {
     Balanced,
     MinEntropy,
     Throughput,
+    Quantum,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,6 +61,10 @@ struct BenchRow {
     avg_min_entropy: f64,
     avg_throughput_bps: f64,
     stability: f64,
+    quantum_score: f64,
+    quantum_min_entropy_bits: f64,
+    quantum_to_classical: Option<f64>,
+    rank_score: f64,
     score: f64,
 }
 
@@ -58,8 +75,9 @@ struct BenchReport {
     conditioning: String,
     rank_by: String,
     settings: BenchSettingsJson,
-    sources: Vec<BenchSourceReport>,
-    pool: Option<PoolQualityReport>,
+    standard: BenchStandardSection,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    experimental: Option<BenchExperimentalSection>,
 }
 
 #[derive(Serialize)]
@@ -85,6 +103,21 @@ struct BenchSourceReport {
     score: f64,
 }
 
+#[derive(Serialize)]
+struct BenchStandardSection {
+    sources: Vec<BenchSourceReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pool: Option<PoolQualityReport>,
+}
+
+#[derive(Serialize)]
+struct BenchExperimentalSection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    telemetry_v1: Option<TelemetryWindowReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quantum_proxy_v3: Option<BenchQuantumReport>,
+}
+
 #[derive(Serialize, Clone)]
 struct PoolQualityReport {
     bytes: usize,
@@ -92,6 +125,17 @@ struct PoolQualityReport {
     min_entropy: f64,
     healthy_sources: usize,
     total_sources: usize,
+}
+
+#[derive(Serialize, Clone)]
+struct BenchQuantumReport {
+    model_id: &'static str,
+    model_version: u32,
+    sample_bytes: usize,
+    calibration_source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stress_sweep: Option<StressSweepReport>,
+    report: QuantumBatchReport,
 }
 
 pub struct BenchCommandConfig<'a> {
@@ -106,6 +150,10 @@ pub struct BenchCommandConfig<'a> {
     pub rank_by: &'a str,
     pub output_path: Option<&'a str>,
     pub include_pool_quality: bool,
+    pub include_quantum: bool,
+    pub include_telemetry: bool,
+    pub quantum_live_stress: bool,
+    pub quantum_calibration_path: Option<&'a str>,
 }
 
 pub fn run(cfg: BenchCommandConfig<'_>) {
@@ -117,6 +165,8 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
 
     let profile = BenchProfile::parse(cfg.profile);
     let rank_by = RankBy::parse(cfg.rank_by);
+    let include_quantum = cfg.include_quantum || matches!(rank_by, RankBy::Quantum);
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
     let mode = super::parse_conditioning(cfg.conditioning);
     let mut settings = profile.defaults();
     if let Some(v) = cfg.samples_per_round {
@@ -150,6 +200,11 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
         settings.timeout_sec,
         rank_by.as_str()
     );
+    if matches!(rank_by, RankBy::Quantum) {
+        println!(
+            "Ranking uses experimental quantum_proxy_v3; `standard.score` remains non-experimental."
+        );
+    }
     println!();
 
     for i in 0..settings.warmup_rounds {
@@ -249,10 +304,57 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
                 avg_min_entropy,
                 avg_throughput_bps,
                 stability,
+                quantum_score: 0.0,
+                quantum_min_entropy_bits: 0.0,
+                quantum_to_classical: None,
+                rank_score: 0.0,
                 score: 0.0,
             }
         })
         .collect();
+
+    let telemetry_report = telemetry.finish();
+    let quantum_sample_bytes = settings.samples_per_round.clamp(512, 4096);
+    let quantum_report = if include_quantum {
+        build_quantum_report(
+            &pool_instance,
+            &rows,
+            quantum_sample_bytes,
+            settings.timeout_sec,
+            cfg.quantum_live_stress,
+            cfg.quantum_calibration_path,
+            telemetry_report.as_ref(),
+        )
+    } else {
+        None
+    };
+    if let Some(ref qr) = quantum_report {
+        let quantum_by_source: HashMap<&str, (f64, f64, Option<f64>)> = qr
+            .report
+            .sources
+            .iter()
+            .map(|s| {
+                let ratio = if s.classical_min_entropy_bits > 0.0 {
+                    Some(s.quantum_min_entropy_bits / s.classical_min_entropy_bits)
+                } else if s.quantum_min_entropy_bits > 0.0 {
+                    Some(f64::INFINITY)
+                } else {
+                    Some(0.0)
+                };
+                (
+                    s.name.as_str(),
+                    (s.quantum_score, s.quantum_min_entropy_bits, ratio),
+                )
+            })
+            .collect();
+        for row in &mut rows {
+            if let Some((q, q_bits, q_to_c)) = quantum_by_source.get(row.name.as_str()) {
+                row.quantum_score = *q;
+                row.quantum_min_entropy_bits = *q_bits;
+                row.quantum_to_classical = *q_to_c;
+            }
+        }
+    }
 
     let max_throughput = rows
         .iter()
@@ -260,37 +362,50 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
         .fold(0.0_f64, f64::max);
 
     for row in &mut rows {
-        row.score = match rank_by {
-            RankBy::MinEntropy => row.avg_min_entropy,
-            RankBy::Throughput => row.avg_throughput_bps,
-            RankBy::Balanced => {
-                let min_h_term = (row.avg_min_entropy / 8.0).clamp(0.0, 1.0);
-                let throughput_term = if max_throughput > 0.0 {
-                    (row.avg_throughput_bps / max_throughput).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                0.7 * min_h_term + 0.2 * throughput_term + 0.1 * row.stability
-            }
-        };
+        row.rank_score = rank_score_for_mode(row, rank_by, max_throughput);
+
+        // Keep `standard.score` free of experimental terms even when ranking
+        // is requested by quantum diagnostics.
+        row.score = standard_score_for_mode(row, rank_by, max_throughput);
 
         if row.success_rounds < settings.rounds || row.failures > 0 {
+            row.rank_score *= 0.8;
             row.score *= 0.8;
         }
     }
 
     rows.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
+        b.rank_score
+            .partial_cmp(&a.rank_score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    println!("\n{}", "=".repeat(96));
-    println!(
-        "{:<25} {:>5} {:>7} {:>7} {:>10} {:>8} {:>10} {:>6} {:>9}",
-        "Source", "Grade", "H", "H∞", "KB/s", "Stability", "Rounds", "Fail", "State"
-    );
-    println!("{}", "-".repeat(96));
+    if include_quantum {
+        println!("\n{}", "=".repeat(128));
+        println!(
+            "{:<25} {:>5} {:>7} {:>7} {:>6} {:>8} {:>8} {:>10} {:>8} {:>10} {:>6} {:>9}",
+            "Source",
+            "Grade",
+            "H",
+            "H∞",
+            "Q",
+            "Qbits",
+            "Q:C",
+            "KB/s",
+            "Stability",
+            "Rounds",
+            "Fail",
+            "State"
+        );
+        println!("{}", "-".repeat(128));
+    } else {
+        println!("\n{}", "=".repeat(96));
+        println!(
+            "{:<25} {:>5} {:>7} {:>7} {:>10} {:>8} {:>10} {:>6} {:>9}",
+            "Source", "Grade", "H", "H∞", "KB/s", "Stability", "Rounds", "Fail", "State"
+        );
+        println!("{}", "-".repeat(96));
+    }
     for row in &rows {
         let grade = openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0));
         let state = if row.success_rounds == 0 || row.failures > 0 {
@@ -299,33 +414,105 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
             "OK"
         };
         let composite = if row.composite { " [C]" } else { "" };
-        println!(
-            "{:<25} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>8.2} {:>6}/{} {:>6} {:>9}{}",
-            row.name,
-            grade,
-            row.avg_shannon,
-            row.avg_min_entropy,
-            row.avg_throughput_bps / 1024.0,
-            row.stability,
-            row.success_rounds,
-            settings.rounds,
-            row.failures,
-            state,
-            composite
-        );
+        if include_quantum {
+            let q_to_c = row
+                .quantum_to_classical
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "-".to_string());
+            println!(
+                "{:<25} {:>5} {:>7.3} {:>7.3} {:>6.3} {:>8.3} {:>8} {:>10.1} {:>8.2} {:>6}/{} {:>6} {:>9}{}",
+                row.name,
+                grade,
+                row.avg_shannon,
+                row.avg_min_entropy,
+                row.quantum_score,
+                row.quantum_min_entropy_bits,
+                q_to_c,
+                row.avg_throughput_bps / 1024.0,
+                row.stability,
+                row.success_rounds,
+                settings.rounds,
+                row.failures,
+                state,
+                composite
+            );
+        } else {
+            println!(
+                "{:<25} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>8.2} {:>6}/{} {:>6} {:>9}{}",
+                row.name,
+                grade,
+                row.avg_shannon,
+                row.avg_min_entropy,
+                row.avg_throughput_bps / 1024.0,
+                row.stability,
+                row.success_rounds,
+                settings.rounds,
+                row.failures,
+                state,
+                composite
+            );
+        }
     }
     println!();
     println!("Grade is based on min-entropy (H∞), not Shannon.");
+    if include_quantum {
+        println!("Q and Qbits are quantum proxy score and quantum-attributed min-entropy bits.");
+        println!("Q:C is per-source quantum-to-classical min-entropy ratio.");
+    }
     println!("Stability is derived from run-to-run min-entropy consistency (1.0 = most stable).");
+
+    if let Some(ref qr) = quantum_report {
+        println!("\n{}", "=".repeat(68));
+        println!("Quantum:Classical Contribution Proxy");
+        println!(
+            "  Aggregate Q:C = {:.3}:{:.3} (Q fraction {:.1}%)",
+            qr.report.aggregate.quantum_bits,
+            qr.report.aggregate.classical_bits,
+            qr.report.aggregate.quantum_fraction * 100.0
+        );
+        println!(
+            "  Aggregate CI95 Q fraction: {:.1}% .. {:.1}%   Q:C ratio: {:.3} .. {:.3}",
+            qr.report.aggregate.quantum_fraction_ci_low * 100.0,
+            qr.report.aggregate.quantum_fraction_ci_high * 100.0,
+            qr.report.aggregate.quantum_to_classical_ci_low,
+            qr.report.aggregate.quantum_to_classical_ci_high
+        );
+        println!("  Calibration: {}", qr.calibration_source);
+        if let Some(stress) = &qr.stress_sweep {
+            println!("  Stress sweep: enabled ({} ms)", stress.elapsed_ms);
+        } else {
+            println!("  Stress sweep: stream-variability estimate");
+        }
+        println!(
+            "  Coupling significance: BH-FDR alpha={:.3}, null_rounds={}, hard_gate={}",
+            qr.report.config.coupling_fdr_alpha,
+            qr.report.config.coupling_null_rounds,
+            qr.report.config.coupling_use_fdr_gate
+        );
+        for src in qr.report.sources.iter().take(10) {
+            println!(
+                "  {:20} q={:.3} q_bits={:.3} (prior={:.2} quality={:.2} stress={:.2} coupling={:.2} sig={:.0}%)",
+                src.name,
+                src.quantum_score,
+                src.quantum_min_entropy_bits,
+                src.physics_prior,
+                src.quality_factor,
+                src.stress_sensitivity,
+                src.coupling_penalty,
+                src.coupling_significant_pair_fraction_any * 100.0
+            );
+        }
+    }
 
     let pool_report = if cfg.include_pool_quality {
         let bytes = 65_536usize;
         let output = pool_instance.get_bytes(bytes, mode);
         let health = pool_instance.health_report();
+        let metrics = EntropyMeasurements::from_bytes(&output, None);
         let report = PoolQualityReport {
             bytes: output.len(),
-            shannon_entropy: quick_shannon(&output),
-            min_entropy: quick_min_entropy(&output),
+            shannon_entropy: metrics.shannon_entropy,
+            min_entropy: metrics.min_entropy,
             healthy_sources: health.healthy,
             total_sources: health.total,
         };
@@ -350,8 +537,19 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
     } else {
         None
     };
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("bench", window);
+    }
 
     if let Some(path) = cfg.output_path {
+        let experimental = if quantum_report.is_some() || telemetry_report.is_some() {
+            Some(BenchExperimentalSection {
+                telemetry_v1: telemetry_report.clone(),
+                quantum_proxy_v3: quantum_report.clone(),
+            })
+        } else {
+            None
+        };
         let report = BenchReport {
             generated_unix: unix_timestamp_now(),
             profile: profile.as_str().to_string(),
@@ -363,23 +561,26 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
                 warmup_rounds: settings.warmup_rounds,
                 timeout_sec: settings.timeout_sec,
             },
-            sources: rows
-                .iter()
-                .map(|row| BenchSourceReport {
-                    name: row.name.clone(),
-                    composite: row.composite,
-                    healthy: row.healthy,
-                    success_rounds: row.success_rounds,
-                    failures: row.failures,
-                    avg_shannon: row.avg_shannon,
-                    avg_min_entropy: row.avg_min_entropy,
-                    avg_throughput_bps: row.avg_throughput_bps,
-                    stability: row.stability,
-                    grade: openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0)),
-                    score: row.score,
-                })
-                .collect(),
-            pool: pool_report,
+            standard: BenchStandardSection {
+                sources: rows
+                    .iter()
+                    .map(|row| BenchSourceReport {
+                        name: row.name.clone(),
+                        composite: row.composite,
+                        healthy: row.healthy,
+                        success_rounds: row.success_rounds,
+                        failures: row.failures,
+                        avg_shannon: row.avg_shannon,
+                        avg_min_entropy: row.avg_min_entropy,
+                        avg_throughput_bps: row.avg_throughput_bps,
+                        stability: row.stability,
+                        grade: openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0)),
+                        score: row.score,
+                    })
+                    .collect(),
+                pool: pool_report.clone(),
+            },
+            experimental,
         };
 
         match std::fs::write(path, serde_json::to_string_pretty(&report).unwrap()) {
@@ -394,6 +595,32 @@ fn snapshot_counters(sources: &[openentropy_core::SourceHealth]) -> HashMap<Stri
         .iter()
         .map(|s| (s.name.clone(), (s.bytes, s.failures)))
         .collect()
+}
+
+fn balanced_score(row: &BenchRow, max_throughput: f64) -> f64 {
+    let min_h_term = (row.avg_min_entropy / 8.0).clamp(0.0, 1.0);
+    let throughput_term = if max_throughput > 0.0 {
+        (row.avg_throughput_bps / max_throughput).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    0.7 * min_h_term + 0.2 * throughput_term + 0.1 * row.stability
+}
+
+fn rank_score_for_mode(row: &BenchRow, rank_by: RankBy, max_throughput: f64) -> f64 {
+    match rank_by {
+        RankBy::Balanced => balanced_score(row, max_throughput),
+        RankBy::MinEntropy => row.avg_min_entropy,
+        RankBy::Throughput => row.avg_throughput_bps,
+        RankBy::Quantum => row.quantum_score,
+    }
+}
+
+fn standard_score_for_mode(row: &BenchRow, rank_by: RankBy, max_throughput: f64) -> f64 {
+    match rank_by {
+        RankBy::Quantum => balanced_score(row, max_throughput),
+        _ => rank_score_for_mode(row, rank_by, max_throughput),
+    }
 }
 
 fn stability_index(values: &[f64]) -> f64 {
@@ -418,6 +645,112 @@ fn unix_timestamp_now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+fn build_quantum_report(
+    pool: &EntropyPool,
+    rows: &[BenchRow],
+    sample_bytes: usize,
+    timeout_sec: f64,
+    live_stress: bool,
+    calibration_path: Option<&str>,
+    telemetry_window: Option<&TelemetryWindowReport>,
+) -> Option<BenchQuantumReport> {
+    let selected_names: Vec<String> = rows
+        .iter()
+        .filter(|row| row.success_rounds > 0 && row.avg_min_entropy > 0.0)
+        .map(|row| row.name.clone())
+        .collect();
+    if selected_names.is_empty() {
+        return None;
+    }
+    let sampled = collect_named_source_stream_samples(pool, &selected_names, sample_bytes, 64);
+    if sampled.is_empty() {
+        return None;
+    }
+
+    let streams = to_named_streams(&sampled);
+    let qcfg = QuantumAssessmentConfig::default();
+    let mut stress_by_name = estimate_stress_sensitivity_from_streams(&streams, qcfg);
+
+    let stress_sweep = if live_stress {
+        let sweep = collect_stress_sweep(
+            pool,
+            &selected_names,
+            sample_bytes,
+            64,
+            timeout_sec,
+            qcfg,
+            StressSweepConfig::default(),
+        );
+        for (name, row) in &sweep.by_source {
+            stress_by_name.insert(name.clone(), row.stress_sensitivity);
+        }
+        Some(sweep)
+    } else {
+        None
+    };
+
+    let (calibration, calibration_source) = load_calibration_for_bench(calibration_path);
+
+    let row_by_name: HashMap<&str, &BenchRow> = rows.iter().map(|r| (r.name.as_str(), r)).collect();
+    let mut inputs: Vec<QuantumSourceInput> = Vec::new();
+    for sample in &sampled {
+        let Some(row) = row_by_name.get(sample.name.as_str()) else {
+            continue;
+        };
+        let analysis = openentropy_core::analysis::full_analysis(&sample.name, &sample.data);
+        let quality = quality_factor_from_analysis(&analysis);
+        let category = parse_source_category(&sample.category);
+        inputs.push(QuantumSourceInput {
+            name: sample.name.clone(),
+            category,
+            min_entropy_bits: row.avg_min_entropy,
+            quality_factor: quality,
+            stress_sensitivity: stress_by_name.get(&sample.name).copied().unwrap_or(0.0),
+            physics_prior_override: None,
+        });
+    }
+
+    if inputs.is_empty() {
+        return None;
+    }
+
+    let report = assess_batch_from_streams_with_calibration_and_telemetry(
+        &inputs,
+        &streams,
+        qcfg,
+        64,
+        &calibration,
+        telemetry_window,
+        TelemetryConfoundConfig::default(),
+    );
+    Some(BenchQuantumReport {
+        model_id: QUANTUM_MODEL_ID,
+        model_version: QUANTUM_MODEL_VERSION,
+        sample_bytes,
+        calibration_source,
+        stress_sweep,
+        report,
+    })
+}
+
+fn load_calibration_for_bench(path: Option<&str>) -> (PriorCalibration, String) {
+    let Some(path) = path else {
+        return (default_calibration(), "default_seeded".to_string());
+    };
+
+    let p = Path::new(path);
+    match load_calibration_from_path(p) {
+        Ok(c) => (c, p.display().to_string()),
+        Err(e) => {
+            eprintln!(
+                "Warning: failed to load calibration from {} ({e}); using default seeded calibration",
+                p.display()
+            );
+            (default_calibration(), "default_seeded".to_string())
+        }
+    }
 }
 
 impl BenchProfile {
@@ -466,6 +799,7 @@ impl RankBy {
         match s {
             "min_entropy" => Self::MinEntropy,
             "throughput" => Self::Throughput,
+            "quantum" => Self::Quantum,
             _ => Self::Balanced,
         }
     }
@@ -475,6 +809,7 @@ impl RankBy {
             Self::Balanced => "balanced",
             Self::MinEntropy => "min_entropy",
             Self::Throughput => "throughput",
+            Self::Quantum => "quantum",
         }
     }
 }
@@ -513,14 +848,58 @@ fn run_single_source(source_name: &str) {
         return;
     }
 
-    let quality = quick_quality(&data);
-    println!("  Grade:           {}", quality.grade);
-    println!("  Samples:         {}", quality.samples);
+    let metrics = EntropyMeasurements::from_bytes(&data, Some(elapsed.as_secs_f64()));
+    let grade = openentropy_core::grade_min_entropy(metrics.min_entropy.max(0.0));
+    let mut uniq = [false; 256];
+    for &b in &data {
+        uniq[b as usize] = true;
+    }
+    let unique_values = uniq.into_iter().filter(|v| *v).count();
+    println!("  Grade:           {}", grade);
+    println!("  Samples:         {}", data.len());
     println!(
         "  Shannon entropy: {:.4} / 8.0 bits",
-        quality.shannon_entropy
+        metrics.shannon_entropy
     );
-    println!("  Compression:     {:.4}", quality.compression_ratio);
-    println!("  Unique values:   {}", quality.unique_values);
+    println!("  Min-entropy H∞:  {:.4} / 8.0 bits", metrics.min_entropy);
+    println!("  Compression:     {:.4}", metrics.compression_ratio);
+    println!("  Unique values:   {}", unique_values);
     println!("  Time:            {:.3}s", elapsed.as_secs_f64());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_row() -> BenchRow {
+        BenchRow {
+            name: "sample".to_string(),
+            composite: false,
+            healthy: true,
+            success_rounds: 3,
+            failures: 0,
+            avg_shannon: 7.8,
+            avg_min_entropy: 6.0,
+            avg_throughput_bps: 4_000.0,
+            stability: 0.9,
+            quantum_score: 0.25,
+            quantum_min_entropy_bits: 1.5,
+            quantum_to_classical: Some(0.33),
+            rank_score: 0.0,
+            score: 0.0,
+        }
+    }
+
+    #[test]
+    fn quantum_ranking_keeps_standard_score_non_experimental() {
+        let row = sample_row();
+        let max_throughput = 8_000.0;
+        let rank = rank_score_for_mode(&row, RankBy::Quantum, max_throughput);
+        let standard = standard_score_for_mode(&row, RankBy::Quantum, max_throughput);
+        let balanced = balanced_score(&row, max_throughput);
+
+        assert!((rank - row.quantum_score).abs() < 1e-12);
+        assert!((standard - balanced).abs() < 1e-12);
+        assert!((standard - row.quantum_score).abs() > 1e-12);
+    }
 }

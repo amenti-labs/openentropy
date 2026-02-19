@@ -17,7 +17,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// List all available entropy sources on this machine
-    Scan,
+    Scan {
+        /// Include a telemetry_v1 snapshot after source discovery.
+        #[arg(long)]
+        telemetry: bool,
+    },
 
     /// Benchmark sources: Shannon entropy, min-entropy, grade, speed.
     /// Use --source to probe a single source in detail.
@@ -56,10 +60,27 @@ enum Commands {
         timeout_sec: Option<f64>,
 
         /// Ranking strategy
-        #[arg(long, default_value = "balanced", value_parser = ["balanced", "min_entropy", "throughput"])]
+        #[arg(long, default_value = "balanced", value_parser = ["balanced", "min_entropy", "throughput", "quantum"])]
         rank_by: String,
 
-        /// Write machine-readable benchmark report as JSON
+        /// Include experimental quantum proxy diagnostics in table and JSON.
+        /// Automatically enabled when using --rank-by quantum.
+        #[arg(long)]
+        quantum: bool,
+
+        /// Include telemetry_v1 start/end environment snapshots in output.
+        #[arg(long)]
+        telemetry: bool,
+
+        /// Run active stress sweeps (CPU/memory/scheduler load) for measured stress sensitivity.
+        #[arg(long)]
+        quantum_live_stress: bool,
+
+        /// Path to prior calibration JSON for quantum proxy (defaults to seeded calibration).
+        #[arg(long)]
+        quantum_calibration: Option<String>,
+
+        /// Write machine-readable benchmark report as JSON (`standard` + `experimental`)
         #[arg(long)]
         output: Option<String>,
 
@@ -98,6 +119,14 @@ enum Commands {
         /// Output view: summary (default, verdict-driven) or detailed (full metrics)
         #[arg(long, default_value = "summary", value_parser = ["summary", "detailed"])]
         view: String,
+
+        /// Estimate per-source and aggregate quantum:classical contribution proxy ratios
+        #[arg(long)]
+        quantum_ratio: bool,
+
+        /// Include telemetry_v1 start/end environment snapshots in output.
+        #[arg(long)]
+        telemetry: bool,
     },
 
     /// Run NIST-inspired randomness test battery with pass/fail and p-values
@@ -117,6 +146,10 @@ enum Commands {
         /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
         #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
+
+        /// Include telemetry_v1 start/end environment snapshots in output.
+        #[arg(long)]
+        telemetry: bool,
     },
 
     /// Record entropy samples to disk for offline analysis
@@ -152,6 +185,10 @@ enum Commands {
         /// Conditioning mode: raw (default for recording), vonneumann, sha256
         #[arg(long, default_value = "raw", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
+
+        /// Store telemetry_v1 start/end snapshots in session.json.
+        #[arg(long)]
+        telemetry: bool,
     },
 
     /// Live interactive entropy dashboard (TUI)
@@ -163,6 +200,10 @@ enum Commands {
         /// Comma-separated source name filter
         #[arg(long)]
         sources: Option<String>,
+
+        /// Print a telemetry_v1 snapshot before launching the dashboard.
+        #[arg(long)]
+        telemetry: bool,
     },
 
     /// Stream raw entropy bytes to stdout (pipe-friendly)
@@ -224,6 +265,14 @@ enum Commands {
         #[arg(long)]
         entropy: bool,
 
+        /// Estimate per-source and aggregate quantum:classical contribution proxy ratios
+        #[arg(long)]
+        quantum_ratio: bool,
+
+        /// Include telemetry_v1 start/end environment snapshots in analysis output.
+        #[arg(long)]
+        telemetry: bool,
+
         /// Write analysis results as JSON
         #[arg(long)]
         output: Option<String>,
@@ -246,6 +295,21 @@ enum Commands {
         /// Allow conditioning mode selection via ?conditioning=raw|vonneumann|sha256
         #[arg(long)]
         allow_raw: bool,
+
+        /// Print a telemetry_v1 snapshot at server startup.
+        #[arg(long)]
+        telemetry: bool,
+    },
+
+    /// Capture telemetry_v1 as a standalone snapshot or timed window
+    Telemetry {
+        /// Window duration in seconds (0 = single snapshot).
+        #[arg(long, default_value = "0")]
+        window_sec: f64,
+
+        /// Write telemetry JSON to path.
+        #[arg(long)]
+        output: Option<String>,
     },
 }
 
@@ -253,7 +317,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Scan => commands::scan::run(),
+        Commands::Scan { telemetry } => commands::scan::run(telemetry),
         Commands::Bench {
             source,
             sources,
@@ -264,6 +328,10 @@ fn main() {
             warmup_rounds,
             timeout_sec,
             rank_by,
+            quantum,
+            telemetry,
+            quantum_live_stress,
+            quantum_calibration,
             output,
             no_pool,
         } => commands::bench::run(commands::bench::BenchCommandConfig {
@@ -278,6 +346,10 @@ fn main() {
             rank_by: &rank_by,
             output_path: output.as_deref(),
             include_pool_quality: !no_pool,
+            include_quantum: quantum,
+            include_telemetry: telemetry,
+            quantum_live_stress,
+            quantum_calibration_path: quantum_calibration.as_deref(),
         }),
         Commands::Analyze {
             sources,
@@ -287,21 +359,32 @@ fn main() {
             no_entropy,
             conditioning,
             view,
-        } => commands::analyze::run(
-            sources.as_deref(),
-            output.as_deref(),
+            quantum_ratio,
+            telemetry,
+        } => commands::analyze::run(commands::analyze::AnalyzeCommandConfig {
+            source_filter: sources.as_deref(),
+            output_path: output.as_deref(),
             samples,
             cross_correlation,
-            !no_entropy,
-            &conditioning,
-            &view,
-        ),
+            entropy: !no_entropy,
+            conditioning: &conditioning,
+            view: &view,
+            quantum_ratio,
+            include_telemetry: telemetry,
+        }),
         Commands::Report {
             samples,
             source,
             output,
             conditioning,
-        } => commands::report::run(samples, source.as_deref(), output.as_deref(), &conditioning),
+            telemetry,
+        } => commands::report::run(
+            samples,
+            source.as_deref(),
+            output.as_deref(),
+            &conditioning,
+            telemetry,
+        ),
         Commands::Record {
             sources,
             duration,
@@ -311,6 +394,7 @@ fn main() {
             interval,
             analyze,
             conditioning,
+            telemetry,
         } => commands::record::run(
             &sources,
             duration.as_deref(),
@@ -320,10 +404,13 @@ fn main() {
             interval.as_deref(),
             analyze,
             &conditioning,
+            telemetry,
         ),
-        Commands::Monitor { refresh, sources } => {
-            commands::monitor::run(refresh, sources.as_deref())
-        }
+        Commands::Monitor {
+            refresh,
+            sources,
+            telemetry,
+        } => commands::monitor::run(refresh, sources.as_deref(), telemetry),
         Commands::Stream {
             format,
             rate,
@@ -342,6 +429,8 @@ fn main() {
             dir,
             analyze,
             entropy,
+            quantum_ratio,
+            telemetry,
             output,
         } => commands::sessions::run(
             session.as_deref(),
@@ -349,12 +438,18 @@ fn main() {
             analyze,
             entropy,
             output.as_deref(),
+            quantum_ratio,
+            telemetry,
         ),
         Commands::Server {
             port,
             host,
             sources,
             allow_raw,
-        } => commands::server::run(&host, port, sources.as_deref(), allow_raw),
+            telemetry,
+        } => commands::server::run(&host, port, sources.as_deref(), allow_raw, telemetry),
+        Commands::Telemetry { window_sec, output } => {
+            commands::telemetry::run(window_sec, output.as_deref())
+        }
     }
 }

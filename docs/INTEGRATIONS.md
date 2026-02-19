@@ -81,8 +81,10 @@ openentropy device /tmp/openentropy-rng --sources timing,silicon
 |----------|-------------|
 | `GET /api/v1/random?length=N&type=T` | Random data. Types: `hex16`, `uint8`, `uint16` |
 | `GET /health` | Pool health status |
-| `GET /sources` | List sources with per-source stats |
-| `GET /pool/status` | Detailed pool metrics |
+| `GET /sources[?experimental=true&telemetry=true&sample_bytes=1024]` | List sources with per-source stats and optional diagnostics (`quantum_proxy_v3`, `telemetry_v1`) |
+| `GET /pool/status[?experimental=true&telemetry=true&sample_bytes=1024]` | Detailed pool metrics and optional diagnostics (`quantum_proxy_v3`, `telemetry_v1`) |
+
+`experimental` and `telemetry` are independent opt-ins.
 
 ---
 

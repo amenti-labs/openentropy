@@ -34,6 +34,9 @@ openentropy scan
 # Benchmark all fast sources
 openentropy bench
 
+# Capture a 3-second telemetry window
+openentropy telemetry --window-sec 3
+
 # Output 64 random hex bytes
 openentropy stream --format hex --bytes 64
 
@@ -117,6 +120,8 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 |-----|-------------|
 | [Source Catalog](docs/SOURCES.md) | All 47 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
+| [Quantum Benchmark](docs/QUANTUM_BENCHMARK.md) | Detailed methodology for the experimental quantum:classical proxy |
+| [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
 | [Integrations](docs/INTEGRATIONS.md) | Named pipe device, HTTP server, piping to other programs |
@@ -250,6 +255,7 @@ Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) 
 
 ```bash
 openentropy scan
+openentropy scan --telemetry
 ```
 
 ### `bench` — Benchmark sources
@@ -261,8 +267,57 @@ openentropy bench --profile deep     # higher-confidence benchmark
 openentropy bench --sources all      # all sources
 openentropy bench --sources silicon  # filter by name
 openentropy bench --rank-by throughput
+openentropy bench --quantum
+openentropy bench --rank-by quantum
+openentropy bench --quantum --quantum-live-stress
+openentropy bench --quantum --quantum-calibration calibration.json
+openentropy bench --telemetry
 openentropy bench --output bench.json
 ```
+
+`bench --output` JSON is split into `standard` and `experimental` sections.  
+Quantum proxy diagnostics are under `experimental.quantum_proxy_v3` (model id/version included) when `--quantum` is enabled (or `--rank-by quantum` is used).
+Telemetry snapshots are emitted under `experimental.telemetry_v1` when `--telemetry` is enabled.
+When both `--quantum` and `--telemetry` are enabled, `quantum_proxy_v3` also applies a telemetry confound adjustment and reports it in `report.telemetry_confound`.
+When `--rank-by quantum` is used, ordering uses the experimental proxy, but `standard.score` remains non-experimental.
+Full method details: [docs/QUANTUM_BENCHMARK.md](docs/QUANTUM_BENCHMARK.md).
+
+#### Quantum Benchmark (Experimental)
+
+`--quantum` does **not** prove a source is quantum. It computes a versioned, operational proxy (`quantum_proxy_v3`) that estimates how much of each source's min-entropy may be attributable to plausibly quantum-dominated mechanisms vs clearly classical effects.
+
+For each source, the model computes:
+
+1. `physics_prior` in `[0,1]` from source mechanism/category priors.
+2. `quality_factor` in `[0,1]` from observed stats (autocorrelation, bias, spectral flatness, stationarity, runs behavior).
+3. `coupling_penalty` in `[0,1]` from cross-source dependence using **null-debiased** correlation + mutual information (Miller-Madow corrected MI, raw vs shifted-null baseline, plus BH-FDR significance diagnostics).
+4. `stress_sensitivity` in `[0,1]` from measured instability: stream-window variability by default, or active CPU/memory/scheduler stress sweep with `--quantum-live-stress`.
+5. optional telemetry confound penalty from measured host-state drift when telemetry is enabled.
+
+Then:
+
+```text
+stress_effective = clamp01(stress_sensitivity + telemetry_confound_penalty)
+q = physics_prior * quality_factor * (1 - stress_effective) * (1 - coupling_penalty)
+q_bits = H∞ * q
+c_bits = H∞ - q_bits
+```
+
+Aggregate quantum:classical is the sum of `q_bits` and `c_bits` across sources.
+
+`v3` also reports uncertainty intervals (Monte Carlo + window variability), ablation/sensitivity diagnostics, and coupling significance summaries (q-value means and significant-pair fractions).
+
+Default normalization constants:
+
+- `corr_threshold = 0.30`
+- `mi_threshold_bits = 0.02`
+- `stress_delta_bits = 1.5`
+
+What to use for decisions:
+
+- Treat `standard` metrics (especially min-entropy `H∞`, stability, and throughput) as release/production benchmarks.
+- Treat `experimental.quantum_proxy_v3` as research diagnostics and ranking context.
+- Do not use this proxy as a compliance claim or a formal QRNG proof.
 
 ### `stream` — Continuous output
 
@@ -279,6 +334,7 @@ openentropy stream --conditioning sha256 --format hex    # full conditioning (de
 
 ```bash
 openentropy monitor
+openentropy monitor --telemetry
 ```
 
 | Key | Action |
@@ -313,11 +369,15 @@ openentropy device /tmp/openentropy-rng
 ```bash
 openentropy server --port 8080
 openentropy server --port 8080 --allow-raw    # enable raw output
+openentropy server --port 8080 --telemetry    # print startup telemetry snapshot
 ```
 
 ```bash
 curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
 curl "http://localhost:8080/health"
+curl "http://localhost:8080/sources?experimental=true&sample_bytes=1024"
+curl "http://localhost:8080/sources?experimental=true&telemetry=true&sample_bytes=1024"
+curl "http://localhost:8080/pool/status?telemetry=true"
 ```
 
 ### `analyze` — Statistical source analysis
@@ -327,6 +387,16 @@ openentropy analyze                          # summary view, raw, entropy on
 openentropy analyze --view detailed
 openentropy analyze --sources mach_timing --no-entropy
 openentropy analyze --cross-correlation --output analysis.json
+openentropy analyze --quantum-ratio
+openentropy analyze --telemetry --output analysis.json
+```
+
+### `telemetry` — Standalone telemetry capture
+
+```bash
+openentropy telemetry                      # single telemetry_v1 snapshot
+openentropy telemetry --window-sec 5       # start/end window with deltas
+openentropy telemetry --window-sec 5 --output telemetry.json
 ```
 
 ### `report` — NIST test battery
@@ -334,6 +404,13 @@ openentropy analyze --cross-correlation --output analysis.json
 ```bash
 openentropy report
 openentropy report --source mach_timing --samples 50000
+openentropy report --telemetry --output report.md
+```
+
+### `sessions` — Analyze recorded sessions
+
+```bash
+openentropy sessions sessions/<session-id> --analyze --entropy --quantum-ratio --telemetry --output session_analysis.json
 ```
 
 ---

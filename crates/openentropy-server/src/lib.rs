@@ -16,6 +16,17 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use openentropy_core::conditioning::ConditioningMode;
+use openentropy_core::metrics::experimental::quantum_proxy_v3::{
+    MODEL_ID as QUANTUM_MODEL_ID, MODEL_VERSION as QUANTUM_MODEL_VERSION, QuantumAssessmentConfig,
+    QuantumBatchReport, QuantumSourceInput, TelemetryConfoundConfig,
+    assess_batch_from_streams_with_telemetry, estimate_stress_sensitivity_from_streams,
+    parse_source_category, quality_factor_from_analysis,
+};
+use openentropy_core::metrics::standard::SourceMeasurementRecord;
+use openentropy_core::metrics::streams::{SourceRawStreamSample, collect_source_stream_samples};
+use openentropy_core::metrics::telemetry::{
+    TelemetrySnapshot, TelemetryWindowReport, collect_telemetry_snapshot, collect_telemetry_window,
+};
 use openentropy_core::pool::EntropyPool;
 
 /// Shared server state.
@@ -67,6 +78,10 @@ struct HealthResponse {
 struct SourcesResponse {
     sources: Vec<SourceEntry>,
     total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    measurements: Option<Vec<SourceMeasurementEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    experimental: Option<SourcesExperimental>,
 }
 
 #[derive(Serialize)]
@@ -75,8 +90,47 @@ struct SourceEntry {
     healthy: bool,
     bytes: u64,
     entropy: f64,
+    min_entropy: f64,
     time: f64,
     failures: u64,
+}
+
+#[derive(Deserialize, Default)]
+struct DiagnosticsParams {
+    experimental: Option<bool>,
+    telemetry: Option<bool>,
+    sample_bytes: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct SourceMeasurementEntry {
+    #[serde(flatten)]
+    standard: SourceMeasurementRecord,
+    quality_factor: f64,
+}
+
+#[derive(Serialize)]
+struct SourcesExperimental {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quantum_proxy_v3: Option<QuantumSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    telemetry_v1: Option<TelemetrySnapshot>,
+}
+
+#[derive(Serialize, Clone)]
+struct QuantumSnapshot {
+    model_id: &'static str,
+    model_version: u32,
+    sample_bytes: usize,
+    report: QuantumBatchReport,
+}
+
+fn include_experimental(params: &DiagnosticsParams) -> bool {
+    params.experimental.unwrap_or(false)
+}
+
+fn include_telemetry(params: &DiagnosticsParams) -> bool {
+    params.telemetry.unwrap_or(false)
 }
 
 async fn handle_random(
@@ -198,9 +252,113 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> Json<HealthRespons
     })
 }
 
-async fn handle_sources(State(state): State<Arc<AppState>>) -> Json<SourcesResponse> {
-    let pool = state.pool.lock().await;
-    let report = pool.health_report();
+fn build_quantum_snapshot(
+    samples: Vec<SourceRawStreamSample>,
+    sample_bytes: usize,
+    telemetry_window: Option<&TelemetryWindowReport>,
+) -> Option<(Vec<SourceMeasurementEntry>, QuantumSnapshot)> {
+    let mut measurements = Vec::new();
+    let mut inputs = Vec::<QuantumSourceInput>::new();
+    let mut streams = Vec::<(String, Vec<u8>)>::new();
+
+    for sample in samples {
+        let standard = SourceMeasurementRecord::from_bytes(
+            sample.name.clone(),
+            sample.category.clone(),
+            &sample.data,
+            None,
+        );
+        let analysis = openentropy_core::analysis::full_analysis(&sample.name, &sample.data);
+        let quality_factor = quality_factor_from_analysis(&analysis);
+        inputs.push(QuantumSourceInput {
+            name: sample.name.clone(),
+            category: parse_source_category(&sample.category),
+            min_entropy_bits: standard.measurements.min_entropy,
+            quality_factor,
+            stress_sensitivity: 0.0,
+            physics_prior_override: None,
+        });
+        streams.push((sample.name.clone(), sample.data));
+        measurements.push(SourceMeasurementEntry {
+            standard,
+            quality_factor,
+        });
+    }
+
+    if inputs.is_empty() {
+        return None;
+    }
+
+    let qcfg = QuantumAssessmentConfig::default();
+    let stress_by_name = estimate_stress_sensitivity_from_streams(&streams, qcfg);
+    for input in &mut inputs {
+        input.stress_sensitivity = stress_by_name.get(&input.name).copied().unwrap_or(0.0);
+    }
+
+    let report = assess_batch_from_streams_with_telemetry(
+        &inputs,
+        &streams,
+        qcfg,
+        64,
+        telemetry_window,
+        TelemetryConfoundConfig::default(),
+    );
+    Some((
+        measurements,
+        QuantumSnapshot {
+            model_id: QUANTUM_MODEL_ID,
+            model_version: QUANTUM_MODEL_VERSION,
+            sample_bytes,
+            report,
+        },
+    ))
+}
+
+async fn handle_sources(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<DiagnosticsParams>,
+) -> Json<SourcesResponse> {
+    let want_experimental = include_experimental(&params);
+    let want_telemetry = include_telemetry(&params);
+    let sample_bytes = params.sample_bytes.unwrap_or(1024).clamp(64, 4096);
+    let telemetry_start = want_telemetry.then(collect_telemetry_snapshot);
+
+    let (report, samples) = {
+        let pool = state.pool.lock().await;
+        let report = pool.health_report();
+        let samples = if want_experimental {
+            collect_source_stream_samples(&pool, sample_bytes, 64)
+        } else {
+            Vec::new()
+        };
+        (report, samples)
+    };
+    let telemetry_window = telemetry_start.map(collect_telemetry_window);
+    let telemetry = if want_telemetry {
+        telemetry_window.as_ref().map(|w| w.end.clone())
+    } else {
+        None
+    };
+    let (measurements, quantum) = if want_experimental {
+        if let Some((m, q)) =
+            build_quantum_snapshot(samples, sample_bytes, telemetry_window.as_ref())
+        {
+            (Some(m), Some(q))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+    let experimental = if quantum.is_some() || telemetry.is_some() {
+        Some(SourcesExperimental {
+            quantum_proxy_v3: quantum,
+            telemetry_v1: telemetry,
+        })
+    } else {
+        None
+    };
+
     let sources: Vec<SourceEntry> = report
         .sources
         .iter()
@@ -209,18 +367,42 @@ async fn handle_sources(State(state): State<Arc<AppState>>) -> Json<SourcesRespo
             healthy: s.healthy,
             bytes: s.bytes,
             entropy: s.entropy,
+            min_entropy: s.min_entropy,
             time: s.time,
             failures: s.failures,
         })
         .collect();
     let total = sources.len();
-    Json(SourcesResponse { sources, total })
+    Json(SourcesResponse {
+        sources,
+        total,
+        measurements,
+        experimental,
+    })
 }
 
-async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let pool = state.pool.lock().await;
-    let report = pool.health_report();
-    Json(serde_json::json!({
+async fn handle_pool_status(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<DiagnosticsParams>,
+) -> Json<serde_json::Value> {
+    let want_experimental = include_experimental(&params);
+    let want_telemetry = include_telemetry(&params);
+    let sample_bytes = params.sample_bytes.unwrap_or(1024).clamp(64, 4096);
+    let telemetry_start = want_telemetry.then(collect_telemetry_snapshot);
+
+    let (report, samples) = {
+        let pool = state.pool.lock().await;
+        let report = pool.health_report();
+        let samples = if want_experimental {
+            collect_source_stream_samples(&pool, sample_bytes, 64)
+        } else {
+            Vec::new()
+        };
+        (report, samples)
+    };
+    let telemetry_window = telemetry_start.map(collect_telemetry_window);
+
+    let mut payload = serde_json::json!({
         "healthy": report.healthy,
         "total": report.total,
         "raw_bytes": report.raw_bytes,
@@ -231,10 +413,30 @@ async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_js
             "healthy": s.healthy,
             "bytes": s.bytes,
             "entropy": s.entropy,
+            "min_entropy": s.min_entropy,
             "time": s.time,
             "failures": s.failures,
         })).collect::<Vec<_>>(),
-    }))
+    });
+
+    if want_experimental
+        && let Some((measurements, quantum)) =
+            build_quantum_snapshot(samples, sample_bytes, telemetry_window.as_ref())
+    {
+        payload["experimental"] = serde_json::json!({});
+        payload["measurements"] = serde_json::to_value(measurements).unwrap_or_default();
+        payload["experimental"]["quantum_proxy_v3"] = serde_json::json!(quantum);
+    }
+    if want_telemetry {
+        if payload.get("experimental").is_none() {
+            payload["experimental"] = serde_json::json!({});
+        }
+        if let Some(window) = telemetry_window {
+            payload["experimental"]["telemetry_v1"] = serde_json::json!(window.end);
+        }
+    }
+
+    Json(payload)
 }
 
 async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -258,14 +460,31 @@ async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Va
                     "conditioning": "Conditioning mode: sha256 (default), vonneumann, raw",
                 }
             },
-            "/sources": "List all active entropy sources with health metrics",
-            "/pool/status": "Detailed pool status",
+            "/sources": {
+                "description": "List active entropy sources with health metrics",
+                "params": {
+                    "experimental": "Include experimental diagnostics (true/false, default false)",
+                    "telemetry": "Include telemetry_v1 snapshot (true/false, default false)",
+                    "sample_bytes": "Raw bytes sampled per source for diagnostics (64-4096, default 1024)"
+                }
+            },
+            "/pool/status": {
+                "description": "Detailed pool status",
+                "params": {
+                    "experimental": "Include experimental diagnostics (true/false, default false)",
+                    "telemetry": "Include telemetry_v1 snapshot (true/false, default false)",
+                    "sample_bytes": "Raw bytes sampled per source for diagnostics (64-4096, default 1024)"
+                }
+            },
             "/health": "Health check",
         },
         "examples": {
             "mixed_pool": "/api/v1/random?length=32&type=uint8",
             "single_source": format!("/api/v1/random?length=32&source={}", source_names.first().map(|s| s.as_str()).unwrap_or("clock_jitter")),
             "raw_output": "/api/v1/random?length=32&conditioning=raw",
+            "experimental_sources": "/sources?experimental=true&sample_bytes=1024",
+            "experimental_pool_status": "/pool/status?experimental=true&sample_bytes=1024",
+            "telemetry_snapshot": "/sources?telemetry=true",
         }
     }))
 }
@@ -298,5 +517,33 @@ pub async fn run_server(pool: EntropyPool, host: &str, port: u16, allow_raw: boo
 mod hex {
     pub fn encode(data: &[u8]) -> String {
         data.iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DiagnosticsParams, include_experimental, include_telemetry};
+
+    #[test]
+    fn diagnostics_flags_are_independent() {
+        let default = DiagnosticsParams::default();
+        assert!(!include_experimental(&default));
+        assert!(!include_telemetry(&default));
+
+        let experimental_only = DiagnosticsParams {
+            experimental: Some(true),
+            telemetry: None,
+            sample_bytes: None,
+        };
+        assert!(include_experimental(&experimental_only));
+        assert!(!include_telemetry(&experimental_only));
+
+        let telemetry_only = DiagnosticsParams {
+            experimental: None,
+            telemetry: Some(true),
+            sample_bytes: None,
+        };
+        assert!(!include_experimental(&telemetry_only));
+        assert!(include_telemetry(&telemetry_only));
     }
 }

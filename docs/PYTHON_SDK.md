@@ -64,6 +64,8 @@ openentropy.calculate_quality_score
 # Conditioning and quality helpers
 openentropy.condition
 openentropy.min_entropy_estimate
+openentropy.entropy_measurements
+openentropy.quantum_assess_batch
 openentropy.quick_min_entropy
 openentropy.quick_shannon
 openentropy.grade_min_entropy
@@ -116,6 +118,15 @@ for s in report["sources"]:
 infos = pool.sources()
 for s in infos:
     print(s["name"], s["category"], s["platform"], s["requirements"])
+
+q = pool.quantum_report(sample_bytes=1024, min_pair_samples=64, telemetry=True)
+report = q["experimental"]["quantum_proxy_v3"]["report"]
+print(report["aggregate"]["quantum_to_classical"])
+print(report["aggregate"]["quantum_fraction_ci_low"], report["aggregate"]["quantum_fraction_ci_high"])
+print(report["calibration"]["global_prior"])
+print(report["config"]["coupling_fdr_alpha"], report["config"]["coupling_use_fdr_gate"])
+print(report["sources"][0]["coupling_significant_pair_fraction_any"])
+print(report["sources"][0]["stress_sensitivity_effective"], report["sources"][0]["telemetry_confound_penalty"])
 ```
 
 Properties:
@@ -145,6 +156,8 @@ print(detect_machine_info())
 from openentropy import (
     condition,
     min_entropy_estimate,
+    entropy_measurements,
+    quantum_assess_batch,
     quick_min_entropy,
     quick_shannon,
     grade_min_entropy,
@@ -165,6 +178,15 @@ print(grade_min_entropy(4.2))  # "B"
 
 qr = quick_quality(data)
 print(qr["quality_score"], qr["grade"])
+
+m = entropy_measurements(data, elapsed_seconds=0.25)
+print(m["shannon_entropy"], m["min_entropy"], m["throughput_bps"])
+
+batch = quantum_assess_batch([
+    {"name": "audio_noise", "category": "sensor", "min_entropy_bits": 6.5, "quality_factor": 0.9},
+    {"name": "sysctl_deltas", "category": "system", "min_entropy_bits": 2.2, "quality_factor": 0.7},
+], telemetry=True)
+print(batch["aggregate"]["quantum_fraction"])
 ```
 
 ## Statistical Test Battery

@@ -24,7 +24,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::analysis;
-use crate::conditioning::{ConditioningMode, quick_min_entropy, quick_shannon};
+use crate::conditioning::ConditioningMode;
+use crate::metrics::standard::EntropyMeasurements;
+use crate::metrics::telemetry::{
+    TelemetrySnapshot, TelemetryWindowReport, collect_telemetry_snapshot, collect_telemetry_window,
+};
 
 // ---------------------------------------------------------------------------
 // Machine info
@@ -240,6 +244,8 @@ pub struct SessionMeta {
     pub openentropy_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analysis: Option<HashMap<String, SessionSourceAnalysis>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telemetry: Option<TelemetryWindowReport>,
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +264,7 @@ pub struct SessionConfig {
     pub duration: Option<Duration>,
     pub sample_size: usize,
     pub include_analysis: bool,
+    pub include_telemetry: bool,
 }
 
 impl Default for SessionConfig {
@@ -272,6 +279,7 @@ impl Default for SessionConfig {
             duration: None,
             sample_size: 1000,
             include_analysis: false,
+            include_telemetry: false,
         }
     }
 }
@@ -306,6 +314,8 @@ pub struct SessionWriter {
     machine: MachineInfo,
     /// Retains last 128 KiB per source for optional end-of-session analysis.
     analysis_buffer: Option<AnalysisBuffer>,
+    /// Optional telemetry start snapshot for session-level environment context.
+    telemetry_start: Option<TelemetrySnapshot>,
     /// Set to true after `finish()` succeeds so `Drop` doesn't double-write.
     finished: bool,
 }
@@ -369,6 +379,7 @@ impl SessionWriter {
         } else {
             None
         };
+        let telemetry_start = config.include_telemetry.then(collect_telemetry_snapshot);
 
         Ok(Self {
             session_dir,
@@ -387,6 +398,7 @@ impl SessionWriter {
             config,
             machine,
             analysis_buffer,
+            telemetry_start,
             finished: false,
         })
     }
@@ -416,11 +428,13 @@ impl SessionWriter {
             .unwrap_or_default()
             .as_nanos() as u64;
 
-        let raw_shannon = quick_shannon(raw_bytes);
+        let raw_metrics = EntropyMeasurements::from_bytes(raw_bytes, None);
+        let conditioned_metrics = EntropyMeasurements::from_bytes(conditioned_bytes, None);
+        let raw_shannon = raw_metrics.shannon_entropy;
         // Clamp to 0.0 to avoid displaying "-0.00" in CSV
-        let raw_min_entropy = quick_min_entropy(raw_bytes).max(0.0);
-        let conditioned_shannon = quick_shannon(conditioned_bytes);
-        let conditioned_min_entropy = quick_min_entropy(conditioned_bytes).max(0.0);
+        let raw_min_entropy = raw_metrics.min_entropy.max(0.0);
+        let conditioned_shannon = conditioned_metrics.shannon_entropy;
+        let conditioned_min_entropy = conditioned_metrics.min_entropy.max(0.0);
         let raw_hex = hex_encode(raw_bytes);
         let conditioned_hex = hex_encode(conditioned_bytes);
 
@@ -491,6 +505,11 @@ impl SessionWriter {
                 Some(analysis_map)
             }
         });
+        let telemetry = self
+            .telemetry_start
+            .as_ref()
+            .cloned()
+            .map(collect_telemetry_window);
 
         SessionMeta {
             version: 2,
@@ -512,6 +531,7 @@ impl SessionWriter {
             note: self.config.note.clone(),
             openentropy_version: crate::VERSION.to_string(),
             analysis,
+            telemetry,
         }
     }
 
@@ -926,6 +946,7 @@ mod tests {
             note: None,
             openentropy_version: env!("CARGO_PKG_VERSION").to_string(),
             analysis: None,
+            telemetry: None,
         };
 
         let json = serde_json::to_string_pretty(&meta).unwrap();
@@ -1025,6 +1046,53 @@ mod tests {
                 "CSV should not contain negative zero: {line}"
             );
         }
+    }
+
+    #[test]
+    fn test_session_writer_telemetry_enabled_writes_window() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            include_telemetry: true,
+            ..Default::default()
+        };
+
+        let mut writer = SessionWriter::new(config).unwrap();
+        writer.write_sample("test", &[1; 32], &[2; 32]).unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+        let dir = writer.finish().unwrap();
+
+        let meta: SessionMeta =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("session.json")).unwrap())
+                .unwrap();
+        let t = meta
+            .telemetry
+            .expect("telemetry should be present when include_telemetry is enabled");
+        assert_eq!(t.model_id, crate::metrics::telemetry::MODEL_ID);
+        assert_eq!(t.model_version, crate::metrics::telemetry::MODEL_VERSION);
+        assert_eq!(t.start.model_id, crate::metrics::telemetry::MODEL_ID);
+        assert_eq!(t.end.model_id, crate::metrics::telemetry::MODEL_ID);
+    }
+
+    #[test]
+    fn test_session_writer_telemetry_disabled_writes_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            sources: vec!["test".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            include_telemetry: false,
+            ..Default::default()
+        };
+
+        let mut writer = SessionWriter::new(config).unwrap();
+        writer.write_sample("test", &[1; 32], &[2; 32]).unwrap();
+        let dir = writer.finish().unwrap();
+
+        let meta: SessionMeta =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("session.json")).unwrap())
+                .unwrap();
+        assert!(meta.telemetry.is_none());
     }
 
     // -----------------------------------------------------------------------
