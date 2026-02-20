@@ -23,20 +23,24 @@ struct SourceInterpretation {
     meaning: &'static str,
 }
 
-pub fn run(
-    source_filter: Option<&str>,
-    output_path: Option<&str>,
-    samples: usize,
-    cross_correlation: bool,
-    entropy: bool,
-    conditioning: &str,
-    view: &str,
-) {
-    let all_sources = openentropy_core::platform::detect_available_sources();
-    let mode = super::parse_conditioning(conditioning);
-    let view = AnalyzeView::parse(view);
+pub struct AnalyzeCommandConfig<'a> {
+    pub source_filter: Option<&'a str>,
+    pub output_path: Option<&'a str>,
+    pub samples: usize,
+    pub cross_correlation: bool,
+    pub entropy: bool,
+    pub conditioning: &'a str,
+    pub view: &'a str,
+    pub include_telemetry: bool,
+}
 
-    let sources: Vec<_> = if let Some(filter) = source_filter {
+pub fn run(cfg: AnalyzeCommandConfig<'_>) {
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
+    let all_sources = openentropy_core::platform::detect_available_sources();
+    let mode = super::parse_conditioning(cfg.conditioning);
+    let view = AnalyzeView::parse(cfg.view);
+
+    let sources: Vec<_> = if let Some(filter) = cfg.source_filter {
         if filter == "all" {
             all_sources
         } else {
@@ -66,7 +70,7 @@ pub fn run(
     println!(
         "Analyzing {} source(s), {} samples each (view: {})...\n",
         sources.len(),
-        samples,
+        cfg.samples,
         view.as_str()
     );
 
@@ -78,7 +82,7 @@ pub fn run(
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let data = source.collect(samples);
+        let data = source.collect(cfg.samples);
         let collect_time = t0.elapsed();
 
         if data.is_empty() {
@@ -102,7 +106,7 @@ pub fn run(
         }
 
         // Min-entropy breakdown (MCV primary + diagnostic estimators)
-        if entropy {
+        if cfg.entropy {
             // Use the same sampled dataset we just analyzed to keep reports
             // comparable. Conditioning (if selected) is applied to this sample,
             // not to a separately recollected stream.
@@ -114,7 +118,8 @@ pub fn run(
             let report = min_entropy_estimate(&entropy_input);
             let report_str = format!("{report}");
             println!(
-                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {conditioning}, {} bytes)",
+                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {}, {} bytes)",
+                cfg.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
@@ -125,7 +130,7 @@ pub fn run(
 
         all_results.push(result);
 
-        if cross_correlation {
+        if cfg.cross_correlation {
             all_data.push((name, data));
         }
     }
@@ -145,7 +150,7 @@ pub fn run(
     }
 
     // Cross-correlation matrix.
-    if cross_correlation && all_data.len() >= 2 {
+    if cfg.cross_correlation && all_data.len() >= 2 {
         println!("\n{:=<68}", "");
         println!("Cross-Correlation Matrix ({} sources)", all_data.len());
         println!("{:=<68}", "");
@@ -171,17 +176,24 @@ pub fn run(
         }
     }
 
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("analyze", window);
+    }
+
     // JSON output.
-    if let Some(path) = output_path {
-        let json = if cross_correlation && all_data.len() >= 2 {
-            let matrix = analysis::cross_correlation_matrix(&all_data);
+    if let Some(path) = cfg.output_path {
+        let mut json = if cfg.cross_correlation && all_data.len() >= 2 {
             serde_json::json!({
                 "sources": all_results,
-                "cross_correlation": matrix,
+                "cross_correlation": analysis::cross_correlation_matrix(&all_data),
             })
         } else {
             serde_json::json!({ "sources": all_results })
         };
+        if let Some(window) = telemetry_report {
+            json["telemetry_v1"] = serde_json::json!(window);
+        }
 
         match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
             Ok(()) => println!("\nResults written to {path}"),

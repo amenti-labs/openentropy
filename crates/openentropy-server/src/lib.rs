@@ -17,6 +17,9 @@ use tokio::sync::Mutex;
 
 use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::pool::EntropyPool;
+use openentropy_core::telemetry::{
+    TelemetryWindowReport, collect_telemetry_snapshot, collect_telemetry_window,
+};
 
 /// Shared server state.
 struct AppState {
@@ -67,6 +70,8 @@ struct HealthResponse {
 struct SourcesResponse {
     sources: Vec<SourceEntry>,
     total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    telemetry_v1: Option<TelemetryWindowReport>,
 }
 
 #[derive(Serialize)]
@@ -77,6 +82,15 @@ struct SourceEntry {
     entropy: f64,
     time: f64,
     failures: u64,
+}
+
+#[derive(Deserialize, Default)]
+struct DiagnosticsParams {
+    telemetry: Option<bool>,
+}
+
+fn include_telemetry(params: &DiagnosticsParams) -> bool {
+    params.telemetry.unwrap_or(false)
 }
 
 async fn handle_random(
@@ -198,9 +212,15 @@ async fn handle_health(State(state): State<Arc<AppState>>) -> Json<HealthRespons
     })
 }
 
-async fn handle_sources(State(state): State<Arc<AppState>>) -> Json<SourcesResponse> {
+async fn handle_sources(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<DiagnosticsParams>,
+) -> Json<SourcesResponse> {
+    let telemetry_start = include_telemetry(&params).then(collect_telemetry_snapshot);
     let pool = state.pool.lock().await;
     let report = pool.health_report();
+    drop(pool);
+    let telemetry_v1 = telemetry_start.map(collect_telemetry_window);
     let sources: Vec<SourceEntry> = report
         .sources
         .iter()
@@ -214,13 +234,23 @@ async fn handle_sources(State(state): State<Arc<AppState>>) -> Json<SourcesRespo
         })
         .collect();
     let total = sources.len();
-    Json(SourcesResponse { sources, total })
+    Json(SourcesResponse {
+        sources,
+        total,
+        telemetry_v1,
+    })
 }
 
-async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+async fn handle_pool_status(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<DiagnosticsParams>,
+) -> Json<serde_json::Value> {
+    let telemetry_start = include_telemetry(&params).then(collect_telemetry_snapshot);
     let pool = state.pool.lock().await;
     let report = pool.health_report();
-    Json(serde_json::json!({
+    drop(pool);
+
+    let mut payload = serde_json::json!({
         "healthy": report.healthy,
         "total": report.total,
         "raw_bytes": report.raw_bytes,
@@ -234,7 +264,11 @@ async fn handle_pool_status(State(state): State<Arc<AppState>>) -> Json<serde_js
             "time": s.time,
             "failures": s.failures,
         })).collect::<Vec<_>>(),
-    }))
+    });
+    if let Some(window) = telemetry_start.map(collect_telemetry_window) {
+        payload["telemetry_v1"] = serde_json::json!(window);
+    }
+    Json(payload)
 }
 
 async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -258,14 +292,26 @@ async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Va
                     "conditioning": "Conditioning mode: sha256 (default), vonneumann, raw",
                 }
             },
-            "/sources": "List all active entropy sources with health metrics",
-            "/pool/status": "Detailed pool status",
+            "/sources": {
+                "description": "List all active entropy sources with health metrics",
+                "params": {
+                    "telemetry": "Include telemetry_v1 start/end report (true/false, default false)"
+                }
+            },
+            "/pool/status": {
+                "description": "Detailed pool status",
+                "params": {
+                    "telemetry": "Include telemetry_v1 start/end report (true/false, default false)"
+                }
+            },
             "/health": "Health check",
         },
         "examples": {
             "mixed_pool": "/api/v1/random?length=32&type=uint8",
             "single_source": format!("/api/v1/random?length=32&source={}", source_names.first().map(|s| s.as_str()).unwrap_or("clock_jitter")),
             "raw_output": "/api/v1/random?length=32&conditioning=raw",
+            "sources_with_telemetry": "/sources?telemetry=true",
+            "pool_with_telemetry": "/pool/status?telemetry=true",
         }
     }))
 }
@@ -298,5 +344,19 @@ pub async fn run_server(pool: EntropyPool, host: &str, port: u16, allow_raw: boo
 mod hex {
     pub fn encode(data: &[u8]) -> String {
         data.iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DiagnosticsParams, include_telemetry};
+
+    #[test]
+    fn telemetry_flag_defaults_to_false() {
+        let default = DiagnosticsParams::default();
+        assert!(!include_telemetry(&default));
+        assert!(include_telemetry(&DiagnosticsParams {
+            telemetry: Some(true),
+        }));
     }
 }

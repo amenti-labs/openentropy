@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use openentropy_core::TelemetryWindowReport;
 use openentropy_core::conditioning::{quick_min_entropy, quick_quality, quick_shannon};
 use openentropy_core::platform::detect_available_sources;
 use serde::Serialize;
@@ -60,6 +61,8 @@ struct BenchReport {
     settings: BenchSettingsJson,
     sources: Vec<BenchSourceReport>,
     pool: Option<PoolQualityReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    telemetry_v1: Option<TelemetryWindowReport>,
 }
 
 #[derive(Serialize)]
@@ -106,6 +109,7 @@ pub struct BenchCommandConfig<'a> {
     pub rank_by: &'a str,
     pub output_path: Option<&'a str>,
     pub include_pool_quality: bool,
+    pub include_telemetry: bool,
 }
 
 pub fn run(cfg: BenchCommandConfig<'_>) {
@@ -117,6 +121,7 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
 
     let profile = BenchProfile::parse(cfg.profile);
     let rank_by = RankBy::parse(cfg.rank_by);
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
     let mode = super::parse_conditioning(cfg.conditioning);
     let mut settings = profile.defaults();
     if let Some(v) = cfg.samples_per_round {
@@ -350,6 +355,10 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
     } else {
         None
     };
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("bench", window);
+    }
 
     if let Some(path) = cfg.output_path {
         let report = BenchReport {
@@ -380,6 +389,7 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
                 })
                 .collect(),
             pool: pool_report,
+            telemetry_v1: telemetry_report,
         };
 
         match std::fs::write(path, serde_json::to_string_pretty(&report).unwrap()) {

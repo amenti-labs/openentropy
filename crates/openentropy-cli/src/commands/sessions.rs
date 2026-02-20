@@ -14,6 +14,7 @@ pub fn run(
     do_analyze: bool,
     do_entropy: bool,
     output: Option<&str>,
+    include_telemetry: bool,
 ) {
     if let Some(path) = session_path {
         // Single session mode
@@ -27,7 +28,7 @@ pub fn run(
         show_session(&session_dir);
 
         if do_analyze || do_entropy {
-            analyze_session(&session_dir, do_entropy, output);
+            analyze_session(&session_dir, do_entropy, output, include_telemetry);
         }
     } else {
         // List mode
@@ -147,6 +148,14 @@ fn show_session(session_dir: &Path) {
     if let Some(note) = &meta.note {
         println!("  Note:         {note}");
     }
+    if let Some(telemetry) = &meta.telemetry_v1 {
+        println!(
+            "  Telemetry v1: {} ({:.1}s, {} metrics)",
+            telemetry.model_id,
+            telemetry.elapsed_ms as f64 / 1000.0,
+            telemetry.end.metrics.len()
+        );
+    }
 
     // Per-source sample counts
     if meta.samples_per_source.len() > 1 {
@@ -181,7 +190,13 @@ fn show_session(session_dir: &Path) {
 }
 
 /// Run full analysis on a recorded session's raw data.
-fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
+fn analyze_session(
+    session_dir: &Path,
+    do_entropy: bool,
+    output: Option<&str>,
+    include_telemetry: bool,
+) {
+    let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let meta = read_session_meta(session_dir);
 
     // Read raw_index.csv to group bytes by source
@@ -305,9 +320,14 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
         }
     }
 
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("sessions-analyze", window);
+    }
+
     // JSON output
     if let Some(path) = output {
-        let json = if all_data.len() >= 2 {
+        let mut json = if all_data.len() >= 2 {
             let matrix = analysis::cross_correlation_matrix(&all_data);
             serde_json::json!({
                 "session": meta.id,
@@ -320,6 +340,9 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
                 "sources": all_results,
             })
         };
+        if let Some(window) = telemetry_report {
+            json["telemetry_v1"] = serde_json::json!(window);
+        }
 
         match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
             Ok(()) => println!("\nResults written to {path}"),

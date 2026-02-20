@@ -25,6 +25,11 @@ use uuid::Uuid;
 
 use crate::analysis;
 use crate::conditioning::{ConditioningMode, quick_min_entropy, quick_shannon};
+#[cfg(test)]
+use crate::telemetry::{TelemetryMetric, TelemetryMetricDelta};
+use crate::telemetry::{
+    TelemetrySnapshot, TelemetryWindowReport, collect_telemetry_snapshot, collect_telemetry_window,
+};
 
 // ---------------------------------------------------------------------------
 // Machine info
@@ -240,6 +245,8 @@ pub struct SessionMeta {
     pub openentropy_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analysis: Option<HashMap<String, SessionSourceAnalysis>>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "telemetry")]
+    pub telemetry_v1: Option<TelemetryWindowReport>,
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +265,7 @@ pub struct SessionConfig {
     pub duration: Option<Duration>,
     pub sample_size: usize,
     pub include_analysis: bool,
+    pub include_telemetry: bool,
 }
 
 impl Default for SessionConfig {
@@ -272,6 +280,7 @@ impl Default for SessionConfig {
             duration: None,
             sample_size: 1000,
             include_analysis: false,
+            include_telemetry: false,
         }
     }
 }
@@ -306,6 +315,8 @@ pub struct SessionWriter {
     machine: MachineInfo,
     /// Retains last 128 KiB per source for optional end-of-session analysis.
     analysis_buffer: Option<AnalysisBuffer>,
+    /// Optional telemetry snapshot captured at session start.
+    telemetry_start: Option<TelemetrySnapshot>,
     /// Set to true after `finish()` succeeds so `Drop` doesn't double-write.
     finished: bool,
 }
@@ -369,6 +380,7 @@ impl SessionWriter {
         } else {
             None
         };
+        let telemetry_start = config.include_telemetry.then(collect_telemetry_snapshot);
 
         Ok(Self {
             session_dir,
@@ -387,6 +399,7 @@ impl SessionWriter {
             config,
             machine,
             analysis_buffer,
+            telemetry_start,
             finished: false,
         })
     }
@@ -491,6 +504,11 @@ impl SessionWriter {
                 Some(analysis_map)
             }
         });
+        let telemetry = self
+            .telemetry_start
+            .as_ref()
+            .cloned()
+            .map(collect_telemetry_window);
 
         SessionMeta {
             version: 2,
@@ -512,6 +530,7 @@ impl SessionWriter {
             note: self.config.note.clone(),
             openentropy_version: crate::VERSION.to_string(),
             analysis,
+            telemetry_v1: telemetry,
         }
     }
 
@@ -926,6 +945,7 @@ mod tests {
             note: None,
             openentropy_version: env!("CARGO_PKG_VERSION").to_string(),
             analysis: None,
+            telemetry_v1: None,
         };
 
         let json = serde_json::to_string_pretty(&meta).unwrap();
@@ -934,6 +954,106 @@ mod tests {
         assert_eq!(parsed.id, "test-id");
         assert_eq!(parsed.total_samples, 3000);
         assert_eq!(parsed.duration_ms, 300000);
+    }
+
+    #[test]
+    fn test_session_meta_accepts_legacy_telemetry_key() {
+        let base = SessionMeta {
+            version: 2,
+            id: "test-id".to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            ended_at: "2026-01-01T00:05:00Z".to_string(),
+            duration_ms: 300000,
+            sources: vec!["clock_jitter".to_string()],
+            conditioning: "raw".to_string(),
+            interval_ms: Some(100),
+            total_samples: 3000,
+            samples_per_source: {
+                let mut m = HashMap::new();
+                m.insert("clock_jitter".to_string(), 3000);
+                m
+            },
+            machine: MachineInfo {
+                os: "macos 15.4".to_string(),
+                arch: "aarch64".to_string(),
+                chip: "Apple M4".to_string(),
+                cores: 10,
+            },
+            tags: HashMap::new(),
+            note: None,
+            openentropy_version: env!("CARGO_PKG_VERSION").to_string(),
+            analysis: None,
+            telemetry_v1: None,
+        };
+
+        let window = TelemetryWindowReport {
+            model_id: "telemetry_v1".to_string(),
+            model_version: 1,
+            elapsed_ms: 1234,
+            start: TelemetrySnapshot {
+                model_id: "telemetry_v1".to_string(),
+                model_version: 1,
+                collected_unix_ms: 1000,
+                os: "macos".to_string(),
+                arch: "aarch64".to_string(),
+                cpu_count: 8,
+                loadavg_1m: Some(1.0),
+                loadavg_5m: Some(1.1),
+                loadavg_15m: Some(1.2),
+                metrics: vec![TelemetryMetric {
+                    domain: "memory".to_string(),
+                    name: "free_bytes".to_string(),
+                    value: 100.0,
+                    unit: "bytes".to_string(),
+                    source: "test".to_string(),
+                }],
+            },
+            end: TelemetrySnapshot {
+                model_id: "telemetry_v1".to_string(),
+                model_version: 1,
+                collected_unix_ms: 2234,
+                os: "macos".to_string(),
+                arch: "aarch64".to_string(),
+                cpu_count: 8,
+                loadavg_1m: Some(1.3),
+                loadavg_5m: Some(1.2),
+                loadavg_15m: Some(1.1),
+                metrics: vec![TelemetryMetric {
+                    domain: "memory".to_string(),
+                    name: "free_bytes".to_string(),
+                    value: 80.0,
+                    unit: "bytes".to_string(),
+                    source: "test".to_string(),
+                }],
+            },
+            deltas: vec![TelemetryMetricDelta {
+                domain: "memory".to_string(),
+                name: "free_bytes".to_string(),
+                unit: "bytes".to_string(),
+                source: "test".to_string(),
+                start_value: 100.0,
+                end_value: 80.0,
+                delta_value: -20.0,
+            }],
+        };
+
+        let mut json = serde_json::to_value(base).unwrap();
+        let obj = json.as_object_mut().expect("session meta should be object");
+        obj.insert(
+            "telemetry".to_string(),
+            serde_json::to_value(window).unwrap(),
+        );
+
+        let parsed: SessionMeta = serde_json::from_value(json).unwrap();
+        assert!(parsed.telemetry_v1.is_some());
+        assert_eq!(
+            parsed
+                .telemetry_v1
+                .as_ref()
+                .map(|t| t.model_id.as_str())
+                .unwrap_or(""),
+            "telemetry_v1"
+        );
     }
 
     // -----------------------------------------------------------------------

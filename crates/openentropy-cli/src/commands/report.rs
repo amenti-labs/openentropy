@@ -5,7 +5,9 @@ pub fn run(
     source_name: Option<&str>,
     output_path: Option<&str>,
     conditioning: &str,
+    include_telemetry: bool,
 ) {
+    let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let mode = super::parse_conditioning(conditioning);
     // Use make_pool which defaults to fast sources
     let pool = super::make_pool(source_name);
@@ -79,7 +81,8 @@ pub fn run(
     }
 
     // Generate report
-    let report = generate_report(&all_results);
+    let telemetry_report = telemetry.finish_and_print("report");
+    let report = generate_report(&all_results, telemetry_report.as_ref());
 
     if let Some(path) = output_path {
         if let Err(e) = std::fs::write(path, &report) {
@@ -130,10 +133,24 @@ pub fn run(
     }
 }
 
-fn generate_report(results: &[(String, Vec<u8>, Vec<openentropy_tests::TestResult>)]) -> String {
+fn generate_report(
+    results: &[(String, Vec<u8>, Vec<openentropy_tests::TestResult>)],
+    telemetry: Option<&openentropy_core::TelemetryWindowReport>,
+) -> String {
     let mut report = String::new();
     report.push_str("# OpenEntropy — NIST Randomness Test Report\n\n");
     report.push_str(&format!("Generated: {}\n\n", chrono_now()));
+    if let Some(t) = telemetry {
+        report.push_str("## Telemetry Context (`telemetry_v1`)\n\n");
+        report.push_str(&format!(
+            "- Elapsed: {:.2}s\n- Host: {}/{}\n- CPU count: {}\n- Metrics observed: {}\n\n",
+            t.elapsed_ms as f64 / 1000.0,
+            t.end.os,
+            t.end.arch,
+            t.end.cpu_count,
+            t.end.metrics.len()
+        ));
+    }
 
     for (name, data, tests) in results {
         let score = openentropy_tests::calculate_quality_score(tests);
