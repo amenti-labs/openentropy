@@ -95,6 +95,78 @@ fn run_command_output(program: &str, args: &[&str]) -> Option<std::process::Outp
     Some(output)
 }
 
+/// Run a subprocess command with a timeout and return full `Output`.
+///
+/// If the process does not finish within `timeout_ms`, it is killed and `None`
+/// is returned. Stderr is suppressed to keep entropy collection paths quiet.
+pub fn run_command_output_timeout(
+    program: &str,
+    args: &[&str],
+    timeout_ms: u64,
+) -> Option<std::process::Output> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // Drain stdout concurrently so producers like ffmpeg rawvideo do not block
+    // on a full pipe before process exit.
+    let mut stdout_reader = child.stdout.take().map(|mut stdout| {
+        thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stdout.read_to_end(&mut buf);
+            buf
+        })
+    });
+
+    let start = Instant::now();
+    let timeout = Duration::from_millis(timeout_ms.max(1));
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = stdout_reader
+                    .take()
+                    .and_then(|h| h.join().ok())
+                    .unwrap_or_default();
+                let output = std::process::Output {
+                    status,
+                    stdout,
+                    stderr: Vec::new(),
+                };
+                return output.status.success().then_some(output);
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    if let Some(reader) = stdout_reader.take() {
+                        let _ = reader.join();
+                    }
+                    return None;
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(_e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Some(reader) = stdout_reader.take() {
+                    let _ = reader.join();
+                }
+                return None;
+            }
+        }
+    }
+}
+
 /// Run a subprocess command and return its stdout as a `String`.
 ///
 /// Returns `None` if the command fails to execute or exits with a non-zero
@@ -111,6 +183,49 @@ pub fn run_command(program: &str, args: &[&str]) -> Option<String> {
 /// status.
 pub fn run_command_raw(program: &str, args: &[&str]) -> Option<Vec<u8>> {
     run_command_output(program, args).map(|o| o.stdout)
+}
+
+/// Run a subprocess command with timeout and return raw stdout bytes.
+pub fn run_command_raw_timeout(program: &str, args: &[&str], timeout_ms: u64) -> Option<Vec<u8>> {
+    run_command_output_timeout(program, args, timeout_ms).map(|o| o.stdout)
+}
+
+/// Capture one grayscale frame from the camera via ffmpeg/avfoundation.
+///
+/// Tries a few common avfoundation input selectors because device ordering can
+/// differ across systems (`default:none`, `0:none`, etc.). Returns raw 8-bit
+/// grayscale bytes when any selector succeeds.
+pub fn capture_camera_gray_frame(timeout_ms: u64) -> Option<Vec<u8>> {
+    // Most common macOS avfoundation selectors in fallback order.
+    const INPUTS: &[&str] = &["default:none", "0:none", "1:none", "0:0"];
+
+    for &input in INPUTS {
+        let args = [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-f",
+            "avfoundation",
+            "-framerate",
+            "30",
+            "-i",
+            input,
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "gray",
+            "pipe:1",
+        ];
+        if let Some(frame) = run_command_raw_timeout("ffmpeg", &args, timeout_ms)
+            && !frame.is_empty()
+        {
+            return Some(frame);
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------

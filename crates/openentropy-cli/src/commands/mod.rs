@@ -50,6 +50,11 @@ const FAST_SOURCES: &[&str] = &[
     "counter_beat",
     "display_pll",
     "pcie_pll",
+    // Fast quantum sources (camera-based quantum sources are opt-in via --sources all)
+    "ssd_tunneling",
+    "avalanche_noise",
+    "vacuum_fluctuations",
+    "multi_source_quantum",
     // GPU sources (moderate speed)
     "gpu_divergence",
     "iosurface_crossing",

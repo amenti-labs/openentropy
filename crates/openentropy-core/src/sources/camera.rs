@@ -6,7 +6,7 @@
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
-use super::helpers::{command_exists, pack_nibbles};
+use super::helpers::{capture_camera_gray_frame, command_exists, pack_nibbles};
 
 static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
     name: "camera_noise",
@@ -36,29 +36,10 @@ impl EntropySource for CameraNoiseSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // Capture one frame of raw grayscale video from the default camera.
-        // ffmpeg -f avfoundation -i "0" -frames:v 1 -f rawvideo -pix_fmt gray pipe:1
-        let result = std::process::Command::new("ffmpeg")
-            .args([
-                "-f",
-                "avfoundation",
-                "-i",
-                "0",
-                "-frames:v",
-                "1",
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "gray",
-                "pipe:1",
-            ])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
-
-        let raw_frame = match result {
-            Ok(output) if output.status.success() => output.stdout,
+        // Capture one frame from camera (tries common avfoundation selectors).
+        // Timeout keeps TUI responsive if permission is denied or device is busy.
+        let raw_frame = match capture_camera_gray_frame(900) {
+            Some(frame) if !frame.is_empty() => frame,
             _ => return Vec::new(),
         };
 

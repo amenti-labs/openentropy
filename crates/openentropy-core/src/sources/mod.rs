@@ -1,4 +1,13 @@
-//! All 47 entropy source implementations.
+//! All entropy source implementations.
+//!
+//! ## Source Categories
+//!
+//! - **Quantum**: TRUE quantum randomness (cosmic muons, tunneling, decay)
+//! - **Thermal**: Johnson-Nyquist noise in oscillators
+//! - **Timing**: Clock jitter, scheduler noise
+//! - **System**: Kernel counters, process state
+//! - **IO**: Disk, network timing
+//! - **Silicon**: Cache, DRAM, pipeline state
 
 pub mod helpers;
 
@@ -21,6 +30,9 @@ pub mod sysctl;
 pub mod timing;
 pub mod vmstat;
 pub mod wifi;
+
+// QUANTUM sources - TRUE quantum randomness from consumer hardware
+pub mod quantum;
 
 use crate::source::EntropySource;
 
@@ -88,5 +100,12 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: independent oscillator/PLL sources (2026-02-15)
         Box::new(frontier::DisplayPllSource),
         Box::new(frontier::PciePllSource),
+        // QUANTUM sources - TRUE quantum randomness (2026-02-19)
+        Box::new(quantum::SSDTunnelingSource::default()),
+        Box::new(quantum::CosmicMuonSource),
+        Box::new(quantum::RadioactiveDecaySource),
+        Box::new(quantum::AvalancheNoiseSource::default()),
+        Box::new(quantum::VacuumFluctuationsSource::default()),
+        Box::new(quantum::MultiSourceQuantumSource::new()),
     ]
 }
