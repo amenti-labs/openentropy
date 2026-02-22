@@ -1,6 +1,6 @@
 use openentropy_core::platform::{detect_available_sources, platform_info};
 
-pub fn run() {
+pub fn run(include_telemetry: bool) {
     let info = platform_info();
     println!("Platform: {} {} (Rust)", info.system, info.machine);
     println!();
@@ -27,4 +27,6 @@ pub fn run() {
     if sources.is_empty() {
         println!("  (none found)");
     }
+
+    let _ = super::telemetry::print_snapshot_if_enabled(include_telemetry, "scan");
 }

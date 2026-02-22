@@ -48,6 +48,7 @@ pub mod pool;
 pub mod session;
 pub mod source;
 pub mod sources;
+pub mod telemetry;
 
 pub use conditioning::{
     ConditioningMode, MinEntropyReport, QualityReport, condition, grade_min_entropy,
@@ -60,6 +61,11 @@ pub use session::{
     detect_machine_info,
 };
 pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+pub use telemetry::{
+    MODEL_ID as TELEMETRY_MODEL_ID, MODEL_VERSION as TELEMETRY_MODEL_VERSION, TelemetryMetric,
+    TelemetryMetricDelta, TelemetrySnapshot, TelemetryWindowReport, build_telemetry_window,
+    collect_telemetry_snapshot, collect_telemetry_window,
+};
 
 /// Library version (from Cargo.toml).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

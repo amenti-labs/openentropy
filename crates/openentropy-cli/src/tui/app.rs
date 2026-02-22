@@ -252,10 +252,6 @@ pub fn next_conditioning(mode: ConditioningMode) -> ConditioningMode {
     }
 }
 
-fn preferred_chart_mode_for_source(_source_name: &str) -> ChartMode {
-    ChartMode::RandomWalk
-}
-
 // ---------------------------------------------------------------------------
 // Sample
 // ---------------------------------------------------------------------------
@@ -477,7 +473,6 @@ impl App {
                     s.byte_freq = [0u64; 256];
                     drop(s);
                     self.active = Some(self.cursor);
-                    self.chart_mode = preferred_chart_mode_for_source(name);
                     self.kick_collect();
                 }
             }
