@@ -91,7 +91,7 @@ impl EntropySource for GPUTimingSource {
     }
 
     fn is_available(&self) -> bool {
-        std::path::Path::new(SIPS_PATH).exists()
+        cfg!(target_os = "macos") && std::path::Path::new(SIPS_PATH).exists()
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

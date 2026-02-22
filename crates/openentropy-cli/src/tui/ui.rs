@@ -286,12 +286,12 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
             };
 
             Row::new(vec![
-                pointer.to_string(),
-                marker.to_string(),
-                name.clone(),
-                cat.to_string(),
-                entropy_str,
-                time_str,
+                Cell::from(pointer.to_string()),
+                Cell::from(marker.to_string()),
+                Cell::from(name.clone()),
+                Cell::from(cat.to_string()),
+                Cell::from(entropy_str),
+                Cell::from(time_str),
             ])
             .style(style)
         })

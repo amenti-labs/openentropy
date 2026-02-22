@@ -168,7 +168,9 @@ impl ChartMode {
                 let bound = (min_val.abs().max(max_val.abs()) + 0.1).min(1.0);
                 (-bound, bound)
             }
-            Self::ByteDistribution => unreachable!(),
+            Self::ByteDistribution => {
+                unreachable!()
+            }
         }
     }
 }
@@ -248,6 +250,10 @@ pub fn next_conditioning(mode: ConditioningMode) -> ConditioningMode {
         ConditioningMode::Raw => ConditioningMode::VonNeumann,
         ConditioningMode::VonNeumann => ConditioningMode::Sha256,
     }
+}
+
+fn preferred_chart_mode_for_source(_source_name: &str) -> ChartMode {
+    ChartMode::RandomWalk
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +477,7 @@ impl App {
                     s.byte_freq = [0u64; 256];
                     drop(s);
                     self.active = Some(self.cursor);
+                    self.chart_mode = preferred_chart_mode_for_source(name);
                     self.kick_collect();
                 }
             }
@@ -489,7 +496,9 @@ impl App {
                 }
                 self.kick_collect();
             }
-            KeyCode::Char('g') => self.chart_mode = self.chart_mode.next(),
+            KeyCode::Char('g') => {
+                self.chart_mode = self.chart_mode.next();
+            }
             KeyCode::Char('p') => self.paused = !self.paused,
             KeyCode::Char('s') => self.export_snapshot(),
             KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Char(']') => {

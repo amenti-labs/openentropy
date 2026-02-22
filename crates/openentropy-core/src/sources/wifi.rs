@@ -244,6 +244,9 @@ impl EntropySource for WiFiRSSISource {
     }
 
     fn is_available(&self) -> bool {
+        if !cfg!(target_os = "macos") {
+            return false;
+        }
         let device = discover_wifi_device();
         let m = measure_once(&device);
         // Available if we got a real RSSI (not the zero fallback)

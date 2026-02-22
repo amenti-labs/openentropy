@@ -236,8 +236,8 @@ Each source taps a **physically independent** noise mechanism. The oscillator so
 
 | Source | Time | Description |
 |--------|-----:|-------------|
-| `audio_noise` | — | Audio ADC thermal noise floor *(requires mic)* |
-| `camera_noise` | — | Image sensor dark current noise *(requires camera)* |
+| `audio_noise` | — | Microphone ADC thermal noise (Johnson-Nyquist) *(requires mic)* |
+| `camera_noise` | — | Camera sensor noise (read noise + dark current) *(requires camera)* |
 | `bluetooth_noise` | 10.01s | BLE ambient RF noise |
 
 Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) for physics details on each source.

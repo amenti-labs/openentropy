@@ -1,4 +1,13 @@
-//! All 47 entropy source implementations.
+//! All entropy source implementations.
+//!
+//! ## Source Categories
+//!
+//! - **Sensor**: Camera dark-frame noise, audio ADC noise
+//! - **Thermal**: Johnson-Nyquist noise in oscillators
+//! - **Timing**: Clock jitter, scheduler noise
+//! - **System**: Kernel counters, process state
+//! - **IO**: Disk, network timing
+//! - **Silicon**: Cache, DRAM, pipeline state
 
 pub mod helpers;
 
@@ -43,8 +52,8 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(disk::DiskIOSource),
         Box::new(memory::MemoryTimingSource),
         Box::new(gpu::GPUTimingSource),
-        Box::new(audio::AudioNoiseSource),
-        Box::new(camera::CameraNoiseSource),
+        Box::new(audio::AudioNoiseSource::default()),
+        Box::new(camera::CameraNoiseSource::default()),
         Box::new(bluetooth::BluetoothNoiseSource),
         // Silicon
         Box::new(silicon::DRAMRowBufferSource),
