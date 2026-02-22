@@ -128,7 +128,7 @@ impl EntropySource for IORegistryEntropySource {
     }
 
     fn is_available(&self) -> bool {
-        std::path::Path::new(IOREG_PATH).exists()
+        cfg!(target_os = "macos") && std::path::Path::new(IOREG_PATH).exists()
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

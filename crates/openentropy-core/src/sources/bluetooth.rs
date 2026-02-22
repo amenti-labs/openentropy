@@ -100,7 +100,7 @@ impl EntropySource for BluetoothNoiseSource {
     }
 
     fn is_available(&self) -> bool {
-        std::path::Path::new(SYSTEM_PROFILER_PATH).exists()
+        cfg!(target_os = "macos") && std::path::Path::new(SYSTEM_PROFILER_PATH).exists()
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

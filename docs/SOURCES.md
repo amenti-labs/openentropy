@@ -18,8 +18,8 @@
 | 10 | `disk_io` | IO | Block device I/O timing jitter | ~500 b/s | All |
 | 11 | `memory_timing` | Timing | DRAM access timing variations | ~800 b/s | All |
 | 12 | `gpu_timing` | GPU | GPU compute dispatch jitter | ~600 b/s | macOS (Metal) |
-| 13 | `audio_noise` | Sensor | Microphone thermal noise floor | ~1000 b/s | Requires mic |
-| 14 | `camera_noise` | Sensor | Camera sensor dark current | ~2000 b/s | Requires camera |
+| 13 | `audio_noise` | Sensor | Microphone ADC thermal noise (Johnson-Nyquist) | ~10000 b/s | Requires mic |
+| 14 | `camera_noise` | Sensor | Camera sensor noise (read noise + dark current) | ~4000 b/s | Requires camera |
 | 15 | `bluetooth_noise` | Sensor | BLE ambient RF environment | ~200 b/s | macOS |
 | 17 | `ioregistry` | System | IOKit registry value mining | ~500 b/s | macOS |
 | 18 | `dram_row_buffer` | Timing | DRAM row buffer hit/miss timing | ~3000 b/s | All |
@@ -238,11 +238,11 @@
 **Category:** Sensor
 **Struct:** `AudioNoiseSource`
 **Platform:** Requires microphone (built-in or external)
-**Estimated Rate:** ~1000 b/s
+**Estimated Rate:** ~10000 b/s
 
-**Physics:** Microphone preamp thermal noise (Johnson-Nyquist noise). Even with no audio input, the ADC captures genuine thermal fluctuations from the preamplifier's input resistance: V_noise = sqrt(4kTR * bandwidth). This is fundamental thermodynamic noise.
+**Physics:** Records from the microphone ADC with no signal present. The LSBs capture Johnson-Nyquist noise — thermal agitation of electrons in the input impedance. At audio frequencies (up to ~44 kHz), this noise is entirely classical: hf << kT by a factor of ~10^8 at room temperature. Laptop audio codecs use CMOS input stages where channel thermal noise and 1/f flicker noise dominate; shot noise is negligible. V_noise = sqrt(4kTR * bandwidth).
 
-**Implementation:** Captures audio via `ffmpeg` or CoreAudio, extracting the noise floor from silent recordings.
+**Implementation:** Captures 0.1s of raw signed 16-bit PCM audio via `ffmpeg` avfoundation, extracts the lower 4 bits of each sample, and packs nibble pairs into bytes.
 
 ---
 
@@ -251,13 +251,13 @@
 **Category:** Sensor
 **Struct:** `CameraNoiseSource`
 **Platform:** Requires camera (built-in or USB)
-**Estimated Rate:** ~2000 b/s
+**Estimated Rate:** ~4000 b/s
 
-**Physics:** Image sensor dark current -- thermally generated electron-hole pairs in silicon photodiodes. At the physical level, each pixel independently generates charge carriers through thermal excitation across the silicon bandgap. The process is fundamentally stochastic (Poisson-distributed photon/electron events).
+**Physics:** Captures frames from the camera sensor in darkness. Noise sources: (1) read noise from the amplifier — classical analog noise, dominates at short exposures (~95%+ of variance); (2) dark current from thermal carrier generation in silicon — classical at sensor operating temperatures; (3) dark current shot noise (Poisson counting) — ~1-5% of variance in typical webcams. The LSBs of pixel values mix all three components.
 
-**Implementation:** Captures frames via `ffmpeg` with the lens covered or in darkness. Pixel-to-pixel variation in dark frames is genuine thermal noise.
+**Implementation:** Captures one grayscale frame via `ffmpeg` avfoundation (tries multiple input selectors), extracts the lower 4 bits of each pixel, and packs nibble pairs into bytes. 900ms timeout keeps the TUI responsive when camera permission is denied.
 
-**Benchmark (raw):** Shannon entropy H=1.976 (4 unique values), but 921,600 samples per frame. Low per-sample entropy compensated by massive parallelism.
+**Benchmark (raw):** Shannon entropy ~2 bits/byte. Low per-sample entropy but large frame sizes (640x480 = 307,200 pixels) provide substantial total entropy per capture.
 
 ---
 

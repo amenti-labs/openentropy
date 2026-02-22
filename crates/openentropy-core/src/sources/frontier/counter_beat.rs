@@ -22,8 +22,8 @@
 //!
 //! ## Why this matters for anomaly detection research
 //!
-//! - **Clean physical signal**: thermal noise in crystal oscillators is as close to
-//!   quantum-origin randomness as consumer hardware provides
+//! - **Clean physical signal**: thermal noise in crystal oscillators is a genuine
+//!   physical noise source independent of software state
 //! - **High sample rate**: thousands of phase-difference samples per second
 //! - **Well-characterized physics**: crystal oscillator phase noise (Allan variance,
 //!   flicker FM, white PM) is thoroughly documented in metrology literature

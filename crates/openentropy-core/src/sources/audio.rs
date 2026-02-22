@@ -19,9 +19,11 @@ static AUDIO_NOISE_INFO: SourceInfo = SourceInfo {
     description: "Microphone ADC thermal noise (Johnson-Nyquist) via ffmpeg",
     physics: "Records from the microphone ADC with no signal present. The LSBs capture \
               Johnson-Nyquist noise \u{2014} thermal agitation of electrons in the input \
-              impedance. This is genuine quantum-origin entropy: random electron motion \
-              in a resistor at temperature T produces voltage noise proportional to \
-              \u{221a}(4kT R \u{0394}f).",
+              impedance. At audio frequencies (up to ~44 kHz), this noise is entirely \
+              classical: hf \u{226a} kT by a factor of ~10^8 at room temperature. Laptop \
+              audio codecs use CMOS input stages where channel thermal noise and 1/f \
+              flicker noise dominate; shot noise is negligible. \
+              Voltage noise \u{221d} \u{221a}(4kT R \u{0394}f).",
     category: SourceCategory::Sensor,
     platform: Platform::MacOS,
     requirements: &[Requirement::AudioUnit],
@@ -29,8 +31,27 @@ static AUDIO_NOISE_INFO: SourceInfo = SourceInfo {
     composite: false,
 };
 
+/// Configuration for audio device selection.
+pub struct AudioNoiseConfig {
+    /// AVFoundation audio device index (e.g., 0, 1, 2).
+    /// `None` means use default (`:0`).
+    pub device_index: Option<u32>,
+}
+
+impl Default for AudioNoiseConfig {
+    fn default() -> Self {
+        let device_index = std::env::var("OPENENTROPY_AUDIO_DEVICE")
+            .ok()
+            .and_then(|s| s.parse().ok());
+        Self { device_index }
+    }
+}
+
 /// Entropy source that harvests thermal noise from the microphone ADC.
-pub struct AudioNoiseSource;
+#[derive(Default)]
+pub struct AudioNoiseSource {
+    pub config: AudioNoiseConfig,
+}
 
 impl EntropySource for AudioNoiseSource {
     fn info(&self) -> &SourceInfo {
@@ -46,10 +67,14 @@ impl EntropySource for AudioNoiseSource {
         // ffmpeg -f avfoundation -i ":0" -t 0.1 -f s16le -ar 44100 -ac 1 pipe:1
         let result = std::process::Command::new("ffmpeg")
             .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
                 "-f",
                 "avfoundation",
                 "-i",
-                ":0",
+                &format!(":{}", self.config.device_index.unwrap_or(0)),
                 "-t",
                 CAPTURE_DURATION,
                 "-f",
@@ -87,7 +112,7 @@ mod tests {
 
     #[test]
     fn audio_noise_info() {
-        let src = AudioNoiseSource;
+        let src = AudioNoiseSource::default();
         assert_eq!(src.name(), "audio_noise");
         assert_eq!(src.info().category, SourceCategory::Sensor);
         assert_eq!(src.info().entropy_rate_estimate, 10000.0);
@@ -95,10 +120,26 @@ mod tests {
     }
 
     #[test]
+    fn audio_config_default_is_none() {
+        let config = AudioNoiseConfig { device_index: None };
+        assert!(config.device_index.is_none());
+    }
+
+    #[test]
+    fn audio_config_explicit_device() {
+        let src = AudioNoiseSource {
+            config: AudioNoiseConfig {
+                device_index: Some(2),
+            },
+        };
+        assert_eq!(src.config.device_index, Some(2));
+    }
+
+    #[test]
     #[cfg(target_os = "macos")]
     #[ignore] // Requires microphone and ffmpeg
     fn audio_noise_collects_bytes() {
-        let src = AudioNoiseSource;
+        let src = AudioNoiseSource::default();
         if src.is_available() {
             let data = src.collect(64);
             assert!(!data.is_empty());
