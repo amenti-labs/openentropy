@@ -6,6 +6,21 @@ pub fn run(
     source_filter: Option<&str>,
     n_bytes: usize,
     conditioning: &str,
+    fifo_path: Option<&str>,
+) {
+    if let Some(path) = fifo_path {
+        run_fifo(path, rate, source_filter, conditioning);
+    } else {
+        run_stdout(format, rate, source_filter, n_bytes, conditioning);
+    }
+}
+
+fn run_stdout(
+    format: &str,
+    rate: usize,
+    source_filter: Option<&str>,
+    n_bytes: usize,
+    conditioning: &str,
 ) {
     let pool = super::make_pool(source_filter);
     let mode = super::parse_conditioning(conditioning);
@@ -52,6 +67,94 @@ pub fn run(
             std::thread::sleep(sleep_dur);
         }
     }
+}
+
+fn run_fifo(path: &str, buffer_size: usize, source_filter: Option<&str>, conditioning: &str) {
+    let pool = super::make_pool(source_filter);
+    let mode = super::parse_conditioning(conditioning);
+    let buffer_size = if buffer_size > 0 { buffer_size } else { 4096 };
+
+    // Create FIFO if it doesn't exist; verify it's a FIFO if it does.
+    if std::path::Path::new(path).exists() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileTypeExt;
+            let meta = std::fs::metadata(path).unwrap();
+            if !meta.file_type().is_fifo() {
+                eprintln!("Error: {path} exists and is not a FIFO.");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        #[cfg(unix)]
+        {
+            use std::ffi::CString;
+            let c_path = CString::new(path).unwrap();
+            // SAFETY: c_path is a valid NUL-terminated CString.
+            let ret = unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) };
+            if ret != 0 {
+                eprintln!("Error creating FIFO: {}", std::io::Error::last_os_error());
+                std::process::exit(1);
+            }
+            println!("Created FIFO: {path}");
+        }
+        #[cfg(not(unix))]
+        {
+            eprintln!("Named pipes not supported on this platform.");
+            std::process::exit(1);
+        }
+    }
+
+    println!("Feeding entropy to {path} (conditioning={conditioning}, buffer={buffer_size}B)");
+    println!("Press Ctrl+C to stop.");
+
+    let path_owned = path.to_string();
+    install_cleanup_handler(&path_owned);
+
+    loop {
+        match std::fs::OpenOptions::new().write(true).open(path) {
+            Ok(mut fifo) => loop {
+                let data = pool.get_bytes(buffer_size, mode);
+                if fifo.write_all(&data).is_err() {
+                    break;
+                }
+                let _ = fifo.flush();
+            },
+            Err(e) => {
+                eprintln!("Error opening FIFO: {e}");
+                break;
+            }
+        }
+    }
+
+    let _ = std::fs::remove_file(path);
+}
+
+/// Store the FIFO path globally so the signal handler can clean it up.
+static FIFO_PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Register a signal handler that removes the FIFO on Ctrl+C / SIGTERM.
+fn install_cleanup_handler(path: &str) {
+    let _ = FIFO_PATH.set(path.to_string());
+    // SAFETY: signal() registers a C-linkage handler for SIGINT/SIGTERM.
+    // signal_handler is a valid extern "C" fn with correct signature.
+    unsafe {
+        libc::signal(
+            libc::SIGINT,
+            signal_handler as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGTERM,
+            signal_handler as *const () as libc::sighandler_t,
+        );
+    }
+}
+
+extern "C" fn signal_handler(_: libc::c_int) {
+    if let Some(path) = FIFO_PATH.get() {
+        let _ = std::fs::remove_file(path);
+    }
+    std::process::exit(0);
 }
 
 fn base64_encode(data: &[u8]) -> String {

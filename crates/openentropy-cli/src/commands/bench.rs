@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
+use openentropy_core::TelemetryWindowReport;
 use openentropy_core::conditioning::{quick_min_entropy, quick_quality, quick_shannon};
 use openentropy_core::platform::detect_available_sources;
 use serde::Serialize;
@@ -41,7 +42,6 @@ struct SourceAccumulator {
 struct BenchRow {
     name: String,
     composite: bool,
-    healthy: bool,
     success_rounds: usize,
     failures: u64,
     avg_shannon: f64,
@@ -60,6 +60,8 @@ struct BenchReport {
     settings: BenchSettingsJson,
     sources: Vec<BenchSourceReport>,
     pool: Option<PoolQualityReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    telemetry_v1: Option<TelemetryWindowReport>,
 }
 
 #[derive(Serialize)]
@@ -106,17 +108,21 @@ pub struct BenchCommandConfig<'a> {
     pub rank_by: &'a str,
     pub output_path: Option<&'a str>,
     pub include_pool_quality: bool,
+    pub include_telemetry: bool,
 }
 
 pub fn run(cfg: BenchCommandConfig<'_>) {
     // Single-source mode (replaces `probe`)
     if let Some(source_name) = cfg.source {
-        run_single_source(source_name);
+        let mode = super::parse_conditioning(cfg.conditioning);
+        let samples = cfg.samples_per_round.unwrap_or(5000);
+        run_single_source(source_name, mode, samples, cfg.conditioning);
         return;
     }
 
     let profile = BenchProfile::parse(cfg.profile);
     let rank_by = RankBy::parse(cfg.rank_by);
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
     let mode = super::parse_conditioning(cfg.conditioning);
     let mut settings = profile.defaults();
     if let Some(v) = cfg.samples_per_round {
@@ -204,13 +210,6 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
         );
     }
 
-    let final_health = pool_instance.health_report();
-    let health_by_name: HashMap<String, bool> = final_health
-        .sources
-        .iter()
-        .map(|s| (s.name.clone(), s.healthy))
-        .collect();
-
     let mut rows: Vec<BenchRow> = infos
         .iter()
         .map(|info| {
@@ -242,7 +241,6 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
             BenchRow {
                 name: info.name.clone(),
                 composite: info.composite,
-                healthy: health_by_name.get(&info.name).copied().unwrap_or(false),
                 success_rounds,
                 failures,
                 avg_shannon,
@@ -274,8 +272,13 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
             }
         };
 
-        if row.success_rounds < settings.rounds || row.failures > 0 {
-            row.score *= 0.8;
+        // Graduated reliability penalty: scale with failure rate instead of binary 0.8×.
+        let missed = settings.rounds.saturating_sub(row.success_rounds) as f64;
+        let total_issues = missed + row.failures as f64;
+        let expected = settings.rounds as f64;
+        if total_issues > 0.0 && expected > 0.0 {
+            let failure_rate = (total_issues / expected).clamp(0.0, 1.0);
+            row.score *= 1.0 - 0.5 * failure_rate;
         }
     }
 
@@ -350,10 +353,14 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
     } else {
         None
     };
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("bench", window);
+    }
 
     if let Some(path) = cfg.output_path {
         let report = BenchReport {
-            generated_unix: unix_timestamp_now(),
+            generated_unix: super::unix_timestamp_now(),
             profile: profile.as_str().to_string(),
             conditioning: cfg.conditioning.to_string(),
             rank_by: rank_by.as_str().to_string(),
@@ -368,7 +375,7 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
                 .map(|row| BenchSourceReport {
                     name: row.name.clone(),
                     composite: row.composite,
-                    healthy: row.healthy,
+                    healthy: row.avg_min_entropy > 1.0 && row.failures == 0,
                     success_rounds: row.success_rounds,
                     failures: row.failures,
                     avg_shannon: row.avg_shannon,
@@ -380,12 +387,10 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
                 })
                 .collect(),
             pool: pool_report,
+            telemetry_v1: telemetry_report,
         };
 
-        match std::fs::write(path, serde_json::to_string_pretty(&report).unwrap()) {
-            Ok(()) => println!("\nBenchmark report written to {path}"),
-            Err(e) => eprintln!("\nFailed to write benchmark report to {path}: {e}"),
-        }
+        super::write_json(&report, path, "Benchmark report");
     }
 }
 
@@ -404,20 +409,14 @@ fn stability_index(values: &[f64]) -> f64 {
         return 1.0;
     }
     let mean = values.iter().sum::<f64>() / values.len() as f64;
-    if mean.abs() < f64::EPSILON {
-        return 0.0;
-    }
     let var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
     let stddev = var.sqrt();
+    // If mean ≈ 0 and stddev ≈ 0, all values are consistently near zero — perfectly stable.
+    if mean.abs() < f64::EPSILON {
+        return if stddev < f64::EPSILON { 1.0 } else { 0.0 };
+    }
     let cv = (stddev / mean.abs()).min(1.0);
     (1.0 - cv).clamp(0.0, 1.0)
-}
-
-fn unix_timestamp_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }
 
 impl BenchProfile {
@@ -479,7 +478,12 @@ impl RankBy {
     }
 }
 
-fn run_single_source(source_name: &str) {
+fn run_single_source(
+    source_name: &str,
+    mode: openentropy_core::conditioning::ConditioningMode,
+    samples: usize,
+    conditioning_label: &str,
+) {
     let sources = detect_available_sources();
     let matches: Vec<_> = sources
         .into_iter()
@@ -505,21 +509,29 @@ fn run_single_source(source_name: &str) {
     println!();
 
     let t0 = Instant::now();
-    let data = src.collect(5000);
+    let raw_data = src.collect(samples);
     let elapsed = t0.elapsed();
 
-    if data.is_empty() {
+    if raw_data.is_empty() {
         println!("  No data collected.");
         return;
     }
 
+    let data = openentropy_core::conditioning::condition(&raw_data, raw_data.len(), mode);
+    let shannon = quick_shannon(&data);
+    let min_h = quick_min_entropy(&data);
+    let grade = openentropy_core::grade_min_entropy(min_h.max(0.0));
     let quality = quick_quality(&data);
-    println!("  Grade:           {}", quality.grade);
-    println!("  Samples:         {}", quality.samples);
+
+    println!("  Grade:           {} (based on H∞)", grade);
     println!(
-        "  Shannon entropy: {:.4} / 8.0 bits",
-        quality.shannon_entropy
+        "  Samples:         {} (conditioned: {})",
+        raw_data.len(),
+        data.len()
     );
+    println!("  Conditioning:    {}", conditioning_label);
+    println!("  Shannon entropy: {:.4} / 8.0 bits", shannon);
+    println!("  Min-entropy H∞:  {:.4} / 8.0 bits", min_h);
     println!("  Compression:     {:.4}", quality.compression_ratio);
     println!("  Unique values:   {}", quality.unique_values);
     println!("  Time:            {:.3}s", elapsed.as_secs_f64());

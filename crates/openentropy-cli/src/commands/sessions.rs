@@ -14,6 +14,7 @@ pub fn run(
     do_analyze: bool,
     do_entropy: bool,
     output: Option<&str>,
+    include_telemetry: bool,
 ) {
     if let Some(path) = session_path {
         // Single session mode
@@ -27,7 +28,7 @@ pub fn run(
         show_session(&session_dir);
 
         if do_analyze || do_entropy {
-            analyze_session(&session_dir, do_entropy, output);
+            analyze_session(&session_dir, do_entropy, output, include_telemetry);
         }
     } else {
         // List mode
@@ -147,6 +148,14 @@ fn show_session(session_dir: &Path) {
     if let Some(note) = &meta.note {
         println!("  Note:         {note}");
     }
+    if let Some(telemetry) = &meta.telemetry_v1 {
+        println!(
+            "  Telemetry v1: {} ({:.1}s, {} metrics)",
+            telemetry.model_id,
+            telemetry.elapsed_ms as f64 / 1000.0,
+            telemetry.end.metrics.len()
+        );
+    }
 
     // Per-source sample counts
     if meta.samples_per_source.len() > 1 {
@@ -181,7 +190,13 @@ fn show_session(session_dir: &Path) {
 }
 
 /// Run full analysis on a recorded session's raw data.
-fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
+fn analyze_session(
+    session_dir: &Path,
+    do_entropy: bool,
+    output: Option<&str>,
+    include_telemetry: bool,
+) {
+    let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let meta = read_session_meta(session_dir);
 
     // Read raw_index.csv to group bytes by source
@@ -279,36 +294,24 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
     }
 
     // Cross-correlation if multiple sources
-    if all_data.len() >= 2 {
-        println!("\n{:=<68}", "");
-        println!("Cross-Correlation Matrix ({} sources)", all_data.len());
-        println!("{:=<68}", "");
+    let cross_matrix = if all_data.len() >= 2 {
+        Some(analysis::cross_correlation_matrix(&all_data))
+    } else {
+        None
+    };
 
-        let matrix = analysis::cross_correlation_matrix(&all_data);
+    if let Some(ref matrix) = cross_matrix {
+        super::print_cross_correlation(matrix, all_data.len());
+    }
 
-        if matrix.flagged_count > 0 {
-            println!("\n  {} pair(s) with |r| > 0.3:\n", matrix.flagged_count);
-        }
-
-        for pair in &matrix.pairs {
-            let flag = if pair.flagged { " !" } else { "" };
-            if pair.flagged || pair.correlation.abs() > 0.1 {
-                println!(
-                    "  {:20} x {:20}  r = {:+.4}{}",
-                    pair.source_a, pair.source_b, pair.correlation, flag
-                );
-            }
-        }
-
-        if matrix.flagged_count == 0 {
-            println!("  All pairs below r=0.3 threshold — no strong linear correlation detected.");
-        }
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("sessions-analyze", window);
     }
 
     // JSON output
     if let Some(path) = output {
-        let json = if all_data.len() >= 2 {
-            let matrix = analysis::cross_correlation_matrix(&all_data);
+        let mut json = if let Some(matrix) = cross_matrix {
             serde_json::json!({
                 "session": meta.id,
                 "sources": all_results,
@@ -320,11 +323,11 @@ fn analyze_session(session_dir: &Path, do_entropy: bool, output: Option<&str>) {
                 "sources": all_results,
             })
         };
-
-        match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
-            Ok(()) => println!("\nResults written to {path}"),
-            Err(e) => eprintln!("\nFailed to write {path}: {e}"),
+        if let Some(window) = telemetry_report {
+            json["telemetry_v1"] = serde_json::json!(window);
         }
+
+        super::write_json(&json, path, "Results");
     }
 }
 

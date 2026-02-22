@@ -34,6 +34,9 @@ openentropy scan
 # Benchmark all fast sources
 openentropy bench
 
+# Capture a 3-second telemetry window
+openentropy telemetry --window-sec 3
+
 # Output 64 random hex bytes
 openentropy stream --format hex --bytes 64
 
@@ -117,6 +120,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 |-----|-------------|
 | [Source Catalog](docs/SOURCES.md) | All 47 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
+| [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
 | [Integrations](docs/INTEGRATIONS.md) | Named pipe device, HTTP server, piping to other programs |
@@ -250,6 +254,7 @@ Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) 
 
 ```bash
 openentropy scan
+openentropy scan --telemetry
 ```
 
 ### `bench` — Benchmark sources
@@ -261,8 +266,12 @@ openentropy bench --profile deep     # higher-confidence benchmark
 openentropy bench --sources all      # all sources
 openentropy bench --sources silicon  # filter by name
 openentropy bench --rank-by throughput
+openentropy bench --telemetry
 openentropy bench --output bench.json
 ```
+
+`bench --output` JSON includes optional `telemetry_v1` when `--telemetry` is enabled.
+Treat telemetry as run context (load, thermal/frequency/memory signals), not as an entropy score.
 
 ### `stream` — Continuous output
 
@@ -279,6 +288,7 @@ openentropy stream --conditioning sha256 --format hex    # full conditioning (de
 
 ```bash
 openentropy monitor
+openentropy monitor --telemetry
 ```
 
 | Key | Action |
@@ -301,10 +311,10 @@ openentropy bench                    # includes pool quality by default
 openentropy bench --no-pool          # skip pool section
 ```
 
-### `device` — Named pipe (FIFO)
+### `stream --fifo` — Named pipe (FIFO)
 
 ```bash
-openentropy device /tmp/openentropy-rng
+openentropy stream --fifo /tmp/openentropy-rng
 # Another terminal: head -c 32 /tmp/openentropy-rng | xxd
 ```
 
@@ -313,11 +323,14 @@ openentropy device /tmp/openentropy-rng
 ```bash
 openentropy server --port 8080
 openentropy server --port 8080 --allow-raw    # enable raw output
+openentropy server --port 8080 --telemetry    # print startup telemetry snapshot
 ```
 
 ```bash
 curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
 curl "http://localhost:8080/health"
+curl "http://localhost:8080/sources?telemetry=true"
+curl "http://localhost:8080/pool/status?telemetry=true"
 ```
 
 ### `analyze` — Statistical source analysis
@@ -327,13 +340,29 @@ openentropy analyze                          # summary view, raw, entropy on
 openentropy analyze --view detailed
 openentropy analyze --sources mach_timing --no-entropy
 openentropy analyze --cross-correlation --output analysis.json
+openentropy analyze --telemetry --output analysis.json
 ```
 
-### `report` — NIST test battery
+### `telemetry` — Standalone telemetry capture
 
 ```bash
-openentropy report
-openentropy report --source mach_timing --samples 50000
+openentropy telemetry                      # single telemetry_v1 snapshot
+openentropy telemetry --window-sec 5       # start/end window with deltas
+openentropy telemetry --window-sec 5 --output telemetry.json
+```
+
+### `analyze --report` — NIST test battery
+
+```bash
+openentropy analyze --report
+openentropy analyze --report --sources mach_timing --samples 50000
+openentropy analyze --report --telemetry --output report.md
+```
+
+### `sessions` — Analyze recorded sessions
+
+```bash
+openentropy sessions sessions/<session-id> --analyze --entropy --telemetry --output session_analysis.json
 ```
 
 ---

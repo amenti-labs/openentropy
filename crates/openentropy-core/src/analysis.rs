@@ -161,6 +161,10 @@ pub struct CrossCorrMatrix {
 pub struct SourceAnalysis {
     pub source_name: String,
     pub sample_size: usize,
+    /// Shannon entropy (bits/byte, max 8.0).
+    pub shannon_entropy: f64,
+    /// Min-entropy via MCV estimator (bits/byte, max 8.0).
+    pub min_entropy: f64,
     pub autocorrelation: AutocorrResult,
     pub spectral: SpectralResult,
     pub bit_bias: BitBiasResult,
@@ -574,9 +578,12 @@ pub fn cross_correlation_matrix(sources_data: &[(String, Vec<u8>)]) -> CrossCorr
 
 /// Run all per-source analysis on raw byte data.
 pub fn full_analysis(source_name: &str, data: &[u8]) -> SourceAnalysis {
+    use crate::conditioning::{quick_min_entropy, quick_shannon};
     SourceAnalysis {
         source_name: source_name.to_string(),
         sample_size: data.len(),
+        shannon_entropy: quick_shannon(data),
+        min_entropy: quick_min_entropy(data),
         autocorrelation: autocorrelation_profile(data, 100),
         spectral: spectral_analysis(data),
         bit_bias: bit_bias(data),

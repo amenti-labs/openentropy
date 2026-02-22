@@ -23,40 +23,43 @@ struct SourceInterpretation {
     meaning: &'static str,
 }
 
-pub fn run(
-    source_filter: Option<&str>,
-    output_path: Option<&str>,
-    samples: usize,
-    cross_correlation: bool,
-    entropy: bool,
-    conditioning: &str,
-    view: &str,
-) {
-    let all_sources = openentropy_core::platform::detect_available_sources();
-    let mode = super::parse_conditioning(conditioning);
-    let view = AnalyzeView::parse(view);
+pub struct AnalyzeCommandConfig<'a> {
+    pub source_filter: Option<&'a str>,
+    pub output_path: Option<&'a str>,
+    pub samples: usize,
+    pub cross_correlation: bool,
+    pub entropy: bool,
+    pub conditioning: &'a str,
+    pub view: &'a str,
+    pub include_telemetry: bool,
+    pub report: bool,
+}
 
-    let sources: Vec<_> = if let Some(filter) = source_filter {
-        if filter == "all" {
-            all_sources
-        } else {
-            let names: Vec<&str> = filter.split(',').map(|s| s.trim()).collect();
-            all_sources
-                .into_iter()
-                .filter(|s| {
-                    let src_name = s.name().to_lowercase();
-                    names.iter().any(|n| src_name.contains(&n.to_lowercase()))
-                })
-                .collect()
+pub fn run(cfg: AnalyzeCommandConfig<'_>) {
+    if cfg.report {
+        if cfg.entropy || cfg.cross_correlation || cfg.view != "summary" {
+            eprintln!(
+                "Note: --report mode runs the NIST test battery; \
+                 --entropy, --cross-correlation, and --view are ignored."
+            );
         }
+        run_report(&cfg);
     } else {
-        // Default: fast sources only.
-        let fast = super::FAST_SOURCES;
-        all_sources
-            .into_iter()
-            .filter(|s| fast.contains(&s.name()))
-            .collect()
-    };
+        run_analysis(&cfg);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Statistical analysis path (default)
+// ---------------------------------------------------------------------------
+
+fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
+    let all_sources = openentropy_core::platform::detect_available_sources();
+    let mode = super::parse_conditioning(cfg.conditioning);
+    let view = AnalyzeView::parse(cfg.view);
+
+    let sources: Vec<_> = super::filter_sources(all_sources, cfg.source_filter);
 
     if sources.is_empty() {
         eprintln!("No sources matched filter.");
@@ -66,7 +69,7 @@ pub fn run(
     println!(
         "Analyzing {} source(s), {} samples each (view: {})...\n",
         sources.len(),
-        samples,
+        cfg.samples,
         view.as_str()
     );
 
@@ -78,7 +81,7 @@ pub fn run(
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let data = source.collect(samples);
+        let data = source.collect(cfg.samples);
         let collect_time = t0.elapsed();
 
         if data.is_empty() {
@@ -102,10 +105,7 @@ pub fn run(
         }
 
         // Min-entropy breakdown (MCV primary + diagnostic estimators)
-        if entropy {
-            // Use the same sampled dataset we just analyzed to keep reports
-            // comparable. Conditioning (if selected) is applied to this sample,
-            // not to a separately recollected stream.
+        if cfg.entropy {
             let entropy_input = if mode == ConditioningMode::Raw {
                 data.clone()
             } else {
@@ -114,7 +114,8 @@ pub fn run(
             let report = min_entropy_estimate(&entropy_input);
             let report_str = format!("{report}");
             println!(
-                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {conditioning}, {} bytes)",
+                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {}, {} bytes)",
+                cfg.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
@@ -125,7 +126,7 @@ pub fn run(
 
         all_results.push(result);
 
-        if cross_correlation {
+        if cfg.cross_correlation {
             all_data.push((name, data));
         }
     }
@@ -145,36 +146,24 @@ pub fn run(
     }
 
     // Cross-correlation matrix.
-    if cross_correlation && all_data.len() >= 2 {
-        println!("\n{:=<68}", "");
-        println!("Cross-Correlation Matrix ({} sources)", all_data.len());
-        println!("{:=<68}", "");
+    let cross_matrix = if cfg.cross_correlation && all_data.len() >= 2 {
+        Some(analysis::cross_correlation_matrix(&all_data))
+    } else {
+        None
+    };
 
-        let matrix = analysis::cross_correlation_matrix(&all_data);
+    if let Some(ref matrix) = cross_matrix {
+        super::print_cross_correlation(matrix, all_data.len());
+    }
 
-        if matrix.flagged_count > 0 {
-            println!("\n  {} pair(s) with |r| > 0.3:\n", matrix.flagged_count);
-        }
-
-        for pair in &matrix.pairs {
-            let flag = if pair.flagged { " !" } else { "" };
-            if pair.flagged || pair.correlation.abs() > 0.1 {
-                println!(
-                    "  {:20} x {:20}  r = {:+.4}{}",
-                    pair.source_a, pair.source_b, pair.correlation, flag
-                );
-            }
-        }
-
-        if matrix.flagged_count == 0 {
-            println!("  All pairs below r=0.3 threshold — no strong linear correlation detected.");
-        }
+    let telemetry_report = telemetry.finish();
+    if let Some(ref window) = telemetry_report {
+        super::telemetry::print_window_summary("analyze", window);
     }
 
     // JSON output.
-    if let Some(path) = output_path {
-        let json = if cross_correlation && all_data.len() >= 2 {
-            let matrix = analysis::cross_correlation_matrix(&all_data);
+    if let Some(path) = cfg.output_path {
+        let mut json = if let Some(matrix) = cross_matrix {
             serde_json::json!({
                 "sources": all_results,
                 "cross_correlation": matrix,
@@ -182,17 +171,188 @@ pub fn run(
         } else {
             serde_json::json!({ "sources": all_results })
         };
+        if let Some(window) = telemetry_report {
+            json["telemetry_v1"] = serde_json::json!(window);
+        }
 
-        match std::fs::write(path, serde_json::to_string_pretty(&json).unwrap()) {
-            Ok(()) => println!("\nResults written to {path}"),
-            Err(e) => eprintln!("\nFailed to write {path}: {e}"),
+        super::write_json(&json, path, "Results");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NIST-inspired test battery path (--report)
+// ---------------------------------------------------------------------------
+
+fn run_report(cfg: &AnalyzeCommandConfig<'_>) {
+    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
+    let mode = super::parse_conditioning(cfg.conditioning);
+    let all_sources = openentropy_core::platform::detect_available_sources();
+
+    let sources: Vec<_> = super::filter_sources(all_sources, cfg.source_filter);
+
+    if sources.is_empty() {
+        eprintln!("No sources matched filter.");
+        std::process::exit(1);
+    }
+
+    println!(
+        "Running NIST test battery on {} source(s), {} samples each...\n",
+        sources.len(),
+        cfg.samples
+    );
+
+    let mut all_results = Vec::new();
+
+    for src in &sources {
+        let info = src.info();
+        print!("  Collecting from {}...", info.name);
+
+        let t0 = Instant::now();
+        let raw_data = src.collect(cfg.samples);
+        let data = condition(&raw_data, raw_data.len(), mode);
+        print!(" {} bytes", data.len());
+
+        if data.is_empty() {
+            println!(" (no data)");
+            continue;
+        }
+
+        let results = openentropy_tests::run_all_tests(&data);
+        let elapsed = t0.elapsed().as_secs_f64();
+        let score = openentropy_tests::calculate_quality_score(&results);
+        let passed = results.iter().filter(|r| r.passed).count();
+
+        println!(
+            " -> {:.0}/100 ({}/{} passed) [{:.1}s]",
+            score,
+            passed,
+            results.len(),
+            elapsed
+        );
+
+        all_results.push((info.name.to_string(), data, results));
+    }
+
+    if all_results.is_empty() {
+        eprintln!("No sources produced data.");
+        std::process::exit(1);
+    }
+
+    // Summary table
+    println!("\n{}", "=".repeat(60));
+    println!(
+        "{:<25} {:>6} {:>6} {:>8}",
+        "Source", "Score", "Grade", "Pass"
+    );
+    println!("{}", "-".repeat(60));
+
+    let mut sorted_indices: Vec<usize> = (0..all_results.len()).collect();
+    sorted_indices.sort_by(|&a, &b| {
+        let sa = openentropy_tests::calculate_quality_score(&all_results[a].2);
+        let sb = openentropy_tests::calculate_quality_score(&all_results[b].2);
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for &idx in &sorted_indices {
+        let (ref name, _, ref results) = all_results[idx];
+        let score = openentropy_tests::calculate_quality_score(results);
+        let grade = if score >= 80.0 {
+            'A'
+        } else if score >= 60.0 {
+            'B'
+        } else if score >= 40.0 {
+            'C'
+        } else if score >= 20.0 {
+            'D'
+        } else {
+            'F'
+        };
+        let passed = results.iter().filter(|r| r.passed).count();
+        println!(
+            "  {:<23} {:>5.1} {:>6} {:>4}/{}",
+            name,
+            score,
+            grade,
+            passed,
+            results.len()
+        );
+    }
+
+    let telemetry_report = telemetry.finish_and_print("analyze --report");
+
+    // Markdown output.
+    if let Some(path) = cfg.output_path {
+        let report = generate_markdown_report(&all_results, telemetry_report.as_ref());
+        if let Err(e) = std::fs::write(path, &report) {
+            eprintln!("Failed to write report to {path}: {e}");
+        } else {
+            println!("\nReport saved to: {path}");
         }
     }
+}
+
+fn generate_markdown_report(
+    results: &[(String, Vec<u8>, Vec<openentropy_tests::TestResult>)],
+    telemetry: Option<&openentropy_core::TelemetryWindowReport>,
+) -> String {
+    let mut report = String::new();
+    report.push_str("# OpenEntropy — NIST Randomness Test Report\n\n");
+    report.push_str(&format!(
+        "Generated: Unix timestamp: {}\n\n",
+        super::unix_timestamp_now()
+    ));
+    if let Some(t) = telemetry {
+        report.push_str("## Telemetry Context (`telemetry_v1`)\n\n");
+        report.push_str(&format!(
+            "- Elapsed: {:.2}s\n- Host: {}/{}\n- CPU count: {}\n- Metrics observed: {}\n\n",
+            t.elapsed_ms as f64 / 1000.0,
+            t.end.os,
+            t.end.arch,
+            t.end.cpu_count,
+            t.end.metrics.len()
+        ));
+    }
+
+    for (name, data, tests) in results {
+        let score = openentropy_tests::calculate_quality_score(tests);
+        let passed = tests.iter().filter(|r| r.passed).count();
+        report.push_str(&format!("## {name}\n\n"));
+        report.push_str(&format!(
+            "- Samples: {} bytes\n- Score: {:.1}/100\n- Passed: {}/{}\n\n",
+            data.len(),
+            score,
+            passed,
+            tests.len()
+        ));
+
+        report.push_str("| Test | P | Grade | p-value | Statistic | Details |\n");
+        report.push_str("|------|---|-------|---------|-----------|--------|\n");
+        for t in tests {
+            let ok = if t.passed { "Y" } else { "N" };
+            let pval = t
+                .p_value
+                .map(|p| format!("{p:.6}"))
+                .unwrap_or_else(|| "—".to_string());
+            report.push_str(&format!(
+                "| {} | {} | {} | {} | {:.4} | {} |\n",
+                t.name, ok, t.grade, pval, t.statistic, t.details
+            ));
+        }
+        report.push_str("\n---\n\n");
+    }
+
+    report
 }
 
 fn print_source_summary(r: &analysis::SourceAnalysis, i: &SourceInterpretation) {
     println!();
     println!("  ┌─ {} ({} bytes)", r.source_name, r.sample_size);
+    println!(
+        "  │ Entropy: H={:.3} H∞={:.3} (grade {})",
+        r.shannon_entropy,
+        r.min_entropy,
+        openentropy_core::grade_min_entropy(r.min_entropy.max(0.0))
+    );
     println!(
         "  │ Status: {} ({} finding(s))",
         i.status.as_str(),
@@ -220,6 +380,12 @@ fn print_source_summary(r: &analysis::SourceAnalysis, i: &SourceInterpretation) 
 fn print_source_detailed(r: &analysis::SourceAnalysis, i: &SourceInterpretation) {
     println!();
     println!("  ┌─ {} ({} bytes)", r.source_name, r.sample_size);
+    println!(
+        "  │ Entropy:         H={:.4} H∞={:.4} (grade {})",
+        r.shannon_entropy,
+        r.min_entropy,
+        openentropy_core::grade_min_entropy(r.min_entropy.max(0.0))
+    );
     println!("  │ Status: {}", i.status.as_str());
 
     // Autocorrelation
@@ -337,6 +503,22 @@ fn interpret_source(r: &analysis::SourceAnalysis) -> SourceInterpretation {
     let mut criticals = 0usize;
     let mut findings = Vec::new();
     let mut strengths = Vec::new();
+
+    // Entropy gate: min-entropy is the most fundamental quality indicator.
+    let min_h = r.min_entropy;
+    if min_h < 1.0 {
+        criticals += 1;
+        findings.push(format!(
+            "Very low min-entropy (H∞={min_h:.3}); source provides negligible randomness."
+        ));
+    } else if min_h < 4.0 {
+        warnings += 1;
+        findings.push(format!(
+            "Below-average min-entropy (H∞={min_h:.3}); requires strong conditioning."
+        ));
+    } else {
+        strengths.push(format!("Min-entropy is healthy (H∞={min_h:.3})."));
+    }
 
     let ac = r.autocorrelation.max_abs_correlation;
     if ac > 0.15 {

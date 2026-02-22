@@ -1,15 +1,17 @@
 pub mod analyze;
 pub mod bench;
-pub mod device;
 pub mod monitor;
 pub mod record;
-pub mod report;
 pub mod scan;
 pub mod server;
 pub mod sessions;
 pub mod stream;
+pub mod telemetry;
+
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use openentropy_core::EntropyPool;
+use openentropy_core::analysis::CrossCorrMatrix;
 use openentropy_core::conditioning::ConditioningMode;
 
 /// Sources that collect in <2 seconds — safe for real-time use.
@@ -94,9 +96,9 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
     pool
 }
 
-/// Parse a conditioning mode string into the enum.
+/// Parse a conditioning mode string into the enum (case-insensitive).
 pub fn parse_conditioning(s: &str) -> ConditioningMode {
-    match s {
+    match s.to_lowercase().as_str() {
         "raw" => ConditioningMode::Raw,
         "vonneumann" | "von_neumann" | "vn" => ConditioningMode::VonNeumann,
         "sha256" | "sha" => ConditioningMode::Sha256,
@@ -104,6 +106,79 @@ pub fn parse_conditioning(s: &str) -> ConditioningMode {
             eprintln!("Unknown conditioning mode '{s}', using sha256");
             ConditioningMode::Sha256
         }
+    }
+}
+
+/// Current Unix timestamp in seconds.
+pub fn unix_timestamp_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Filter a list of entropy sources using the standard filter syntax.
+/// - `None` → fast sources only
+/// - `Some("all")` → everything
+/// - `Some("a,b")` → comma-separated partial name match
+pub fn filter_sources(
+    all_sources: Vec<Box<dyn openentropy_core::EntropySource>>,
+    source_filter: Option<&str>,
+) -> Vec<Box<dyn openentropy_core::EntropySource>> {
+    if let Some(filter) = source_filter {
+        if filter == "all" {
+            all_sources
+        } else {
+            let names: Vec<&str> = filter.split(',').map(|s| s.trim()).collect();
+            all_sources
+                .into_iter()
+                .filter(|s| {
+                    let src_name = s.name().to_lowercase();
+                    names.iter().any(|n| src_name.contains(&n.to_lowercase()))
+                })
+                .collect()
+        }
+    } else {
+        all_sources
+            .into_iter()
+            .filter(|s| FAST_SOURCES.contains(&s.name()))
+            .collect()
+    }
+}
+
+/// Print a cross-correlation matrix summary to stdout.
+pub fn print_cross_correlation(matrix: &CrossCorrMatrix, source_count: usize) {
+    println!("\n{:=<68}", "");
+    println!("Cross-Correlation Matrix ({} sources)", source_count);
+    println!("{:=<68}", "");
+
+    if matrix.flagged_count > 0 {
+        println!("\n  {} pair(s) with |r| > 0.3:\n", matrix.flagged_count);
+    }
+
+    for pair in &matrix.pairs {
+        let flag = if pair.flagged { " !" } else { "" };
+        if pair.flagged || pair.correlation.abs() > 0.1 {
+            println!(
+                "  {:20} x {:20}  r = {:+.4}{}",
+                pair.source_a, pair.source_b, pair.correlation, flag
+            );
+        }
+    }
+
+    if matrix.flagged_count == 0 {
+        println!("  All pairs below r=0.3 threshold — no strong linear correlation detected.");
+    }
+}
+
+/// Write a serializable value as pretty JSON to a file.
+pub fn write_json<T: serde::Serialize>(value: &T, path: &str, label: &str) {
+    match serde_json::to_string_pretty(value) {
+        Ok(json) => match std::fs::write(path, json) {
+            Ok(()) => println!("\n{label} written to {path}"),
+            Err(e) => eprintln!("\nFailed to write {path}: {e}"),
+        },
+        Err(e) => eprintln!("\nFailed to serialize {label}: {e}"),
     }
 }
 
@@ -143,7 +218,16 @@ mod tests {
     fn test_parse_unknown_defaults_sha256() {
         assert_eq!(parse_conditioning("unknown"), ConditioningMode::Sha256);
         assert_eq!(parse_conditioning(""), ConditioningMode::Sha256);
-        assert_eq!(parse_conditioning("RAW"), ConditioningMode::Sha256); // case-sensitive
+    }
+
+    #[test]
+    fn test_parse_case_insensitive() {
+        assert_eq!(parse_conditioning("RAW"), ConditioningMode::Raw);
+        assert_eq!(parse_conditioning("Sha256"), ConditioningMode::Sha256);
+        assert_eq!(
+            parse_conditioning("VonNeumann"),
+            ConditioningMode::VonNeumann
+        );
     }
 
     // -----------------------------------------------------------------------

@@ -324,18 +324,25 @@ pub fn serial_test(data: &[u8]) -> TestResult {
 
     let psi_m = psi_sq(&bits, n, m);
     let psi_m1 = psi_sq(&bits, n, m - 1);
-    let _psi_m2 = if m >= 2 { psi_sq(&bits, n, m - 2) } else { 0.0 };
+    let psi_m2 = if m >= 2 { psi_sq(&bits, n, m - 2) } else { 0.0 };
     let delta1 = psi_m - psi_m1;
+    let delta2 = psi_m - 2.0 * psi_m1 + psi_m2;
 
-    let df = (1u64 << (m - 1)) as f64;
-    let dist = ChiSquared::new(df).unwrap();
-    let p = dist.sf(delta1);
+    let df1 = (1u64 << (m - 1)) as f64;
+    let df2 = (1u64 << (m - 2)) as f64;
+    let dist1 = ChiSquared::new(df1).unwrap();
+    let dist2 = ChiSquared::new(df2).unwrap();
+    let p1 = dist1.sf(delta1);
+    let p2 = dist2.sf(delta2.max(0.0));
+
+    // Use the more conservative (lower) p-value of the two serial statistics.
+    let p = p1.min(p2);
     TestResult {
         name: name.to_string(),
         passed: TestResult::pass_from_p(Some(p), 0.01),
         p_value: Some(p),
         statistic: delta1,
-        details: format!("m={m}, n_bits={n}"),
+        details: format!("m={m}, n_bits={n}, p1={p1:.4}, p2={p2:.4}"),
         grade: TestResult::grade_from_p(Some(p)),
     }
 }

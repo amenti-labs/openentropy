@@ -1,4 +1,7 @@
-pub fn run(refresh: f64, source_filter: Option<&str>) {
+pub fn run(refresh: f64, source_filter: Option<&str>, include_telemetry: bool) {
+    if super::telemetry::print_snapshot_if_enabled(include_telemetry, "monitor-startup").is_some() {
+        println!();
+    }
     // Monitor exposes the full source catalog so users can interactively
     // select any source (including slow sensor sources) at runtime.
     let pool = match source_filter {

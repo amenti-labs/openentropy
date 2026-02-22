@@ -56,8 +56,7 @@ static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
               encodes the phase difference between two independent oscillators. \
               Entropy arises from independent \
               Johnson-Nyquist thermal noise in each crystal's sustaining amplifier. \
-              The raw physical signal is preserved for statistical analysis.
-              raw physical signal for statistical analysis.",
+              The raw physical signal is preserved for statistical analysis.",
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AppleSilicon, Requirement::AudioUnit],
