@@ -25,8 +25,9 @@ use openentropy_core::conditioning::{
 };
 use openentropy_core::source::EntropySource;
 use openentropy_core::sources::quantum::{
-    quantum_fraction, AvalancheNoiseSource, CosmicMuonSource, MultiSourceQuantumSource,
-    RadioactiveDecaySource, SSDTunnelingSource, VacuumFluctuationsSource,
+    quantum_fraction, CosmicMuonSource, MultiSourceQuantumSource,
+    RadioactiveDecaySource, NvmeIokitSensorsSource, NvmeSmartThermalSource,
+    NvmeRawDeviceSource, NvmePassthroughLinuxSource,
 };
 use serde::{Deserialize, Serialize};
 
@@ -36,29 +37,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SourceResult {
-    /// Source name
     name: String,
-    /// Whether source is available on this system
     available: bool,
-    /// Bytes collected (0 if unavailable or failed)
     bytes_collected: usize,
-    /// Collection time in seconds
     collection_time_sec: f64,
-    /// Throughput in bytes/second (0 if unavailable)
     throughput_bps: f64,
-    /// Shannon entropy (bits/byte, max 8.0)
     shannon_entropy: f64,
-    /// Min-entropy H-infinity (bits/byte, max 8.0)
     min_entropy: f64,
-    /// Statistical quality score (0-100%)
     quality_score: f64,
-    /// Grade (A-F based on min-entropy)
     grade: char,
-    /// Estimated quantum fraction based on physics (0.0-1.0)
     quantum_fraction: f64,
-    /// Min-entropy report details
     entropy_report: Option<EntropyReportJson>,
-    /// Error message if collection failed
     error: Option<String>,
 }
 
@@ -95,29 +84,19 @@ impl From<&MinEntropyReport> for EntropyReportJson {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BenchmarkReport {
-    /// Unix timestamp when benchmark was run
     generated_unix: u64,
-    /// Number of samples collected per source
     samples_per_source: usize,
-    /// All quantum source results
     quantum_sources: Vec<SourceResult>,
-    /// Baseline results (urandom, PRNG)
     baselines: Vec<SourceResult>,
-    /// Summary statistics
     summary: BenchmarkSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BenchmarkSummary {
-    /// Best quantum source by min-entropy
     best_quantum_by_entropy: String,
-    /// Best quantum source by throughput
     best_quantum_by_throughput: String,
-    /// Average quantum fraction across available quantum sources
     avg_quantum_fraction: f64,
-    /// Key insight: can statistical tests distinguish quantum from PRNG?
     statistical_tests_can_distinguish: bool,
-    /// Explanation of results
     explanation: String,
 }
 
@@ -125,7 +104,6 @@ struct BenchmarkSummary {
 // Baseline sources
 // =============================================================================
 
-/// /dev/urandom baseline - cryptographically secure PRNG from OS
 fn collect_urandom(n: usize) -> Vec<u8> {
     let mut buf = vec![0u8; n];
     match File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut buf)) {
@@ -134,10 +112,7 @@ fn collect_urandom(n: usize) -> Vec<u8> {
     }
 }
 
-/// Python-style PRNG baseline (Mersenne Twister equivalent)
-/// This proves that statistical tests score PRNGs just as high as quantum!
 fn collect_prng(n: usize) -> Vec<u8> {
-    // Simple xorshift64* PRNG - same statistical quality as Python's MT
     let mut state = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -145,7 +120,6 @@ fn collect_prng(n: usize) -> Vec<u8> {
 
     let mut result = Vec::with_capacity(n);
     for _ in 0..n {
-        // xorshift64*
         state ^= state >> 12;
         state ^= state << 25;
         state ^= state >> 27;
@@ -237,7 +211,6 @@ fn benchmark_baseline(name: &str, data: Vec<u8>, collection_time_sec: f64) -> So
     let throughput = if collection_time_sec > 0.0 {
         data.len() as f64 / collection_time_sec
     } else {
-        // Assume instant for synthetic sources
         data.len() as f64 * 1000.0
     };
 
@@ -257,7 +230,7 @@ fn benchmark_baseline(name: &str, data: Vec<u8>, collection_time_sec: f64) -> So
         min_entropy: min_ent,
         quality_score: quality.quality_score,
         grade,
-        quantum_fraction: 0.0, // Baselines are NOT quantum
+        quantum_fraction: 0.0,
         entropy_report: Some(EntropyReportJson::from(&entropy_report)),
         error: None,
     }
@@ -356,20 +329,13 @@ fn print_key_insight() {
     println!("  The 'Quantum%' column is based on PHYSICS arguments, not tests:");
     println!("  - Radioactive decay: Nuclear timing is fundamentally unpredictable (99%)");
     println!("  - Cosmic muons: Particle physics from space (95%)");
-    println!("  - SSD tunneling: Fowler-Nordheim electron tunneling (74%)");
-    println!("  - Avalanche noise: Quantum impact ionization (70%)");
-    println!("  - Vacuum fluctuations: Zero-point energy (65%)");
-    println!("  - Multi-source XOR: Combined purity ~90%");
+    println!("  - NVMe passthrough: Closest to NAND quantum physics from userspace (45%)");
+    println!("  - NVMe raw device: Bypasses filesystem for closer NAND timing (40%)");
+    println!("  - NVMe SMART thermal: ADC Johnson-Nyquist noise (35%)");
+    println!("  - NVMe IOKit sensors: Clock domain crossing jitter (30%)");
     println!();
     println!("  Only BELL INEQUALITY TESTS can CERTIFY quantum randomness - and those");
     println!("  require entangled photon pairs and specialized equipment.");
-    println!();
-    println!("  This is why commercial QRNGs (Intel RDRAND, ID Quantique) combine:");
-    println!("    1. A quantum noise source (physics-based)");
-    println!("    2. A cryptographic conditioner (SHA-256 or AES)");
-    println!();
-    println!("  The conditioner ensures output passes all statistical tests, while");
-    println!("  the quantum source provides the fundamental unpredictability.");
 }
 
 // =============================================================================
@@ -377,18 +343,11 @@ fn print_key_insight() {
 // =============================================================================
 
 fn main() {
-    let n_samples = 4096; // Samples per source
+    let n_samples = 4096;
 
     println!();
-    println!("  ____                                    _   ");
-    println!(" / __ \\                                  | |  ");
-    println!("| |  | |_   _ _ __ ___  _ __ ___  __ _  __| |  ");
-    println!("| |  | | | | | '_ ` _ \\| '_ ` _ \\/ _` |/ _` |  ");
-    println!("| |__| | |_| | | | | | | | | | | | (_| | (_| |  ");
-    println!(" \\___\\_\\\\__,_|_| |_| |_|_| |_| |_|\\__,_|\\__,_|  ");
-    println!();
-    println!("  Unified Quantum Entropy Source Benchmark");
-    println!("  OpenEntropy Project");
+    println!("  OpenEntropy Quantum Source Benchmark");
+    println!("  ====================================");
     println!();
 
     let timestamp = SystemTime::now()
@@ -404,55 +363,51 @@ fn main() {
 
     let mut quantum_results: Vec<SourceResult> = Vec::new();
 
-    // Cosmic muon (requires camera + ffmpeg)
-    println!("\n[1/6] Testing cosmic_muon...");
+    println!("\n[1/7] Testing cosmic_muon...");
     quantum_results.push(benchmark_source(
         CosmicMuonSource,
         n_samples,
         quantum_fraction("cosmic_muon"),
     ));
 
-    // SSD tunneling
-    println!("[2/6] Testing ssd_tunneling...");
-    quantum_results.push(benchmark_source(
-        SSDTunnelingSource::default(),
-        n_samples,
-        quantum_fraction("ssd_tunneling"),
-    ));
-
-    // Radioactive decay (requires camera + ffmpeg)
-    println!("[3/6] Testing radioactive_decay...");
+    println!("[2/7] Testing radioactive_decay...");
     quantum_results.push(benchmark_source(
         RadioactiveDecaySource,
         n_samples,
         quantum_fraction("radioactive_decay"),
     ));
 
-    // Avalanche noise
-    println!("[4/6] Testing avalanche_noise...");
+    println!("[3/7] Testing nvme_iokit_sensors...");
     quantum_results.push(benchmark_source(
-        AvalancheNoiseSource::default(),
+        NvmeIokitSensorsSource,
         n_samples,
-        quantum_fraction("avalanche_noise"),
+        quantum_fraction("nvme_iokit_sensors"),
     ));
 
-    // Vacuum fluctuations
-    println!("[5/6] Testing vacuum_fluctuations...");
+    println!("[4/7] Testing nvme_smart_thermal...");
     quantum_results.push(benchmark_source(
-        VacuumFluctuationsSource::default(),
+        NvmeSmartThermalSource,
         n_samples,
-        quantum_fraction("vacuum_fluctuations"),
+        quantum_fraction("nvme_smart_thermal"),
     ));
 
-    // Multi-source quantum (XOR combined)
-    println!("[6/6] Testing multi_source_quantum...");
-    let mut multi = MultiSourceQuantumSource::new();
-    multi.add_source(SSDTunnelingSource::default());
-    multi.add_source(AvalancheNoiseSource::default());
-    multi.add_source(VacuumFluctuationsSource::default());
-    // Note: Camera sources may not be available
+    println!("[5/7] Testing nvme_raw_device...");
     quantum_results.push(benchmark_source(
-        multi,
+        NvmeRawDeviceSource,
+        n_samples,
+        quantum_fraction("nvme_raw_device"),
+    ));
+
+    println!("[6/7] Testing nvme_passthrough_linux...");
+    quantum_results.push(benchmark_source(
+        NvmePassthroughLinuxSource,
+        n_samples,
+        quantum_fraction("nvme_passthrough_linux"),
+    ));
+
+    println!("[7/7] Testing multi_source_quantum...");
+    quantum_results.push(benchmark_source(
+        MultiSourceQuantumSource::new(),
         n_samples,
         quantum_fraction("multi_source_quantum"),
     ));
@@ -467,14 +422,12 @@ fn main() {
 
     let mut baseline_results: Vec<SourceResult> = Vec::new();
 
-    // /dev/urandom
     println!("\n[B1/2] Testing /dev/urandom...");
     let start = Instant::now();
     let urandom_data = collect_urandom(n_samples);
     let urandom_time = start.elapsed().as_secs_f64();
     baseline_results.push(benchmark_baseline("/dev/urandom", urandom_data, urandom_time));
 
-    // PRNG (Mersenne Twister style)
     println!("[B2/2] Testing prng (xorshift64*)...");
     let prng_data = collect_prng(n_samples);
     baseline_results.push(benchmark_baseline("prng_xorshift", prng_data, 0.0));
@@ -485,7 +438,6 @@ fn main() {
     // Print detailed analysis
     // =========================================================================
 
-    // Only show details for sources that collected data
     let all_with_data: Vec<_> = quantum_results
         .iter()
         .chain(baseline_results.iter())
@@ -495,10 +447,6 @@ fn main() {
     if !all_with_data.is_empty() {
         print_entropy_details(&all_with_data.clone().into_iter().cloned().collect::<Vec<_>>());
     }
-
-    // =========================================================================
-    // Print key insight
-    // =========================================================================
 
     print_key_insight();
 
@@ -530,7 +478,6 @@ fn main() {
             / available_quantum.len() as f64
     };
 
-    // Check if baselines have similar entropy to quantum
     let quantum_avg_entropy = if available_quantum.is_empty() {
         0.0
     } else {
@@ -569,10 +516,6 @@ fn main() {
     println!("  Average quantum fraction:     {:.1}%", summary.avg_quantum_fraction * 100.0);
     println!();
     println!("  {}", summary.explanation);
-
-    // =========================================================================
-    // Save JSON report
-    // =========================================================================
 
     let report = BenchmarkReport {
         generated_unix: timestamp,

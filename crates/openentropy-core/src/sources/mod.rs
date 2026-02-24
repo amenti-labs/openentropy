@@ -2,7 +2,7 @@
 //!
 //! ## Source Categories
 //!
-//! - **Quantum**: TRUE quantum randomness (cosmic muons, tunneling, decay)
+//! - **Quantum**: Hardware entropy with documented quantum components
 //! - **Thermal**: Johnson-Nyquist noise in oscillators
 //! - **Timing**: Clock jitter, scheduler noise
 //! - **System**: Kernel counters, process state
@@ -31,8 +31,11 @@ pub mod timing;
 pub mod vmstat;
 pub mod wifi;
 
-// QUANTUM sources - TRUE quantum randomness from consumer hardware
+// QUANTUM sources - hardware entropy with documented quantum components
 pub mod quantum;
+
+// PRNG control source for consciousness experiments
+pub mod prng_control;
 
 use crate::source::EntropySource;
 
@@ -100,12 +103,20 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: independent oscillator/PLL sources (2026-02-15)
         Box::new(frontier::DisplayPllSource),
         Box::new(frontier::PciePllSource),
-        // QUANTUM sources - TRUE quantum randomness (2026-02-19)
-        Box::new(quantum::SSDTunnelingSource::default()),
+        // Frontier: novel hardware domain sources (2026-02-22)
+        Box::new(frontier::AneTimingSource),
+        Box::new(frontier::ImuNoiseSource),
+        Box::new(frontier::SmcPowerSource),
+        // QUANTUM sources (2026-02-19)
         Box::new(quantum::CosmicMuonSource),
         Box::new(quantum::RadioactiveDecaySource),
-        Box::new(quantum::AvalancheNoiseSource::default()),
-        Box::new(quantum::VacuumFluctuationsSource::default()),
         Box::new(quantum::MultiSourceQuantumSource::new()),
+        // QUANTUM: NVMe kernel-level entropy sources (2026-02-22)
+        Box::new(quantum::NvmeIokitSensorsSource),
+        Box::new(quantum::NvmeSmartThermalSource),
+        Box::new(quantum::NvmeRawDeviceSource),
+        Box::new(quantum::NvmePassthroughLinuxSource),
+        // PRNG control (negative control for consciousness experiments)
+        Box::new(prng_control::PrngControlSource::default()),
     ]
 }

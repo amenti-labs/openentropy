@@ -43,6 +43,23 @@
 
 pub mod analysis;
 pub mod conditioning;
+pub mod consciousness;
+pub mod consciousness_anomaly;
+pub mod consciousness_conformal;
+pub mod consciousness_conformal_evalue;
+pub mod consciousness_dat;
+pub mod consciousness_env;
+pub mod consciousness_evalue;
+pub mod consciousness_ml;
+pub mod consciousness_ordinal;
+pub mod consciousness_prereg;
+pub mod consciousness_retrocausal;
+pub mod consciousness_rqa;
+pub mod consciousness_stats;
+pub mod consciousness_surrogate;
+pub mod consciousness_temporal;
+pub mod consciousness_topology;
+pub mod consciousness_transfer;
 pub mod platform;
 pub mod pool;
 pub mod session;

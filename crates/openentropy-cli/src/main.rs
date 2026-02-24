@@ -229,6 +229,220 @@ enum Commands {
         output: Option<String>,
     },
 
+    /// Run a consciousness-RNG experiment (PEAR Lab tripolar protocol).
+    /// Tests whether focused human intention can influence hardware RNG output.
+    /// Uses per-source differential analysis unique to OpenEntropy.
+    ///
+    /// Modes: standard (tripolar), spectroscopy (cross-domain), structure (info-theoretic),
+    /// coherence (cross-source correlation).
+    Consciousness {
+        /// Comma-separated source name filter, or "all"
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Number of trials per phase (default: 50)
+        #[arg(long, default_value = "50")]
+        trials: usize,
+
+        /// Bits per trial (default: 200, PEAR Lab standard)
+        #[arg(long, default_value = "200")]
+        bits: usize,
+
+        /// Milliseconds between trials (default: 1000 = 1 Hz)
+        #[arg(long, default_value = "1000")]
+        interval: u64,
+
+        /// Write experiment results as JSON
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Quick mode: 10 trials per phase for testing
+        #[arg(long)]
+        quick: bool,
+
+        /// Experiment mode
+        #[arg(long, default_value = "standard", value_parser = ["standard", "spectroscopy", "structure", "coherence", "temporal", "adversarial", "feedback", "anomaly", "retrocausal"])]
+        mode: String,
+
+        /// Number of epochs for structure/coherence/anomaly modes (default: 5)
+        #[arg(long, default_value = "5")]
+        epochs: usize,
+
+        /// Duration of each epoch in seconds (default: 30)
+        #[arg(long, default_value = "30")]
+        epoch_duration: u64,
+
+        /// Double-blind: randomize and hide intention direction from operator
+        #[arg(long)]
+        double_blind: bool,
+
+        /// Pre-register experiment parameters (generates hash before experiment)
+        #[arg(long)]
+        preregister: bool,
+
+        /// Operator name for profile tracking across sessions
+        #[arg(long)]
+        operator: Option<String>,
+
+        /// Launch TUI dashboard with live Z-score visualization
+        #[arg(long)]
+        tui: bool,
+
+        /// Enable e-value reporting (anytime-valid inference alongside p-values)
+        #[arg(long)]
+        evalue: bool,
+
+        /// Run deep analysis: topology, RQA, ordinal patterns, DAT model, conformal prediction
+        #[arg(long)]
+        deep_analysis: bool,
+
+        /// Run surrogate permutation tests for deep analysis (N = number of surrogates, e.g. 100)
+        #[arg(long)]
+        surrogate: Option<usize>,
+
+        /// Transfer entropy embedding order for multi-lag coupling detection (default: 1)
+        #[arg(long)]
+        te_order: Option<usize>,
+
+        /// Load/save conformal calibration file for cross-session baseline accumulation
+        #[arg(long)]
+        calibration_file: Option<String>,
+    },
+
+    /// Run N consciousness experiment sessions back-to-back with automatic meta-analysis.
+    /// Accumulates statistical power over extended testing periods.
+    ConsciousnessBatch {
+        /// Number of sessions to run (default: 10)
+        #[arg(long, default_value = "10")]
+        sessions: usize,
+
+        /// Comma-separated source name filter, or "all"
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Trials per phase per session (default: 50)
+        #[arg(long, default_value = "50")]
+        trials: usize,
+
+        /// Bits per trial (default: 200)
+        #[arg(long, default_value = "200")]
+        bits: usize,
+
+        /// Milliseconds between trials (default: 1000)
+        #[arg(long, default_value = "1000")]
+        interval: u64,
+
+        /// Quick mode: 10 trials per phase
+        #[arg(long)]
+        quick: bool,
+
+        /// Rest period between sessions in seconds (default: 10)
+        #[arg(long, default_value = "10")]
+        rest: u64,
+
+        /// Output directory for per-session JSON and meta-analysis
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Operator name for profile tracking
+        #[arg(long)]
+        operator: Option<String>,
+    },
+
+    /// Networked multi-operator adversarial consciousness experiment.
+    /// One machine hosts the experiment, remote operators connect via TCP.
+    ConsciousnessNetwork {
+        /// Run as host (server) collecting entropy and coordinating experiment
+        #[arg(long)]
+        host: bool,
+
+        /// Connect to a remote host (e.g. "192.168.1.10:9042")
+        #[arg(long)]
+        connect: Option<String>,
+
+        /// Port for hosting (default: 9042)
+        #[arg(long, default_value = "9042")]
+        port: u16,
+
+        /// Operator name
+        #[arg(long, default_value = "anonymous")]
+        name: String,
+
+        /// Comma-separated source name filter (host only)
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Trials per phase (default: 50)
+        #[arg(long, default_value = "50")]
+        trials: usize,
+
+        /// Bits per trial (default: 200)
+        #[arg(long, default_value = "200")]
+        bits: usize,
+
+        /// Milliseconds between trials (default: 1000)
+        #[arg(long, default_value = "1000")]
+        interval: u64,
+
+        /// Quick mode: 10 trials per phase
+        #[arg(long)]
+        quick: bool,
+
+        /// Max operators to wait for before starting (default: 2)
+        #[arg(long, default_value = "2")]
+        max_operators: usize,
+
+        /// Write experiment results as JSON
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Meta-analyze multiple consciousness experiment JSON files.
+    /// Computes combined Stouffer Z, forest plot, and per-source cross-session analysis.
+    ConsciousnessMeta {
+        /// JSON result files to analyze
+        files: Vec<String>,
+
+        /// Write combined meta-analysis as JSON
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Long-running entropic weather station.
+    /// Continuously monitors entropy source behavior over hours/days.
+    ConsciousnessWeather {
+        /// Comma-separated source name filter, or "all"
+        #[arg(long)]
+        sources: Option<String>,
+
+        /// Total duration in seconds (0 = indefinite, Ctrl+C to stop)
+        #[arg(long, default_value = "0")]
+        duration: u64,
+
+        /// Seconds between epochs (default: 60)
+        #[arg(long, default_value = "60")]
+        interval: u64,
+
+        /// Bits per epoch (default: 200)
+        #[arg(long, default_value = "200")]
+        bits: usize,
+
+        /// Write results as JSON
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// View operator consciousness experiment profile.
+    /// Shows session history, per-source responsiveness, and cumulative effect sizes.
+    ConsciousnessProfile {
+        /// Operator name to view
+        operator: String,
+
+        /// Directory for profile storage (default: consciousness_profiles)
+        #[arg(long)]
+        dir: Option<String>,
+    },
+
     /// Start an HTTP entropy server (ANU QRNG API compatible)
     Server {
         /// Port to listen on
@@ -350,6 +564,126 @@ fn main() {
             entropy,
             output.as_deref(),
         ),
+        Commands::Consciousness {
+            sources,
+            trials,
+            bits,
+            interval,
+            output,
+            quick,
+            mode,
+            epochs,
+            epoch_duration,
+            double_blind,
+            preregister,
+            operator,
+            tui,
+            evalue,
+            deep_analysis,
+            surrogate,
+            te_order,
+            calibration_file,
+        } => {
+            let config = commands::consciousness::ConsciousnessCommandConfig {
+                source_filter: sources.as_deref(),
+                trials,
+                bits,
+                interval_ms: interval,
+                output_path: output.as_deref(),
+                quick,
+                mode: openentropy_core::consciousness::ExperimentMode::from_str(&mode),
+                epochs,
+                epoch_duration_secs: epoch_duration,
+                double_blind,
+                preregister,
+                operator: operator.as_deref(),
+                evalue,
+                deep_analysis,
+                surrogate_n: surrogate.unwrap_or(0),
+                te_order: te_order.unwrap_or(1),
+                calibration_file: calibration_file.as_deref(),
+            };
+            if tui {
+                commands::consciousness::run_with_tui(config);
+            } else {
+                commands::consciousness::run(config);
+            }
+        }
+        Commands::ConsciousnessBatch {
+            sessions,
+            sources,
+            trials,
+            bits,
+            interval,
+            quick,
+            rest,
+            output,
+            operator,
+        } => commands::consciousness_batch::run(commands::consciousness_batch::BatchConfig {
+            sessions,
+            source_filter: sources.as_deref(),
+            trials,
+            bits,
+            interval_ms: interval,
+            quick,
+            rest_secs: rest,
+            output_dir: output.as_deref(),
+            operator: operator.as_deref(),
+        }),
+        Commands::ConsciousnessNetwork {
+            host,
+            connect,
+            port,
+            name,
+            sources,
+            trials,
+            bits,
+            interval,
+            quick,
+            max_operators,
+            output,
+        } => commands::consciousness_network::run(commands::consciousness_network::NetworkConfig {
+            host,
+            connect: connect.as_deref(),
+            port,
+            name: &name,
+            source_filter: sources.as_deref(),
+            trials,
+            bits,
+            interval_ms: interval,
+            quick,
+            max_operators,
+            output_path: output.as_deref(),
+        }),
+        Commands::ConsciousnessMeta { files, output } => {
+            commands::consciousness_meta::run(commands::consciousness_meta::MetaAnalyzeConfig {
+                files: &files,
+                output_path: output.as_deref(),
+            })
+        }
+        Commands::ConsciousnessWeather {
+            sources,
+            duration,
+            interval,
+            bits,
+            output,
+        } => commands::consciousness_weather::run(
+            commands::consciousness_weather::WeatherConfig {
+                source_filter: sources.as_deref(),
+                duration_secs: duration,
+                epoch_interval_secs: interval,
+                output_path: output.as_deref(),
+                bits_per_epoch: bits,
+            },
+        ),
+        Commands::ConsciousnessProfile { operator, dir } => {
+            commands::consciousness_profile::run(
+                commands::consciousness_profile::ProfileConfig {
+                    operator: &operator,
+                    dir: dir.as_deref(),
+                },
+            )
+        }
         Commands::Server {
             port,
             host,

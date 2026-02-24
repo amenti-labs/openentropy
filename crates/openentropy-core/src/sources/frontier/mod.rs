@@ -56,6 +56,9 @@ mod pipe_buffer;
 mod thread_lifecycle;
 mod tlb_shootdown;
 mod usb_timing;
+mod ane_timing;
+mod imu_noise;
+mod smc_power;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
@@ -78,6 +81,9 @@ pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
 pub use usb_timing::USBTimingSource;
+pub use ane_timing::AneTimingSource;
+pub use imu_noise::ImuNoiseSource;
+pub use smc_power::SmcPowerSource;
 
 // ---------------------------------------------------------------------------
 // Shared extraction helpers (used by multiple frontier sources)
@@ -226,6 +232,9 @@ mod tests {
             Box::new(CounterBeatSource),
             Box::new(DisplayPllSource),
             Box::new(PciePllSource),
+            Box::new(AneTimingSource),
+            Box::new(ImuNoiseSource),
+            Box::new(SmcPowerSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

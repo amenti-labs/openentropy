@@ -42,18 +42,12 @@ pub enum ChartMode {
     RandomWalk,
     ByteDistribution,
     Autocorrelation,
-    /// SSD tunneling visualization (quantum source only)
-    SsdTunneling,
     /// Cosmic muon detection visualization (quantum source only)
     CosmicMuon,
     /// Camera shot-noise visualization (quantum-origin sensor source)
     CameraShotNoise,
     /// Radioactive decay visualization (quantum source only)
     RadioactiveDecay,
-    /// Avalanche noise visualization (quantum source only)
-    AvalancheNoise,
-    /// Vacuum fluctuations visualization (quantum source only)
-    VacuumFluctuations,
     /// Multi-source XOR visualization (quantum source only)
     MultiSourceQuantum,
 }
@@ -67,13 +61,10 @@ impl ChartMode {
             Self::OutputValue => Self::RandomWalk,
             Self::RandomWalk => Self::ByteDistribution,
             Self::ByteDistribution => Self::Autocorrelation,
-            Self::Autocorrelation => Self::SsdTunneling,
-            Self::SsdTunneling => Self::CosmicMuon,
+            Self::Autocorrelation => Self::CosmicMuon,
             Self::CosmicMuon => Self::CameraShotNoise,
             Self::CameraShotNoise => Self::RadioactiveDecay,
-            Self::RadioactiveDecay => Self::AvalancheNoise,
-            Self::AvalancheNoise => Self::VacuumFluctuations,
-            Self::VacuumFluctuations => Self::MultiSourceQuantum,
+            Self::RadioactiveDecay => Self::MultiSourceQuantum,
             Self::MultiSourceQuantum => Self::Shannon,
         }
     }
@@ -83,12 +74,9 @@ impl ChartMode {
     pub fn is_quantum_mode(self) -> bool {
         matches!(
             self,
-            Self::SsdTunneling
-                | Self::CosmicMuon
+            Self::CosmicMuon
                 | Self::CameraShotNoise
                 | Self::RadioactiveDecay
-                | Self::AvalancheNoise
-                | Self::VacuumFluctuations
                 | Self::MultiSourceQuantum
         )
     }
@@ -96,12 +84,9 @@ impl ChartMode {
     /// Check if this mode is appropriate for the given source name
     pub fn is_applicable_for(self, source_name: &str) -> bool {
         match self {
-            Self::SsdTunneling => source_name == "ssd_tunneling",
             Self::CosmicMuon => source_name == "cosmic_muon",
             Self::CameraShotNoise => source_name == "camera_noise",
             Self::RadioactiveDecay => source_name == "radioactive_decay",
-            Self::AvalancheNoise => source_name == "avalanche_noise",
-            Self::VacuumFluctuations => source_name == "vacuum_fluctuations",
             Self::MultiSourceQuantum => source_name == "multi_source_quantum",
             _ => true,
         }
@@ -116,12 +101,9 @@ impl ChartMode {
             Self::RandomWalk => "Random walk",
             Self::ByteDistribution => "Byte dist",
             Self::Autocorrelation => "Autocorrelation",
-            Self::SsdTunneling => "SSD Tunneling",
             Self::CosmicMuon => "Cosmic Muon",
             Self::CameraShotNoise => "Camera Shot Noise",
             Self::RadioactiveDecay => "Radioactive Decay",
-            Self::AvalancheNoise => "Avalanche Noise",
-            Self::VacuumFluctuations => "Vacuum Fluctuations",
             Self::MultiSourceQuantum => "Multi-Source XOR",
         }
     }
@@ -134,12 +116,9 @@ impl ChartMode {
             Self::RandomWalk => "sum",
             Self::ByteDistribution => "count",
             Self::Autocorrelation => "r",
-            Self::SsdTunneling => "tunneling",
             Self::CosmicMuon => "events",
             Self::CameraShotNoise => "pixels",
             Self::RadioactiveDecay => "events",
-            Self::AvalancheNoise => "bursts",
-            Self::VacuumFluctuations => "fluct",
             Self::MultiSourceQuantum => "mix",
         }
     }
@@ -154,12 +133,9 @@ impl ChartMode {
             Self::RandomWalk => "Cumulative bias detector",
             Self::ByteDistribution => "Byte value histogram",
             Self::Autocorrelation => "Sequential independence check",
-            Self::SsdTunneling => "Fowler-Nordheim quantum electron tunneling",
             Self::CosmicMuon => "Cosmic ray muon detection via camera",
             Self::CameraShotNoise => "Camera sensor shot-noise lattice",
             Self::RadioactiveDecay => "Ionizing decay event stream via camera sensor",
-            Self::AvalancheNoise => "PN-junction breakdown burst behavior",
-            Self::VacuumFluctuations => "Zero-point fluctuation proxy stream",
             Self::MultiSourceQuantum => "XOR-mixed quantum stream composition",
         }
     }
@@ -209,12 +185,6 @@ impl ChartMode {
                 "|r| above 0.3 = concerning dependency between consecutive samples.",
                 "Persistent non-zero correlation = the source has memory/structure.",
             ],
-            Self::SsdTunneling => &[
-                "Visualizes Fowler-Nordheim quantum tunneling in SSD NAND flash.",
-                "Electrons tunnel through ~7nm oxide barriers onto floating gates.",
-                "'e' markers show tunneling events with quantum probability.",
-                "Each tunnel event is fundamentally unpredictable (Heisenberg).",
-            ],
             Self::CosmicMuon => &[
                 "Detects cosmic ray muons passing through camera sensor pixels.",
                 "Muons are created ~15km up when cosmic rays hit the atmosphere.",
@@ -232,18 +202,6 @@ impl ChartMode {
                 "Pulse timing is the entropy signal; inter-arrival is modeled as stochastic.",
                 "Shows event stream movement and whether bits are changing per cycle.",
                 "Use dark frames + shielding context for cleaner decay-like event detection.",
-            ],
-            Self::AvalancheNoise => &[
-                "Visualizes avalanche noise bursts from breakdown-like behavior proxies.",
-                "Avalanche processes produce clustered, high-gain shot-noise spikes.",
-                "Lane bars show where bit energy concentrates over recent samples.",
-                "Useful for spotting stuck lanes or over-smooth pseudo-random patterns.",
-            ],
-            Self::VacuumFluctuations => &[
-                "Visualizes a zero-point proxy as a bipolar fluctuation stream.",
-                "Bitstream is converted to +/- steps to expose drift and zero crossings.",
-                "Healthy noise should wander around zero without long deterministic runs.",
-                "Use this as a heuristic; certification still requires dedicated hardware.",
             ],
             Self::MultiSourceQuantum => &[
                 "Visualizes XOR-combined output from multiple quantum-inspired sources.",
@@ -264,12 +222,9 @@ impl ChartMode {
             Self::RandomWalk
             | Self::ByteDistribution
             | Self::Autocorrelation
-            | Self::SsdTunneling
             | Self::CosmicMuon
             | Self::CameraShotNoise
             | Self::RadioactiveDecay
-            | Self::AvalancheNoise
-            | Self::VacuumFluctuations
             | Self::MultiSourceQuantum => 0.0,
         }
     }
@@ -291,12 +246,9 @@ impl ChartMode {
                 (-bound, bound)
             }
             Self::ByteDistribution
-            | Self::SsdTunneling
             | Self::CosmicMuon
             | Self::CameraShotNoise
             | Self::RadioactiveDecay
-            | Self::AvalancheNoise
-            | Self::VacuumFluctuations
             | Self::MultiSourceQuantum => {
                 unreachable!()
             }
@@ -383,12 +335,9 @@ pub fn next_conditioning(mode: ConditioningMode) -> ConditioningMode {
 
 fn preferred_chart_mode_for_source(source_name: &str) -> ChartMode {
     match source_name {
-        "ssd_tunneling" => ChartMode::SsdTunneling,
         "cosmic_muon" => ChartMode::CosmicMuon,
         "camera_noise" => ChartMode::CameraShotNoise,
         "radioactive_decay" => ChartMode::RadioactiveDecay,
-        "avalanche_noise" => ChartMode::AvalancheNoise,
-        "vacuum_fluctuations" => ChartMode::VacuumFluctuations,
         "multi_source_quantum" => ChartMode::MultiSourceQuantum,
         _ => ChartMode::RandomWalk,
     }
@@ -411,9 +360,6 @@ pub struct Sample {
 // Quantum visualization state
 // ---------------------------------------------------------------------------
 
-/// Maximum number of tunneling events to keep for visualization
-const MAX_TUNNEL_EVENTS: usize = 100;
-
 /// Maximum number of muon hits to keep for visualization
 const MAX_MUON_HITS: usize = 50;
 
@@ -422,17 +368,6 @@ const MAX_STREAM_BYTES: usize = 32;
 
 /// Keep latest raw bits visible in quantum visualization panels.
 const MAX_STREAM_BITS: usize = 256;
-
-/// A single SSD tunneling event for visualization
-#[derive(Debug, Clone, Copy)]
-pub struct TunnelEvent {
-    /// Cell column (0-7 for 8-bit representation)
-    pub col: usize,
-    /// Cycle when this event occurred
-    pub cycle: u64,
-    /// Raw-byte-derived signal marker for this event
-    pub timing_delta: u64,
-}
 
 /// A single muon hit for visualization
 #[derive(Debug, Clone, Copy)]
@@ -445,31 +380,6 @@ pub struct MuonHit {
     pub intensity: u8,
     /// Cycle when this event occurred
     pub cycle: u64,
-}
-
-/// State for SSD tunneling visualization
-#[derive(Debug, Clone, Default)]
-pub struct SsdTunnelingState {
-    /// Recent tunneling events
-    pub events: VecDeque<TunnelEvent>,
-    /// Current cell states (8 cells for visualization)
-    pub cell_states: [u8; 8],
-    /// Total events detected
-    pub total_events: u64,
-    /// Animation frame counter
-    pub frame: u64,
-    /// Latest raw bytes used to drive visualization
-    pub recent_bytes: VecDeque<u8>,
-    /// Latest raw bits used to drive visualization (0/1)
-    pub recent_bits: VecDeque<u8>,
-    /// Number of bits changed vs previous collection cycle
-    pub changed_bits_last: usize,
-    /// Number of consecutive cycles with identical raw bytes
-    pub repeat_streak: u64,
-    /// Fingerprint of recent stream tail (for quick visual comparison)
-    pub stream_fingerprint: u64,
-    /// Last cycle's raw bytes
-    pub last_cycle_bytes: Vec<u8>,
 }
 
 /// State for cosmic muon visualization
@@ -537,18 +447,12 @@ pub struct Snapshot {
     pub recording_samples: u64,
     /// Accumulated random walk values (cumulative sum across collections).
     pub walk: Vec<f64>,
-    /// SSD tunneling visualization state (for ssd_tunneling source)
-    pub ssd_tunneling: SsdTunnelingState,
     /// Cosmic muon visualization state (for cosmic_muon source)
     pub cosmic_muon: CosmicMuonState,
     /// Camera shot-noise visualization state
     pub camera_noise: QuantumFlowState,
     /// Radioactive decay visualization state
     pub radioactive_decay: QuantumFlowState,
-    /// Avalanche noise visualization state
-    pub avalanche_noise: QuantumFlowState,
-    /// Vacuum fluctuations visualization state
-    pub vacuum_fluctuations: QuantumFlowState,
     /// Multi-source quantum visualization state
     pub multi_source_quantum: QuantumFlowState,
 }
@@ -573,18 +477,12 @@ struct SharedState {
     walk: HashMap<String, Vec<f64>>,
     /// Session writer for TUI recording. Created when 'r' is pressed, dropped on stop.
     session_writer: Option<SessionWriter>,
-    /// SSD tunneling visualization state
-    ssd_tunneling: SsdTunnelingState,
     /// Cosmic muon visualization state
     cosmic_muon: CosmicMuonState,
     /// Camera shot-noise visualization state
     camera_noise: QuantumFlowState,
     /// Radioactive decay visualization state
     radioactive_decay: QuantumFlowState,
-    /// Avalanche noise visualization state
-    avalanche_noise: QuantumFlowState,
-    /// Vacuum fluctuations visualization state
-    vacuum_fluctuations: QuantumFlowState,
     /// Multi-source quantum visualization state
     multi_source_quantum: QuantumFlowState,
 }
@@ -646,12 +544,9 @@ impl App {
                 byte_freq: [0u64; 256],
                 walk: HashMap::new(),
                 session_writer: None,
-                ssd_tunneling: SsdTunnelingState::default(),
                 cosmic_muon: CosmicMuonState::default(),
                 camera_noise: QuantumFlowState::default(),
                 radioactive_decay: QuantumFlowState::default(),
-                avalanche_noise: QuantumFlowState::default(),
-                vacuum_fluctuations: QuantumFlowState::default(),
                 multi_source_quantum: QuantumFlowState::default(),
             })),
             collector_flag: Arc::new(AtomicBool::new(false)),
@@ -916,18 +811,12 @@ impl App {
 
                 // Update quantum visualization states
                 let cycle = s.cycle_count;
-                if active_name == "ssd_tunneling" {
-                    update_ssd_tunneling_state(&mut s.ssd_tunneling, &raw_bytes, cycle);
-                } else if active_name == "cosmic_muon" {
+                if active_name == "cosmic_muon" {
                     update_cosmic_muon_state(&mut s.cosmic_muon, &raw_bytes, cycle);
                 } else if active_name == "camera_noise" {
                     update_flow_state(&mut s.camera_noise, &raw_bytes);
                 } else if active_name == "radioactive_decay" {
                     update_flow_state(&mut s.radioactive_decay, &raw_bytes);
-                } else if active_name == "avalanche_noise" {
-                    update_flow_state(&mut s.avalanche_noise, &raw_bytes);
-                } else if active_name == "vacuum_fluctuations" {
-                    update_flow_state(&mut s.vacuum_fluctuations, &raw_bytes);
                 } else if active_name == "multi_source_quantum" {
                     update_flow_state(&mut s.multi_source_quantum, &raw_bytes);
                 }
@@ -1112,12 +1001,9 @@ impl App {
                 .and_then(|n| s.walk.get(n))
                 .cloned()
                 .unwrap_or_default(),
-            ssd_tunneling: s.ssd_tunneling.clone(),
             cosmic_muon: s.cosmic_muon.clone(),
             camera_noise: s.camera_noise.clone(),
             radioactive_decay: s.radioactive_decay.clone(),
-            avalanche_noise: s.avalanche_noise.clone(),
-            vacuum_fluctuations: s.vacuum_fluctuations.clone(),
             multi_source_quantum: s.multi_source_quantum.clone(),
         }
     }
@@ -1176,62 +1062,6 @@ fn update_flow_state(state: &mut QuantumFlowState, raw_bytes: &[u8]) {
     state.last_cycle_bytes.extend_from_slice(raw_bytes);
     append_stream(&mut state.recent_bytes, &mut state.recent_bits, raw_bytes);
     state.stream_fingerprint = stream_fingerprint(&state.recent_bytes);
-}
-
-/// Update SSD tunneling visualization state based on raw bytes.
-///
-/// Maps raw bits directly into per-cell tunneling activity.
-fn update_ssd_tunneling_state(state: &mut SsdTunnelingState, raw_bytes: &[u8], cycle: u64) {
-    state.frame = state.frame.wrapping_add(1);
-    state.changed_bits_last = count_bit_changes(raw_bytes, &state.last_cycle_bytes);
-    if raw_bytes == state.last_cycle_bytes.as_slice() {
-        state.repeat_streak = state.repeat_streak.saturating_add(1);
-    } else {
-        state.repeat_streak = 0;
-    }
-    state.last_cycle_bytes.clear();
-    state.last_cycle_bytes.extend_from_slice(raw_bytes);
-    append_stream(&mut state.recent_bytes, &mut state.recent_bits, raw_bytes);
-    state.stream_fingerprint = stream_fingerprint(&state.recent_bytes);
-
-    for charge in &mut state.cell_states {
-        *charge = charge.saturating_sub(1);
-    }
-
-    // Process each set bit as a visualized tunneling event.
-    for (i, &byte) in raw_bytes.iter().enumerate() {
-        for bit in 0..8 {
-            if (byte >> bit) & 1 == 1 {
-                let col = 7 - bit as usize;
-                let signal = ((i as u64) << 8) | byte as u64;
-
-                state.cell_states[col] = state.cell_states[col].saturating_add(16);
-                state.events.push_back(TunnelEvent {
-                    col,
-                    cycle,
-                    timing_delta: signal,
-                });
-                state.total_events += 1;
-            }
-        }
-    }
-
-    // If the stream is all zeros this cycle, add a weak decay marker so
-    // stale charge visibly drains instead of appearing frozen.
-    if raw_bytes.iter().all(|&b| b == 0) {
-        for col in 0..8 {
-            state.events.push_back(TunnelEvent {
-                col,
-                cycle,
-                timing_delta: 0,
-            });
-        }
-    }
-
-    // Trim old events
-    while state.events.len() > MAX_TUNNEL_EVENTS {
-        state.events.pop_front();
-    }
 }
 
 /// Update cosmic muon visualization state based on raw bytes.
@@ -1312,17 +1142,11 @@ mod tests {
         let mode = mode.next();
         assert_eq!(mode, ChartMode::Autocorrelation);
         let mode = mode.next();
-        assert_eq!(mode, ChartMode::SsdTunneling);
-        let mode = mode.next();
         assert_eq!(mode, ChartMode::CosmicMuon);
         let mode = mode.next();
         assert_eq!(mode, ChartMode::CameraShotNoise);
         let mode = mode.next();
         assert_eq!(mode, ChartMode::RadioactiveDecay);
-        let mode = mode.next();
-        assert_eq!(mode, ChartMode::AvalancheNoise);
-        let mode = mode.next();
-        assert_eq!(mode, ChartMode::VacuumFluctuations);
         let mode = mode.next();
         assert_eq!(mode, ChartMode::MultiSourceQuantum);
         let mode = mode.next();
@@ -1343,12 +1167,9 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.label(), "Random walk");
         assert_eq!(ChartMode::ByteDistribution.label(), "Byte dist");
         assert_eq!(ChartMode::Autocorrelation.label(), "Autocorrelation");
-        assert_eq!(ChartMode::SsdTunneling.label(), "SSD Tunneling");
         assert_eq!(ChartMode::CosmicMuon.label(), "Cosmic Muon");
         assert_eq!(ChartMode::CameraShotNoise.label(), "Camera Shot Noise");
         assert_eq!(ChartMode::RadioactiveDecay.label(), "Radioactive Decay");
-        assert_eq!(ChartMode::AvalancheNoise.label(), "Avalanche Noise");
-        assert_eq!(ChartMode::VacuumFluctuations.label(), "Vacuum Fluctuations");
         assert_eq!(ChartMode::MultiSourceQuantum.label(), "Multi-Source XOR");
     }
 
@@ -1362,12 +1183,9 @@ mod tests {
             ChartMode::RandomWalk,
             ChartMode::ByteDistribution,
             ChartMode::Autocorrelation,
-            ChartMode::SsdTunneling,
             ChartMode::CosmicMuon,
             ChartMode::CameraShotNoise,
             ChartMode::RadioactiveDecay,
-            ChartMode::AvalancheNoise,
-            ChartMode::VacuumFluctuations,
             ChartMode::MultiSourceQuantum,
         ] {
             assert!(
@@ -1386,12 +1204,9 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.y_label(), "sum");
         assert_eq!(ChartMode::ByteDistribution.y_label(), "count");
         assert_eq!(ChartMode::Autocorrelation.y_label(), "r");
-        assert_eq!(ChartMode::SsdTunneling.y_label(), "tunneling");
         assert_eq!(ChartMode::CosmicMuon.y_label(), "events");
         assert_eq!(ChartMode::CameraShotNoise.y_label(), "pixels");
         assert_eq!(ChartMode::RadioactiveDecay.y_label(), "events");
-        assert_eq!(ChartMode::AvalancheNoise.y_label(), "bursts");
-        assert_eq!(ChartMode::VacuumFluctuations.y_label(), "fluct");
         assert_eq!(ChartMode::MultiSourceQuantum.y_label(), "mix");
     }
 
@@ -1553,31 +1368,6 @@ mod tests {
         for w in SAMPLE_SIZES.windows(2) {
             assert!(w[0] < w[1], "SAMPLE_SIZES not sorted: {} >= {}", w[0], w[1]);
         }
-    }
-
-    #[test]
-    fn update_ssd_tunneling_tracks_bitstream_from_raw_bytes() {
-        let mut state = SsdTunnelingState::default();
-        update_ssd_tunneling_state(&mut state, &[0b1010_0001], 1);
-
-        let bits: Vec<u8> = state.recent_bits.iter().copied().collect();
-        assert_eq!(bits, vec![1, 0, 1, 0, 0, 0, 0, 1]);
-        assert_eq!(state.recent_bytes.back().copied(), Some(0b1010_0001));
-        assert!(!state.events.is_empty());
-        assert_eq!(state.changed_bits_last, 3);
-        assert_eq!(state.repeat_streak, 0);
-    }
-
-    #[test]
-    fn update_ssd_tunneling_repeat_detection() {
-        let mut state = SsdTunnelingState::default();
-        update_ssd_tunneling_state(&mut state, &[0xAA], 1);
-        let fp1 = state.stream_fingerprint;
-        update_ssd_tunneling_state(&mut state, &[0xAA], 2);
-        assert_eq!(state.changed_bits_last, 0);
-        assert!(state.repeat_streak >= 1);
-        assert_ne!(state.stream_fingerprint, 0);
-        assert_ne!(fp1, 0);
     }
 
     #[test]

@@ -1,5 +1,11 @@
 pub mod analyze;
 pub mod bench;
+pub mod consciousness;
+pub mod consciousness_batch;
+pub mod consciousness_meta;
+pub mod consciousness_network;
+pub mod consciousness_profile;
+pub mod consciousness_weather;
 pub mod device;
 pub mod monitor;
 pub mod record;
@@ -50,10 +56,13 @@ const FAST_SOURCES: &[&str] = &[
     "counter_beat",
     "display_pll",
     "pcie_pll",
-    // Fast quantum sources (camera-based quantum sources are opt-in via --sources all)
-    "ssd_tunneling",
-    "avalanche_noise",
-    "vacuum_fluctuations",
+    // Novel hardware domain sources (fast, < 0.1s)
+    "ane_timing",
+    "imu_noise",
+    "smc_power",
+    // PRNG control (consciousness experiment negative control)
+    "prng_control",
+    // Quantum sources (camera-based quantum sources are opt-in via --sources all)
     "multi_source_quantum",
     // GPU sources (moderate speed)
     "gpu_divergence",
