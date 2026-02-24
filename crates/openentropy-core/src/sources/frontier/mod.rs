@@ -55,20 +55,14 @@ mod gpu_divergence;
 mod iosurface_crossing;
 mod aes_exec_timing;
 mod aprr_jit_timing;
-mod cntpct_phys_timer;
 mod commpage_clock_timing;
-mod cpu_boost_timing;
 mod dispatch_queue_timing;
-mod drbg_reseed_oracle;
 mod icc_atomic_contention;
-mod exclusive_monitor;
-mod isb_pipeline_timing;
 mod pac_timing;
 mod preemption_boundary;
 mod prefetcher_state;
 mod usb_enumeration;
 mod sev_event_timing;
-mod sha256_hw_timing;
 mod keychain_timing;
 mod nl_inference_timing;
 mod kqueue_events;
@@ -89,7 +83,6 @@ mod pcie_pll;
 mod pdn_resonance;
 mod pe_core_arithmetic;
 mod pipe_buffer;
-mod pmull_timing;
 mod proc_info_timing;
 mod smc_highvar_timing;
 mod sep_timing;
@@ -117,20 +110,14 @@ pub use mach_continuous_timing::MachContinuousTimingSource;
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use aes_exec_timing::AESExecTimingSource;
 pub use aprr_jit_timing::APRRJitTimingSource;
-pub use cntpct_phys_timer::CNTPCTPhysTimerSource;
 pub use commpage_clock_timing::CommPageClockTimingSource;
-pub use cpu_boost_timing::CPUBoostTimingSource;
 pub use dispatch_queue_timing::DispatchQueueTimingSource;
-pub use drbg_reseed_oracle::DRBGReseedOracleSource;
 pub use icc_atomic_contention::ICCAtomicContentionSource;
-pub use exclusive_monitor::ExclusiveMonitorSource;
-pub use isb_pipeline_timing::ISBPipelineTimingSource;
 pub use pac_timing::PACTimingSource;
 pub use preemption_boundary::PreemptionBoundarySource;
 pub use prefetcher_state::PrefetcherStateSource;
 pub use usb_enumeration::USBEnumerationSource;
 pub use sev_event_timing::SEVEventTimingSource;
-pub use sha256_hw_timing::SHA256HWTimingSource;
 pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
 pub use nl_inference_timing::NLInferenceTimingSource;
 pub use smc_thermal_jitter::SMCThermalJitterSource;
@@ -148,7 +135,6 @@ pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use sep_timing::SEPTimingSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
-pub use pmull_timing::PMULLTimingSource;
 pub use proc_info_timing::ProcInfoTimingSource;
 pub use smc_highvar_timing::SMCHighVarTimingSource;
 pub use thread_lifecycle::ThreadLifecycleSource;
@@ -310,22 +296,15 @@ mod tests {
             Box::new(LPDDR5RowConflictSource),
             Box::new(SMCThermalJitterSource),
             Box::new(TimerCoalescingSource),
-            Box::new(DRBGReseedOracleSource),
             Box::new(DispatchQueueTimingSource),
             Box::new(NLInferenceTimingSource),
             Box::new(ICCAtomicContentionSource),
-            Box::new(CPUBoostTimingSource),
             Box::new(AESExecTimingSource),
             Box::new(APRRJitTimingSource),
-            Box::new(ISBPipelineTimingSource),
             Box::new(PreemptionBoundarySource),
             Box::new(SEVEventTimingSource),
-            Box::new(SHA256HWTimingSource),
-            Box::new(ExclusiveMonitorSource),
             Box::new(PACTimingSource),
             Box::new(CommPageClockTimingSource),
-            Box::new(CNTPCTPhysTimerSource),
-            Box::new(PMULLTimingSource),
             Box::new(CrossCoreCoherencySource),
             Box::new(DCCIVACTimingSource),
             Box::new(SMCHighVarTimingSource),

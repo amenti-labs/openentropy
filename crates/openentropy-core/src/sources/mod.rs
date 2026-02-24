@@ -98,28 +98,21 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: esoteric sources — SMC, OS timer, DRBG oracle (2026-02-24)
         Box::new(frontier::SMCThermalJitterSource),
         Box::new(frontier::TimerCoalescingSource),
-        Box::new(frontier::DRBGReseedOracleSource),
         Box::new(frontier::DispatchQueueTimingSource),
         Box::new(frontier::NLInferenceTimingSource),
         // Frontier: covert-channel level sources — ICC, DVFS boost, AES pipeline (2026-02-24)
         Box::new(frontier::ICCAtomicContentionSource),
-        Box::new(frontier::CPUBoostTimingSource),
         Box::new(frontier::AESExecTimingSource),
         // Frontier: Apple APRR undocumented register JIT toggle (2026-02-24)
         Box::new(frontier::APRRJitTimingSource),
         // Frontier: instruction-level entropy — ISB pipeline, preemption, SEV broadcast (2026-02-24)
-        Box::new(frontier::ISBPipelineTimingSource),
         Box::new(frontier::PreemptionBoundarySource),
         Box::new(frontier::SEVEventTimingSource),
         // Frontier: crypto + exclusive monitor (2026-02-24)
-        Box::new(frontier::SHA256HWTimingSource),
-        Box::new(frontier::ExclusiveMonitorSource),
         // Frontier: PAC unit, COMMPAGE seqlock, physical timer (2026-02-24)
         Box::new(frontier::PACTimingSource),
         Box::new(frontier::CommPageClockTimingSource),
-        Box::new(frontier::CNTPCTPhysTimerSource),
         // Frontier: PMULL sparse event detector, cross-core coherency, DC CIVAC (2026-02-24)
-        Box::new(frontier::PMULLTimingSource),
         Box::new(frontier::CrossCoreCoherencySource),
         Box::new(frontier::DCCIVACTimingSource),
         // Frontier: SMC thermistor/fuel-gauge outliers, proc_lock contention (2026-02-24)
