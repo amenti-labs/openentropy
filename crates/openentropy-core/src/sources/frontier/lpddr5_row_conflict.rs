@@ -1,3 +1,4 @@
+//! > **Quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
 //! LPDDR5 unified memory row-conflict timing entropy.
 //!
 //! Apple Silicon uses LPDDR5 in a unified memory architecture (UMA) shared

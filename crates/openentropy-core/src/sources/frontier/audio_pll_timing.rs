@@ -1,3 +1,4 @@
+//! > **Quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
 //! Audio PLL clock jitter — phase noise from the audio subsystem oscillator.
 //!
 //! The audio subsystem has its own Phase-Locked Loop (PLL) generating sample

@@ -1,3 +1,4 @@
+//! > **Quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
 //! Dual clock-domain beat-frequency entropy from Apple Silicon private timers.
 //!
 //! The systematic JIT sweep of `S3_*_c15_*` registers revealed a family of

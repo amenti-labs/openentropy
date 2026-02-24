@@ -1,3 +1,4 @@
+//! > **Extractor fix needed + quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
 //! getentropy() system call timing — SEP TRNG reseed detection.
 //!
 //! macOS's `getentropy()` reads from the kernel's entropy pool, which is seeded
