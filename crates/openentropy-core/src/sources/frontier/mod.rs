@@ -51,12 +51,15 @@ mod fsync_journal;
 mod gpu_divergence;
 mod iosurface_crossing;
 mod aes_exec_timing;
+mod cntpct_phys_timer;
+mod commpage_clock_timing;
 mod cpu_boost_timing;
 mod dispatch_queue_timing;
 mod drbg_reseed_oracle;
 mod icc_atomic_contention;
 mod exclusive_monitor;
 mod isb_pipeline_timing;
+mod pac_timing;
 mod preemption_boundary;
 mod sev_event_timing;
 mod sha256_hw_timing;
@@ -93,12 +96,15 @@ pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use aes_exec_timing::AESExecTimingSource;
+pub use cntpct_phys_timer::CNTPCTPhysTimerSource;
+pub use commpage_clock_timing::CommPageClockTimingSource;
 pub use cpu_boost_timing::CPUBoostTimingSource;
 pub use dispatch_queue_timing::DispatchQueueTimingSource;
 pub use drbg_reseed_oracle::DRBGReseedOracleSource;
 pub use icc_atomic_contention::ICCAtomicContentionSource;
 pub use exclusive_monitor::ExclusiveMonitorSource;
 pub use isb_pipeline_timing::ISBPipelineTimingSource;
+pub use pac_timing::PACTimingSource;
 pub use preemption_boundary::PreemptionBoundarySource;
 pub use sev_event_timing::SEVEventTimingSource;
 pub use sha256_hw_timing::SHA256HWTimingSource;
@@ -281,6 +287,9 @@ mod tests {
             Box::new(SEVEventTimingSource),
             Box::new(SHA256HWTimingSource),
             Box::new(ExclusiveMonitorSource),
+            Box::new(PACTimingSource),
+            Box::new(CommPageClockTimingSource),
+            Box::new(CNTPCTPhysTimerSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

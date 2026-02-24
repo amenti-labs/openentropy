@@ -110,5 +110,9 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: crypto + exclusive monitor (2026-02-24)
         Box::new(frontier::SHA256HWTimingSource),
         Box::new(frontier::ExclusiveMonitorSource),
+        // Frontier: PAC unit, COMMPAGE seqlock, physical timer (2026-02-24)
+        Box::new(frontier::PACTimingSource),
+        Box::new(frontier::CommPageClockTimingSource),
+        Box::new(frontier::CNTPCTPhysTimerSource),
     ]
 }
