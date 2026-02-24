@@ -93,5 +93,9 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::PECoreArithmeticSource),
         Box::new(frontier::MemoryBusCryptoSource),
         Box::new(frontier::LPDDR5RowConflictSource),
+        // Frontier: esoteric sources — SMC, OS timer, DRBG oracle (2026-02-24)
+        Box::new(frontier::SMCThermalJitterSource),
+        Box::new(frontier::TimerCoalescingSource),
+        Box::new(frontier::DRBGReseedOracleSource),
     ]
 }

@@ -50,10 +50,13 @@ mod dvfs_race;
 mod fsync_journal;
 mod gpu_divergence;
 mod iosurface_crossing;
+mod drbg_reseed_oracle;
 mod keychain_timing;
 mod kqueue_events;
 mod lpddr5_row_conflict;
 mod mach_ipc;
+mod smc_thermal_jitter;
+mod timer_coalescing;
 mod memory_bus_crypto;
 mod nvme_latency;
 mod pcie_pll;
@@ -80,6 +83,9 @@ pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
+pub use drbg_reseed_oracle::DRBGReseedOracleSource;
+pub use smc_thermal_jitter::SMCThermalJitterSource;
+pub use timer_coalescing::TimerCoalescingSource;
 pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
 pub use pcie_pll::PciePllSource;
@@ -242,6 +248,9 @@ mod tests {
             Box::new(PECoreArithmeticSource),
             Box::new(MemoryBusCryptoSource),
             Box::new(LPDDR5RowConflictSource),
+            Box::new(SMCThermalJitterSource),
+            Box::new(TimerCoalescingSource),
+            Box::new(DRBGReseedOracleSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
