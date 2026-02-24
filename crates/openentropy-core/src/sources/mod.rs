@@ -99,5 +99,9 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::DRBGReseedOracleSource),
         Box::new(frontier::DispatchQueueTimingSource),
         Box::new(frontier::NLInferenceTimingSource),
+        // Frontier: covert-channel level sources — ICC, DVFS boost, AES pipeline (2026-02-24)
+        Box::new(frontier::ICCAtomicContentionSource),
+        Box::new(frontier::CPUBoostTimingSource),
+        Box::new(frontier::AESExecTimingSource),
     ]
 }
