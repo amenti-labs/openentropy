@@ -121,5 +121,11 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: SMC thermistor/fuel-gauge outliers, proc_lock contention (2026-02-24)
         Box::new(frontier::SMCHighVarTimingSource),
         Box::new(frontier::ProcInfoTimingSource),
+        // Frontier: SEP TRNG reseed timing via getentropy (2026-02-24)
+        Box::new(frontier::GetentropyTimingSource),
+        // Frontier: hardware prefetcher state, USB enumeration (2026-02-24)
+        Box::new(frontier::PrefetcherStateSource),
+        Box::new(frontier::USBEnumerationSource),
+        Box::new(frontier::GetentropyTimingSource),
     ]
 }

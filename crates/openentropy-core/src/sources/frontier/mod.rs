@@ -50,6 +50,7 @@ mod denormal_timing;
 mod display_pll;
 mod dvfs_race;
 mod fsync_journal;
+mod getentropy_timing;
 mod gpu_divergence;
 mod iosurface_crossing;
 mod aes_exec_timing;
@@ -63,6 +64,8 @@ mod exclusive_monitor;
 mod isb_pipeline_timing;
 mod pac_timing;
 mod preemption_boundary;
+mod prefetcher_state;
+mod usb_enumeration;
 mod sev_event_timing;
 mod sha256_hw_timing;
 mod keychain_timing;
@@ -97,6 +100,7 @@ pub use denormal_timing::DenormalTimingSource;
 pub use display_pll::DisplayPllSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
+pub use getentropy_timing::GetentropyTimingSource;
 pub use gpu_divergence::GPUDivergenceSource;
 pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
@@ -113,6 +117,8 @@ pub use exclusive_monitor::ExclusiveMonitorSource;
 pub use isb_pipeline_timing::ISBPipelineTimingSource;
 pub use pac_timing::PACTimingSource;
 pub use preemption_boundary::PreemptionBoundarySource;
+pub use prefetcher_state::PrefetcherStateSource;
+pub use usb_enumeration::USBEnumerationSource;
 pub use sev_event_timing::SEVEventTimingSource;
 pub use sha256_hw_timing::SHA256HWTimingSource;
 pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
@@ -305,6 +311,9 @@ mod tests {
             Box::new(DCCIVACTimingSource),
             Box::new(SMCHighVarTimingSource),
             Box::new(ProcInfoTimingSource),
+            Box::new(GetentropyTimingSource),
+            Box::new(PrefetcherStateSource),
+            Box::new(USBEnumerationSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
