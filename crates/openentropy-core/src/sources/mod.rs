@@ -103,5 +103,9 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::ICCAtomicContentionSource),
         Box::new(frontier::CPUBoostTimingSource),
         Box::new(frontier::AESExecTimingSource),
+        // Frontier: instruction-level entropy — ISB pipeline, preemption, SEV broadcast (2026-02-24)
+        Box::new(frontier::ISBPipelineTimingSource),
+        Box::new(frontier::PreemptionBoundarySource),
+        Box::new(frontier::SEVEventTimingSource),
     ]
 }
