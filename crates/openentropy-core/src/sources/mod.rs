@@ -79,6 +79,8 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::USBTimingSource),
         // Frontier: unprecedented entropy sources (2026-02-14)
         Box::new(frontier::NVMeLatencySource),
+        Box::new(frontier::RNDRTrapTimingSource),
+        Box::new(frontier::MachContinuousTimingSource),
         Box::new(frontier::GPUDivergenceSource),
         Box::new(frontier::PDNResonanceSource),
         Box::new(frontier::IOSurfaceCrossingSource),

@@ -42,6 +42,27 @@
 //! The 556.6% CV reflects the high variance in whether a cache line is
 //! clean vs dirty, present in L2 vs only L1, and whether coherency traffic
 //! is needed.
+//!
+//! ## Security Note: DC CIVAC at EL0 is Unusual
+//!
+//! The ARM ARMv8-A Architecture Reference Manual specifies that DC CIVAC is
+//! a privileged instruction (EL1+) by default. Enabling it at EL0 requires
+//! `SCTLR_EL1.UCI = 1`. Apple Silicon enables this unconditionally on all
+//! M-series SoCs, while most Linux ARM implementations and Qualcomm/Samsung
+//! Exynos/Kirin keep it disabled at EL0.
+//!
+//! The FlushTime paper (Zhang et al., AsiaCCS 2023) explicitly calls out DC
+//! CIVAC at EL0 as enabling Flush+Reload cache side-channel attacks from
+//! unprivileged processes. Apple's deliberate choice to enable UCI=1 across
+//! all Silicon is the most architecturally unusual decision in this codebase.
+//!
+//! ## References
+//!
+//! - Zhang et al., "FlushTime: Towards Mitigating Flush-based Cache Attacks
+//!   via Reconciling ABI with Microarchitecture", AsiaCCS 2023.
+//!   <https://fengweiz.github.io/paper/flushtime-asiaccs23.pdf>
+//! - ARM DDI 0487, ARMv8-A Architecture Reference Manual, § D7.2.36
+//!   (DC CIVAC), § D13.2.118 (SCTLR_EL1.UCI)
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 

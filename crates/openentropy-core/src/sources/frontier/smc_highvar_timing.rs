@@ -35,6 +35,32 @@
 //! noise from Li-ion cell voltage measurement across the coulomb counter shunt.
 //!
 //! B0RM: mean=3594 ticks, CV=66.0%, range=[3226,35826]
+//!
+//! ## Relationship to Power Side-Channel Research
+//!
+//! Chawla et al. (2023) demonstrated that SMC power meter keys (e.g., `PHPC`,
+//! `PPBR`, `PPLN`) can be read to recover AES encryption keys via software-
+//! based power analysis on M1/M2 — no physical measurement required. Their
+//! attack exploits the *values* returned by SMC power keys.
+//!
+//! This source exploits the *timing* of SMC IPC calls to TC0P and B0RM —
+//! a different and orthogonal channel. The high CV of TC0P reflects ADC phase
+//! jitter (thermal noise) rather than data-dependent power consumption.
+//!
+//! ## Security Note: B0RM on Desktop Macs
+//!
+//! On Mac mini and Mac Pro (no battery), the B0RM key causes the SMC to poll
+//! an I2C bus for a fuel gauge IC that is not present. This timeout-driven
+//! bimodal behavior is reproducible across reboots. It is unclear why Apple's
+//! firmware polls a battery bus on battery-free hardware; the most likely
+//! explanation is shared firmware with MacBook. The I2C bus timeout creates a
+//! measurable covert timing channel into the SMC's I2C bus state machine.
+//!
+//! ## References
+//!
+//! - Chawla et al., "Uncovering Software-Based Power Side-Channel Attacks on
+//!   Apple M1/M2 Systems", arXiv:2306.16391 [cs.CR], 2023.
+//!   <https://arxiv.org/abs/2306.16391>
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 

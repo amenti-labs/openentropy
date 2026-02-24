@@ -73,11 +73,13 @@ mod keychain_timing;
 mod nl_inference_timing;
 mod kqueue_events;
 mod lpddr5_row_conflict;
+mod mach_continuous_timing;
 mod mach_ipc;
 mod smc_thermal_jitter;
 mod timer_coalescing;
 mod memory_bus_crypto;
 mod nvme_latency;
+mod rndr_trap_timing;
 mod pcie_pll;
 mod pdn_resonance;
 mod pe_core_arithmetic;
@@ -106,6 +108,7 @@ pub use gpu_divergence::GPUDivergenceSource;
 pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
+pub use mach_continuous_timing::MachContinuousTimingSource;
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use aes_exec_timing::AESExecTimingSource;
 pub use aprr_jit_timing::APRRJitTimingSource;
@@ -129,6 +132,7 @@ pub use smc_thermal_jitter::SMCThermalJitterSource;
 pub use timer_coalescing::TimerCoalescingSource;
 pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
+pub use rndr_trap_timing::RNDRTrapTimingSource;
 pub use pcie_pll::PciePllSource;
 pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use sep_timing::SEPTimingSource;
@@ -281,6 +285,8 @@ mod tests {
             Box::new(AudioPLLTimingSource),
             Box::new(USBTimingSource),
             Box::new(NVMeLatencySource),
+            Box::new(RNDRTrapTimingSource),
+            Box::new(MachContinuousTimingSource),
             Box::new(GPUDivergenceSource),
             Box::new(PDNResonanceSource),
             Box::new(IOSurfaceCrossingSource),

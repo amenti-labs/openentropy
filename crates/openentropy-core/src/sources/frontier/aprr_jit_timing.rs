@@ -51,12 +51,30 @@
 //! 4. **Power state** — the APRR register path has variable latency based on pipeline
 //!    power state
 //!
-//! ## Historical Context
+//! ## Historical Context and Prior Art
 //!
-//! APRR was discovered and reverse-engineered by security researchers in 2020 while
-//! analyzing iOS jailbreaks. The register is undocumented in ARM architecture specs —
-//! it is entirely Apple's proprietary extension. Its use as an entropy source has
-//! never been described in prior literature.
+//! APRR (Access Permission Remapping Registers) was discovered and reverse-engineered
+//! by security researcher Siguza in 2020 during iOS jailbreak research. SPRR (its M1+
+//! successor, later referred to as Fast Permission Restrictions in Apple's Security
+//! Guide) was reverse-engineered by Sven Peter in 2021 using bare-metal M1 code.
+//! Neither paper characterizes APRR timing as a source of entropy.
+//!
+//! Google Scholar and web searches return **zero results** for any combination of
+//! APRR, S3_4_c15, pthread_jit_write_protect, timing, entropy, and random number
+//! generation. This appears to be the **first use of APRR register timing as an
+//! entropy source**.
+//!
+//! Apple's APRR/SPRR became publicly known primarily through iOS jailbreak research;
+//! its use as a covert timing channel was not previously characterized.
+//!
+//! ## References
+//!
+//! - Siguza, "APRR: iPhone's Memory Permission Trick",
+//!   <https://siguza.github.io/APRR/>, 2020.
+//! - Sven Peter, "Apple Silicon Hardware Secrets: SPRR and Guarded Exception
+//!   Levels (GXF)", <https://blog.svenpeter.dev/posts/m1_sprr_gxf/>, 2021.
+//! - Apple Platform Security Guide, "Fast Permission Restrictions",
+//!   <https://support.apple.com/guide/security/operating-system-integrity-sec8b776536b/web>
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 

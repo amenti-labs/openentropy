@@ -37,6 +37,26 @@
 //! This is a genuine cross-process covert channel: any process on the system
 //! requesting entropy from `/dev/random` or `getentropy()` changes the pool
 //! state and affects our timing distribution.
+//!
+//! ## Prior Art Gap
+//!
+//! Web searches return **no results** for the specific combination of `getentropy`
+//! timing, bimodal distribution, TRNG reseed oracle, and entropy source. Prior
+//! side-channel work on PRNGs focuses on seed prediction (Debian OpenSSL 2008),
+//! state reconstruction, or direct hardware TRNG attacks. **Timing the getentropy
+//! syscall itself to detect SEP TRNG reseed events appears to be novel.**
+//!
+//! The related class of work — getentropy timing attacks to detect shared entropy
+//! pool depletion across processes — is unexplored in the public literature.
+//!
+//! ## References
+//!
+//! - Barak & Halevi, "A Model and Architecture for Pseudo-Random Generation
+//!   with Applications to /dev/random", CCS 2005.
+//! - Dorrendorf et al., "Cryptanalysis of the Random Number Generator of the
+//!   Windows Operating System" (PRNG state reconstruction), 2007.
+//! - Checkoway & Shacham, "Iago Attacks: Why the System Call API is a Bad
+//!   Untrusted RPC Interface" — relevant for cross-process entropy depletion.
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
