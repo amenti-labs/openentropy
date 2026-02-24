@@ -29,7 +29,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
     vec![
         // Timing
         Box::new(timing::ClockJitterSource),
-        Box::new(timing::MachTimingSource),
         Box::new(timing::SleepJitterSource),
         // System
         Box::new(sysctl::SysctlSource::new()),
@@ -74,7 +73,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::CASContentionSource::default()),
         Box::new(frontier::KeychainTimingSource::default()),
         // Frontier: thermal noise research (2026-02-14)
-        Box::new(frontier::DenormalTimingSource),
         Box::new(frontier::AudioPLLTimingSource),
         Box::new(frontier::USBTimingSource),
         // Frontier: unprecedented entropy sources (2026-02-14)
@@ -82,7 +80,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::RNDRTrapTimingSource),
         Box::new(frontier::MachContinuousTimingSource),
         Box::new(frontier::GPUDivergenceSource),
-        Box::new(frontier::PDNResonanceSource),
         Box::new(frontier::IOSurfaceCrossingSource),
         Box::new(frontier::FsyncJournalSource),
         // Frontier: two-oscillator beat frequency (CPU counter vs audio PLL)
@@ -96,13 +93,11 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::MemoryBusCryptoSource),
         Box::new(frontier::LPDDR5RowConflictSource),
         // Frontier: esoteric sources — SMC, OS timer, DRBG oracle (2026-02-24)
-        Box::new(frontier::SMCThermalJitterSource),
         Box::new(frontier::TimerCoalescingSource),
         Box::new(frontier::DispatchQueueTimingSource),
         Box::new(frontier::NLInferenceTimingSource),
         // Frontier: covert-channel level sources — ICC, DVFS boost, AES pipeline (2026-02-24)
         Box::new(frontier::ICCAtomicContentionSource),
-        Box::new(frontier::AESExecTimingSource),
         // Frontier: Apple APRR undocumented register JIT toggle (2026-02-24)
         Box::new(frontier::APRRJitTimingSource),
         // Frontier: instruction-level entropy — ISB pipeline, preemption, SEV broadcast (2026-02-24)
@@ -110,11 +105,8 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::SEVEventTimingSource),
         // Frontier: crypto + exclusive monitor (2026-02-24)
         // Frontier: PAC unit, COMMPAGE seqlock, physical timer (2026-02-24)
-        Box::new(frontier::PACTimingSource),
         Box::new(frontier::CommPageClockTimingSource),
         // Frontier: PMULL sparse event detector, cross-core coherency, DC CIVAC (2026-02-24)
-        Box::new(frontier::CrossCoreCoherencySource),
-        Box::new(frontier::DCCIVACTimingSource),
         // Frontier: SMC thermistor/fuel-gauge outliers, proc_lock contention (2026-02-24)
         Box::new(frontier::SMCHighVarTimingSource),
         Box::new(frontier::ProcInfoTimingSource),
@@ -123,6 +115,5 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: hardware prefetcher state, USB enumeration (2026-02-24)
         Box::new(frontier::PrefetcherStateSource),
         Box::new(frontier::USBEnumerationSource),
-        Box::new(frontier::GetentropyTimingSource),
     ]
 }

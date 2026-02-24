@@ -100,6 +100,5 @@ fn main() {
     println!("\n── Reference baselines ──");
     audit(&DVFSRaceSource,            2_000);
     audit(&APRRJitTimingSource,       2_000);
-    audit(&PMULLTimingSource,         2_000);
     // DualClockDomain and SITVA require JIT/threads — skip from automated audit
 }

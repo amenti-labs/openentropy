@@ -43,22 +43,17 @@
 mod amx_timing;
 mod audio_pll_timing;
 mod cas_contention;
-mod cross_core_coherency;
-mod dc_civac_timing;
 mod counter_beat;
-mod denormal_timing;
 mod display_pll;
 mod dvfs_race;
 mod fsync_journal;
 mod getentropy_timing;
 mod gpu_divergence;
 mod iosurface_crossing;
-mod aes_exec_timing;
 mod aprr_jit_timing;
 mod commpage_clock_timing;
 mod dispatch_queue_timing;
 mod icc_atomic_contention;
-mod pac_timing;
 mod preemption_boundary;
 mod prefetcher_state;
 mod usb_enumeration;
@@ -69,7 +64,6 @@ mod kqueue_events;
 mod lpddr5_row_conflict;
 mod mach_continuous_timing;
 mod mach_ipc;
-mod smc_thermal_jitter;
 mod timer_coalescing;
 mod memory_bus_crypto;
 mod nvme_latency;
@@ -80,7 +74,6 @@ mod commoncrypto_aes_timing;
 mod dual_clock_domain;
 mod sitva;
 mod pcie_pll;
-mod pdn_resonance;
 mod pe_core_arithmetic;
 mod pipe_buffer;
 mod proc_info_timing;
@@ -94,10 +87,7 @@ mod usb_timing;
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
-pub use cross_core_coherency::CrossCoreCoherencySource;
-pub use dc_civac_timing::DCCIVACTimingSource;
 pub use counter_beat::CounterBeatSource;
-pub use denormal_timing::DenormalTimingSource;
 pub use display_pll::DisplayPllSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
@@ -108,19 +98,16 @@ pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_continuous_timing::MachContinuousTimingSource;
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
-pub use aes_exec_timing::AESExecTimingSource;
 pub use aprr_jit_timing::APRRJitTimingSource;
 pub use commpage_clock_timing::CommPageClockTimingSource;
 pub use dispatch_queue_timing::DispatchQueueTimingSource;
 pub use icc_atomic_contention::ICCAtomicContentionSource;
-pub use pac_timing::PACTimingSource;
 pub use preemption_boundary::PreemptionBoundarySource;
 pub use prefetcher_state::PrefetcherStateSource;
 pub use usb_enumeration::USBEnumerationSource;
 pub use sev_event_timing::SEVEventTimingSource;
 pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
 pub use nl_inference_timing::NLInferenceTimingSource;
-pub use smc_thermal_jitter::SMCThermalJitterSource;
 pub use timer_coalescing::TimerCoalescingSource;
 pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
@@ -133,7 +120,6 @@ pub use sitva::SITVASource;
 pub use pcie_pll::PciePllSource;
 pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use sep_timing::SEPTimingSource;
-pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use proc_info_timing::ProcInfoTimingSource;
 pub use smc_highvar_timing::SMCHighVarTimingSource;
@@ -277,14 +263,12 @@ mod tests {
             Box::new(DVFSRaceSource),
             Box::new(CASContentionSource::default()),
             Box::new(KeychainTimingSource::default()),
-            Box::new(DenormalTimingSource),
             Box::new(AudioPLLTimingSource),
             Box::new(USBTimingSource),
             Box::new(NVMeLatencySource),
             Box::new(RNDRTrapTimingSource),
             Box::new(MachContinuousTimingSource),
             Box::new(GPUDivergenceSource),
-            Box::new(PDNResonanceSource),
             Box::new(IOSurfaceCrossingSource),
             Box::new(FsyncJournalSource),
             Box::new(CounterBeatSource),
@@ -294,19 +278,14 @@ mod tests {
             Box::new(PECoreArithmeticSource),
             Box::new(MemoryBusCryptoSource),
             Box::new(LPDDR5RowConflictSource),
-            Box::new(SMCThermalJitterSource),
             Box::new(TimerCoalescingSource),
             Box::new(DispatchQueueTimingSource),
             Box::new(NLInferenceTimingSource),
             Box::new(ICCAtomicContentionSource),
-            Box::new(AESExecTimingSource),
             Box::new(APRRJitTimingSource),
             Box::new(PreemptionBoundarySource),
             Box::new(SEVEventTimingSource),
-            Box::new(PACTimingSource),
             Box::new(CommPageClockTimingSource),
-            Box::new(CrossCoreCoherencySource),
-            Box::new(DCCIVACTimingSource),
             Box::new(SMCHighVarTimingSource),
             Box::new(ProcInfoTimingSource),
             Box::new(GetentropyTimingSource),
