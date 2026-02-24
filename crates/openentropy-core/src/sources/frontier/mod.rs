@@ -80,6 +80,9 @@ mod timer_coalescing;
 mod memory_bus_crypto;
 mod nvme_latency;
 mod rndr_trap_timing;
+mod cntfrq_cache_timing;
+mod gxf_register_timing;
+mod commoncrypto_aes_timing;
 mod pcie_pll;
 mod pdn_resonance;
 mod pe_core_arithmetic;
@@ -133,6 +136,9 @@ pub use timer_coalescing::TimerCoalescingSource;
 pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
 pub use rndr_trap_timing::RNDRTrapTimingSource;
+pub use cntfrq_cache_timing::CntfrqCacheTimingSource;
+pub use gxf_register_timing::GxfRegisterTimingSource;
+pub use commoncrypto_aes_timing::CommonCryptoAesTimingSource;
 pub use pcie_pll::PciePllSource;
 pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use sep_timing::SEPTimingSource;
@@ -323,6 +329,9 @@ mod tests {
             Box::new(GetentropyTimingSource),
             Box::new(PrefetcherStateSource),
             Box::new(USBEnumerationSource),
+            Box::new(CntfrqCacheTimingSource),
+            Box::new(GxfRegisterTimingSource),
+            Box::new(CommonCryptoAesTimingSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
