@@ -118,5 +118,8 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::PMULLTimingSource),
         Box::new(frontier::CrossCoreCoherencySource),
         Box::new(frontier::DCCIVACTimingSource),
+        // Frontier: SMC thermistor/fuel-gauge outliers, proc_lock contention (2026-02-24)
+        Box::new(frontier::SMCHighVarTimingSource),
+        Box::new(frontier::ProcInfoTimingSource),
     ]
 }

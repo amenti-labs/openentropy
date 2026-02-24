@@ -79,6 +79,8 @@ mod pdn_resonance;
 mod pe_core_arithmetic;
 mod pipe_buffer;
 mod pmull_timing;
+mod proc_info_timing;
+mod smc_highvar_timing;
 mod sep_timing;
 mod thread_lifecycle;
 mod tlb_shootdown;
@@ -125,6 +127,8 @@ pub use sep_timing::SEPTimingSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use pmull_timing::PMULLTimingSource;
+pub use proc_info_timing::ProcInfoTimingSource;
+pub use smc_highvar_timing::SMCHighVarTimingSource;
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
 pub use usb_timing::USBTimingSource;
@@ -299,6 +303,8 @@ mod tests {
             Box::new(PMULLTimingSource),
             Box::new(CrossCoreCoherencySource),
             Box::new(DCCIVACTimingSource),
+            Box::new(SMCHighVarTimingSource),
+            Box::new(ProcInfoTimingSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
