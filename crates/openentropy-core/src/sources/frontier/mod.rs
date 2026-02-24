@@ -55,9 +55,11 @@ mod cpu_boost_timing;
 mod dispatch_queue_timing;
 mod drbg_reseed_oracle;
 mod icc_atomic_contention;
+mod exclusive_monitor;
 mod isb_pipeline_timing;
 mod preemption_boundary;
 mod sev_event_timing;
+mod sha256_hw_timing;
 mod keychain_timing;
 mod nl_inference_timing;
 mod kqueue_events;
@@ -95,9 +97,11 @@ pub use cpu_boost_timing::CPUBoostTimingSource;
 pub use dispatch_queue_timing::DispatchQueueTimingSource;
 pub use drbg_reseed_oracle::DRBGReseedOracleSource;
 pub use icc_atomic_contention::ICCAtomicContentionSource;
+pub use exclusive_monitor::ExclusiveMonitorSource;
 pub use isb_pipeline_timing::ISBPipelineTimingSource;
 pub use preemption_boundary::PreemptionBoundarySource;
 pub use sev_event_timing::SEVEventTimingSource;
+pub use sha256_hw_timing::SHA256HWTimingSource;
 pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
 pub use nl_inference_timing::NLInferenceTimingSource;
 pub use smc_thermal_jitter::SMCThermalJitterSource;
@@ -275,6 +279,8 @@ mod tests {
             Box::new(ISBPipelineTimingSource),
             Box::new(PreemptionBoundarySource),
             Box::new(SEVEventTimingSource),
+            Box::new(SHA256HWTimingSource),
+            Box::new(ExclusiveMonitorSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
