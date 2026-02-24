@@ -54,6 +54,7 @@ mod getentropy_timing;
 mod gpu_divergence;
 mod iosurface_crossing;
 mod aes_exec_timing;
+mod aprr_jit_timing;
 mod cntpct_phys_timer;
 mod commpage_clock_timing;
 mod cpu_boost_timing;
@@ -107,6 +108,7 @@ pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
 pub use aes_exec_timing::AESExecTimingSource;
+pub use aprr_jit_timing::APRRJitTimingSource;
 pub use cntpct_phys_timer::CNTPCTPhysTimerSource;
 pub use commpage_clock_timing::CommPageClockTimingSource;
 pub use cpu_boost_timing::CPUBoostTimingSource;
@@ -298,6 +300,7 @@ mod tests {
             Box::new(ICCAtomicContentionSource),
             Box::new(CPUBoostTimingSource),
             Box::new(AESExecTimingSource),
+            Box::new(APRRJitTimingSource),
             Box::new(ISBPipelineTimingSource),
             Box::new(PreemptionBoundarySource),
             Box::new(SEVEventTimingSource),
