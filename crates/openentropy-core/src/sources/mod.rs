@@ -97,5 +97,7 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::SMCThermalJitterSource),
         Box::new(frontier::TimerCoalescingSource),
         Box::new(frontier::DRBGReseedOracleSource),
+        Box::new(frontier::DispatchQueueTimingSource),
+        Box::new(frontier::NLInferenceTimingSource),
     ]
 }
