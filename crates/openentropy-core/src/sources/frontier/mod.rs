@@ -8,19 +8,23 @@
 //!
 //! ```text
 //! frontier/
-//! ├── mod.rs              ← you are here (re-exports + shared helpers)
-//! ├── amx_timing.rs       ← AMX coprocessor matrix multiply jitter
-//! ├── thread_lifecycle.rs ← pthread create/join scheduling jitter
-//! ├── mach_ipc.rs         ← Mach port OOL message + VM remapping jitter
-//! ├── tlb_shootdown.rs    ← mprotect-induced TLB invalidation IPI jitter
-//! ├── pipe_buffer.rs      ← multi-pipe kernel zone allocator contention
-//! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
-//! ├── dvfs_race.rs        ← cross-core DVFS frequency race
-//! ├── cas_contention.rs   ← CAS atomic contention timing
-//! ├── keychain_timing.rs  ← Keychain/securityd round-trip timing
-//! ├── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
-//! ├── display_pll.rs      ← Display PLL phase noise from pixel clock domain crossing
-//! └── pcie_pll.rs         ← PCIe PHY PLL jitter from IOKit clock domain crossings
+//! ├── mod.rs                  ← you are here (re-exports + shared helpers)
+//! ├── amx_timing.rs           ← AMX coprocessor matrix multiply jitter
+//! ├── thread_lifecycle.rs     ← pthread create/join scheduling jitter
+//! ├── mach_ipc.rs             ← Mach port OOL message + VM remapping jitter
+//! ├── tlb_shootdown.rs        ← mprotect-induced TLB invalidation IPI jitter
+//! ├── pipe_buffer.rs          ← multi-pipe kernel zone allocator contention
+//! ├── kqueue_events.rs        ← kqueue event multiplexing (timers + files + sockets)
+//! ├── dvfs_race.rs            ← cross-core DVFS frequency race
+//! ├── cas_contention.rs       ← CAS atomic contention timing
+//! ├── keychain_timing.rs      ← Keychain/securityd round-trip timing
+//! ├── counter_beat.rs         ← Two-oscillator beat frequency: CPU counter vs audio PLL
+//! ├── display_pll.rs          ← Display PLL phase noise from pixel clock domain crossing
+//! ├── pcie_pll.rs             ← PCIe PHY PLL jitter from IOKit clock domain crossings
+//! ├── sep_timing.rs           ← Secure Enclave Processor TRNG state leakage via IPC timing
+//! ├── pe_core_arithmetic.rs   ← P-core/E-core migration arithmetic timing (6.35 bits/byte)
+//! ├── memory_bus_crypto.rs    ← AES-XTS context switch timing from cache flush cycles
+//! └── lpddr5_row_conflict.rs  ← LPDDR5 unified memory row-conflict sense-amplifier noise
 //! ```
 //!
 //! Each source measures a single, independent physical entropy domain.
@@ -48,11 +52,15 @@ mod gpu_divergence;
 mod iosurface_crossing;
 mod keychain_timing;
 mod kqueue_events;
+mod lpddr5_row_conflict;
 mod mach_ipc;
+mod memory_bus_crypto;
 mod nvme_latency;
 mod pcie_pll;
 mod pdn_resonance;
+mod pe_core_arithmetic;
 mod pipe_buffer;
+mod sep_timing;
 mod thread_lifecycle;
 mod tlb_shootdown;
 mod usb_timing;
@@ -71,8 +79,12 @@ pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
+pub use lpddr5_row_conflict::LPDDR5RowConflictSource;
+pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
 pub use pcie_pll::PciePllSource;
+pub use pe_core_arithmetic::PECoreArithmeticSource;
+pub use sep_timing::SEPTimingSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
 pub use thread_lifecycle::ThreadLifecycleSource;
@@ -226,6 +238,10 @@ mod tests {
             Box::new(CounterBeatSource),
             Box::new(DisplayPllSource),
             Box::new(PciePllSource),
+            Box::new(SEPTimingSource),
+            Box::new(PECoreArithmeticSource),
+            Box::new(MemoryBusCryptoSource),
+            Box::new(LPDDR5RowConflictSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

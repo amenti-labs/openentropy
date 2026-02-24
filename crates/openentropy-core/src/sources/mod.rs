@@ -1,4 +1,4 @@
-//! All 47 entropy source implementations.
+//! All 51 entropy source implementations.
 
 pub mod helpers;
 
@@ -88,5 +88,10 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: independent oscillator/PLL sources (2026-02-15)
         Box::new(frontier::DisplayPllSource),
         Box::new(frontier::PciePllSource),
+        // Frontier: deep hardware sources (2026-02-22)
+        Box::new(frontier::SEPTimingSource),
+        Box::new(frontier::PECoreArithmeticSource),
+        Box::new(frontier::MemoryBusCryptoSource),
+        Box::new(frontier::LPDDR5RowConflictSource),
     ]
 }
