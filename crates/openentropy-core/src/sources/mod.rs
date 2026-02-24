@@ -114,5 +114,9 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::PACTimingSource),
         Box::new(frontier::CommPageClockTimingSource),
         Box::new(frontier::CNTPCTPhysTimerSource),
+        // Frontier: PMULL sparse event detector, cross-core coherency, DC CIVAC (2026-02-24)
+        Box::new(frontier::PMULLTimingSource),
+        Box::new(frontier::CrossCoreCoherencySource),
+        Box::new(frontier::DCCIVACTimingSource),
     ]
 }

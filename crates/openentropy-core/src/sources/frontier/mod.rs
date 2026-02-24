@@ -43,6 +43,8 @@
 mod amx_timing;
 mod audio_pll_timing;
 mod cas_contention;
+mod cross_core_coherency;
+mod dc_civac_timing;
 mod counter_beat;
 mod denormal_timing;
 mod display_pll;
@@ -76,6 +78,7 @@ mod pcie_pll;
 mod pdn_resonance;
 mod pe_core_arithmetic;
 mod pipe_buffer;
+mod pmull_timing;
 mod sep_timing;
 mod thread_lifecycle;
 mod tlb_shootdown;
@@ -85,6 +88,8 @@ mod usb_timing;
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
+pub use cross_core_coherency::CrossCoreCoherencySource;
+pub use dc_civac_timing::DCCIVACTimingSource;
 pub use counter_beat::CounterBeatSource;
 pub use denormal_timing::DenormalTimingSource;
 pub use display_pll::DisplayPllSource;
@@ -119,6 +124,7 @@ pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use sep_timing::SEPTimingSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
+pub use pmull_timing::PMULLTimingSource;
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
 pub use usb_timing::USBTimingSource;
@@ -290,6 +296,9 @@ mod tests {
             Box::new(PACTimingSource),
             Box::new(CommPageClockTimingSource),
             Box::new(CNTPCTPhysTimerSource),
+            Box::new(PMULLTimingSource),
+            Box::new(CrossCoreCoherencySource),
+            Box::new(DCCIVACTimingSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
