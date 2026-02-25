@@ -144,9 +144,8 @@ mod passthrough {
         // SAFETY: ioctl with NVME_IOCTL_ADMIN_CMD on a valid NVMe character device fd.
         // The cmd struct matches the kernel's expected layout. The log_buf is stack-allocated
         // and large enough for the SMART log page (512 bytes).
-        let ret = unsafe {
-            libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD, &mut cmd as *mut NvmePassthruCmd)
-        };
+        let ret =
+            unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD, &mut cmd as *mut NvmePassthruCmd) };
 
         let elapsed_nanos = t_before.elapsed().as_nanos() as u64;
 

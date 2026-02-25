@@ -3,7 +3,7 @@
 //! All draw functions receive an `&App` (non-shared fields) and `&Snapshot`
 //! (shared state captured in a single mutex lock per frame).
 
-use super::app::{App, ChartMode, SensorFlowState, Sample, Snapshot, rolling_autocorr};
+use super::app::{App, ChartMode, Sample, SensorFlowState, Snapshot, rolling_autocorr};
 use openentropy_core::ConditioningMode;
 use ratatui::{prelude::*, widgets::*};
 
@@ -41,7 +41,6 @@ fn display_cat(cat: &str) -> &str {
         .map(|(_, _, d)| *d)
         .unwrap_or(cat)
 }
-
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -743,7 +742,10 @@ fn flow_status_line(state: &SensorFlowState) -> Line<'static> {
         Span::raw(format!("{}", state.repeat_streak)),
         Span::raw("  "),
         Span::styled("fp ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{:08x}", (state.stream_fingerprint & 0xffff_ffff) as u32)),
+        Span::raw(format!(
+            "{:08x}",
+            (state.stream_fingerprint & 0xffff_ffff) as u32
+        )),
     ])
 }
 

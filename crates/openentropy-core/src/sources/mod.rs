@@ -29,7 +29,6 @@ pub mod timing;
 pub mod vmstat;
 pub mod wifi;
 
-
 use crate::source::EntropySource;
 
 /// All entropy source constructors. Each returns a boxed source.

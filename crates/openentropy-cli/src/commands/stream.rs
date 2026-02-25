@@ -30,10 +30,7 @@ fn run_stdout(args: &StreamArgs) {
     };
 
     // Decide: single-source direct mode vs pool mode
-    let use_pool = args.pool
-        || args.all
-        || args.positional.is_empty()
-        || args.positional.len() > 1;
+    let use_pool = args.pool || args.all || args.positional.is_empty() || args.positional.len() > 1;
 
     if use_pool {
         // Pool mode: build pool from positional args, --all, or default fast sources
@@ -181,7 +178,10 @@ fn run_fifo(path: &str, args: &StreamArgs) {
         }
     }
 
-    println!("Feeding entropy to {path} (conditioning={}, buffer={buffer_size}B)", args.conditioning);
+    println!(
+        "Feeding entropy to {path} (conditioning={}, buffer={buffer_size}B)",
+        args.conditioning
+    );
     println!("Press Ctrl+C to stop.");
 
     let path_owned = path.to_string();

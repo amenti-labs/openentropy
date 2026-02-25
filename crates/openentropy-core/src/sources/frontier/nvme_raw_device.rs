@@ -80,12 +80,7 @@ fn try_open_raw_device() -> Option<i32> {
 
     #[cfg(target_os = "linux")]
     {
-        let devices = [
-            "/dev/nvme0n1",
-            "/dev/nvme1n1",
-            "/dev/sda",
-            "/dev/sdb",
-        ];
+        let devices = ["/dev/nvme0n1", "/dev/nvme1n1", "/dev/sda", "/dev/sdb"];
         for dev in &devices {
             let c_path = match std::ffi::CString::new(*dev) {
                 Ok(s) => s,

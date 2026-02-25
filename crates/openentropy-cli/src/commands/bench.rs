@@ -504,9 +504,7 @@ fn run_single_source(
     let src = match super::find_source(source_name) {
         Some(s) => s,
         None => {
-            eprintln!(
-                "Source '{source_name}' not found. Run 'openentropy scan' to list sources."
-            );
+            eprintln!("Source '{source_name}' not found. Run 'openentropy scan' to list sources.");
             std::process::exit(1);
         }
     };

@@ -197,8 +197,7 @@ impl ChartMode {
                 let bound = (min_val.abs().max(max_val.abs()) + 0.1).min(1.0);
                 (-bound, bound)
             }
-            Self::ByteDistribution
-            | Self::CameraShotNoise => (0.0, 1.0),
+            Self::ByteDistribution | Self::CameraShotNoise => (0.0, 1.0),
         }
     }
 }
@@ -941,7 +940,6 @@ fn update_flow_state(state: &mut SensorFlowState, raw_bytes: &[u8]) {
     state.stream_fingerprint = stream_fingerprint(&state.recent_bytes);
 }
 
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1178,5 +1176,4 @@ mod tests {
             assert!(w[0] < w[1], "SAMPLE_SIZES not sorted: {} >= {}", w[0], w[1]);
         }
     }
-
 }
