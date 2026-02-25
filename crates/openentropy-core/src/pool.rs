@@ -62,15 +62,15 @@ impl EntropyPool {
     pub fn auto() -> Self {
         let mut pool = Self::new(None);
         for source in crate::platform::detect_available_sources() {
-            pool.add_source(source, 1.0);
+            pool.add_source(source);
         }
         pool
     }
 
     /// Register an entropy source.
-    pub fn add_source(&mut self, source: Box<dyn EntropySource>, weight: f64) {
+    pub fn add_source(&mut self, source: Box<dyn EntropySource>) {
         self.sources
-            .push(Arc::new(Mutex::new(SourceState::new(source, weight))));
+            .push(Arc::new(Mutex::new(SourceState::new(source))));
     }
 
     /// Number of registered sources.
@@ -689,16 +689,16 @@ mod tests {
     #[test]
     fn test_pool_add_source() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock1", vec![42])), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock1", vec![42])));
         assert_eq!(pool.source_count(), 1);
     }
 
     #[test]
     fn test_pool_add_multiple_sources() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock1", vec![1])), 1.0);
-        pool.add_source(Box::new(MockSource::new("mock2", vec![2])), 1.0);
-        pool.add_source(Box::new(MockSource::new("mock3", vec![3])), 0.5);
+        pool.add_source(Box::new(MockSource::new("mock1", vec![1])));
+        pool.add_source(Box::new(MockSource::new("mock2", vec![2])));
+        pool.add_source(Box::new(MockSource::new("mock3", vec![3])));
         assert_eq!(pool.source_count(), 3);
     }
 
@@ -711,7 +711,6 @@ mod tests {
         let mut pool = EntropyPool::new(Some(b"test"));
         pool.add_source(
             Box::new(MockSource::new("mock1", vec![0xAA, 0xBB, 0xCC])),
-            1.0,
         );
         let n = pool.collect_all();
         assert!(n > 0, "Should have collected some bytes");
@@ -720,8 +719,8 @@ mod tests {
     #[test]
     fn test_collect_all_parallel_with_timeout() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock1", vec![1, 2])), 1.0);
-        pool.add_source(Box::new(MockSource::new("mock2", vec![3, 4])), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock1", vec![1, 2])));
+        pool.add_source(Box::new(MockSource::new("mock2", vec![3, 4])));
         let n = pool.collect_all_parallel(5.0);
         assert!(n > 0);
     }
@@ -729,8 +728,8 @@ mod tests {
     #[test]
     fn test_collect_enabled_filters_sources() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("alpha", vec![1])), 1.0);
-        pool.add_source(Box::new(MockSource::new("beta", vec![2])), 1.0);
+        pool.add_source(Box::new(MockSource::new("alpha", vec![1])));
+        pool.add_source(Box::new(MockSource::new("beta", vec![2])));
 
         let enabled = vec!["alpha".to_string()];
         let n = pool.collect_enabled(&enabled);
@@ -740,7 +739,7 @@ mod tests {
     #[test]
     fn test_collect_enabled_no_match() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("alpha", vec![1])), 1.0);
+        pool.add_source(Box::new(MockSource::new("alpha", vec![1])));
 
         let enabled = vec!["nonexistent".to_string()];
         let n = pool.collect_enabled(&enabled);
@@ -754,7 +753,7 @@ mod tests {
     #[test]
     fn test_get_raw_bytes_length() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let bytes = pool.get_raw_bytes(64);
         assert_eq!(bytes.len(), 64);
     }
@@ -762,7 +761,7 @@ mod tests {
     #[test]
     fn test_get_random_bytes_length() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let bytes = pool.get_random_bytes(64);
         assert_eq!(bytes.len(), 64);
     }
@@ -770,7 +769,7 @@ mod tests {
     #[test]
     fn test_get_random_bytes_various_sizes() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         for size in [1, 16, 32, 64, 100, 256] {
             let bytes = pool.get_random_bytes(size);
             assert_eq!(bytes.len(), size, "Expected {size} bytes");
@@ -780,7 +779,7 @@ mod tests {
     #[test]
     fn test_get_bytes_raw_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let bytes = pool.get_bytes(32, crate::conditioning::ConditioningMode::Raw);
         assert_eq!(bytes.len(), 32);
     }
@@ -788,7 +787,7 @@ mod tests {
     #[test]
     fn test_get_bytes_sha256_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let bytes = pool.get_bytes(32, crate::conditioning::ConditioningMode::Sha256);
         assert_eq!(bytes.len(), 32);
     }
@@ -796,7 +795,7 @@ mod tests {
     #[test]
     fn test_get_bytes_von_neumann_mode() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let bytes = pool.get_bytes(16, crate::conditioning::ConditioningMode::VonNeumann);
         // VonNeumann may produce fewer bytes due to debiasing yield
         assert!(bytes.len() <= 16);
@@ -823,7 +822,6 @@ mod tests {
         let mut pool = EntropyPool::new(Some(b"test"));
         pool.add_source(
             Box::new(MockSource::new("good_source", (0..=255).collect())),
-            1.0,
         );
         pool.collect_all();
         let report = pool.health_report();
@@ -837,7 +835,7 @@ mod tests {
     #[test]
     fn test_health_report_failing_source() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(FailingSource::new("bad_source")), 1.0);
+        pool.add_source(Box::new(FailingSource::new("bad_source")));
         pool.collect_all();
         let report = pool.health_report();
         assert_eq!(report.total, 1);
@@ -849,8 +847,8 @@ mod tests {
     #[test]
     fn test_health_report_mixed_sources() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("good", (0..=255).collect())), 1.0);
-        pool.add_source(Box::new(FailingSource::new("bad")), 1.0);
+        pool.add_source(Box::new(MockSource::new("good", (0..=255).collect())));
+        pool.add_source(Box::new(FailingSource::new("bad")));
         pool.collect_all();
         let report = pool.health_report();
         assert_eq!(report.total, 2);
@@ -862,7 +860,7 @@ mod tests {
     #[test]
     fn test_health_report_tracks_output_bytes() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", (0..=255).collect())));
         let _ = pool.get_random_bytes(64);
         let report = pool.health_report();
         assert!(report.output_bytes >= 64);
@@ -882,7 +880,7 @@ mod tests {
     #[test]
     fn test_source_infos_populated() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("test_src", vec![1])), 1.0);
+        pool.add_source(Box::new(MockSource::new("test_src", vec![1])));
         let infos = pool.source_infos();
         assert_eq!(infos.len(), 1);
         assert_eq!(infos[0].name, "test_src");
@@ -898,9 +896,9 @@ mod tests {
     #[test]
     fn test_different_seeds_differ() {
         let mut pool1 = EntropyPool::new(Some(b"seed_a"));
-        pool1.add_source(Box::new(MockSource::new("m", vec![42; 100])), 1.0);
+        pool1.add_source(Box::new(MockSource::new("m", vec![42; 100])));
         let mut pool2 = EntropyPool::new(Some(b"seed_b"));
-        pool2.add_source(Box::new(MockSource::new("m", vec![42; 100])), 1.0);
+        pool2.add_source(Box::new(MockSource::new("m", vec![42; 100])));
 
         let bytes1 = pool1.get_random_bytes(32);
         let bytes2 = pool2.get_random_bytes(32);
@@ -924,7 +922,7 @@ mod tests {
     #[test]
     fn test_collect_enabled_empty_list() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(Box::new(MockSource::new("mock", vec![1])), 1.0);
+        pool.add_source(Box::new(MockSource::new("mock", vec![1])));
         let n = pool.collect_enabled(&[]);
         assert_eq!(n, 0);
     }

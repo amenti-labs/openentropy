@@ -110,7 +110,7 @@ static AMX_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::MacOS,
     requirements: &[Requirement::AppleSilicon],
-    entropy_rate_estimate: 2500.0,
+    entropy_rate_estimate: 1.5,
     composite: false,
 };
 

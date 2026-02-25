@@ -47,7 +47,7 @@ static DISPLAY_PLL_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AppleSilicon],
-    entropy_rate_estimate: 2500.0,
+    entropy_rate_estimate: 4.0,
     composite: false,
 };
 

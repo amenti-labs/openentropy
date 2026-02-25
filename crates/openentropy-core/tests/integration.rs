@@ -128,7 +128,7 @@ fn session_recording_from_clock_jitter() {
     let mut pool = EntropyPool::new(None);
     for source in detect_available_sources() {
         if source.name() == "clock_jitter" {
-            pool.add_source(source, 1.0);
+            pool.add_source(source);
         }
     }
     assert!(

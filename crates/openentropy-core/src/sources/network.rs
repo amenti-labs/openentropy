@@ -40,7 +40,7 @@ static DNS_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Network,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 100.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 
@@ -203,7 +203,7 @@ static TCP_CONNECT_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Network,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 50.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 
@@ -325,7 +325,7 @@ mod tests {
         let src = DNSTimingSource::new();
         assert_eq!(src.info().name, "dns_timing");
         assert_eq!(src.info().category, SourceCategory::Network);
-        assert!((src.info().entropy_rate_estimate - 100.0).abs() < f64::EPSILON);
+        assert!((src.info().entropy_rate_estimate - 3.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -333,7 +333,7 @@ mod tests {
         let src = TCPConnectSource::new();
         assert_eq!(src.info().name, "tcp_connect_timing");
         assert_eq!(src.info().category, SourceCategory::Network);
-        assert!((src.info().entropy_rate_estimate - 50.0).abs() < f64::EPSILON);
+        assert!((src.info().entropy_rate_estimate - 2.0).abs() < f64::EPSILON);
     }
 
     #[test]

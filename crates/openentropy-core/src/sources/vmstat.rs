@@ -32,7 +32,7 @@ static VMSTAT_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 1000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 

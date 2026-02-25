@@ -34,7 +34,7 @@ static CAMERA_NOISE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Sensor,
     platform: Platform::MacOS,
     requirements: &[Requirement::Camera],
-    entropy_rate_estimate: 4000.0,
+    entropy_rate_estimate: 5.0,
     composite: false,
 };
 
@@ -278,7 +278,7 @@ mod tests {
         let src = CameraNoiseSource::default();
         assert_eq!(src.name(), "camera_noise");
         assert_eq!(src.info().category, SourceCategory::Sensor);
-        assert_eq!(src.info().entropy_rate_estimate, 4000.0);
+        assert_eq!(src.info().entropy_rate_estimate, 5.0);
         assert!(!src.info().composite);
     }
 

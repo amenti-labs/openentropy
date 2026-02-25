@@ -29,7 +29,7 @@ static DISK_IO_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 800.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 

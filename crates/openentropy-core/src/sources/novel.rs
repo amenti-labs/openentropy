@@ -1,173 +1,11 @@
-//! Novel entropy sources: dispatch queue scheduling, VM page fault timing,
-//! and Spotlight metadata query timing.
+//! Novel entropy sources: Spotlight metadata query timing.
 
 use std::process::Command;
-use std::ptr;
-use std::sync::mpsc;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 use super::helpers::extract_timing_entropy;
-
-// ---------------------------------------------------------------------------
-// DispatchQueueSource
-// ---------------------------------------------------------------------------
-
-static DISPATCH_QUEUE_INFO: SourceInfo = SourceInfo {
-    name: "dispatch_queue",
-    description: "Thread scheduling latency jitter from concurrent dispatch queue operations",
-    physics: "Submits blocks to GCD (Grand Central Dispatch) queues and measures scheduling \
-              latency. macOS dynamically migrates work between P-cores (performance) and \
-              E-cores (efficiency) based on thermal state and load. The migration decisions, \
-              queue priority inversions, and QoS tier scheduling create non-deterministic \
-              dispatch timing.",
-    category: SourceCategory::Scheduling,
-    platform: Platform::Any,
-    requirements: &[],
-    entropy_rate_estimate: 1500.0,
-    composite: false,
-};
-
-/// Entropy source that harvests scheduling latency jitter from worker thread
-/// dispatch via MPSC channels (analogous to GCD queue dispatch).
-pub struct DispatchQueueSource;
-
-impl EntropySource for DispatchQueueSource {
-    fn info(&self) -> &SourceInfo {
-        &DISPATCH_QUEUE_INFO
-    }
-
-    fn is_available(&self) -> bool {
-        true
-    }
-
-    fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let raw_count = n_samples * 10 + 64;
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
-
-        // Create 4 worker threads with MPSC channels.
-        let num_workers = 4;
-        let mut senders: Vec<mpsc::Sender<Instant>> = Vec::with_capacity(num_workers);
-        let (result_tx, result_rx) = mpsc::channel::<u64>();
-
-        for _ in 0..num_workers {
-            let (tx, rx) = mpsc::channel::<Instant>();
-            let rtx = result_tx.clone();
-            senders.push(tx);
-
-            thread::spawn(move || {
-                while let Ok(sent_at) = rx.recv() {
-                    // Measure scheduling latency: time from send to receive.
-                    let latency_ns = sent_at.elapsed().as_nanos() as u64;
-                    if rtx.send(latency_ns).is_err() {
-                        break;
-                    }
-                }
-            });
-        }
-
-        // Submit items to workers round-robin and collect scheduling latencies.
-        for i in 0..raw_count {
-            let worker_idx = i % num_workers;
-            let sent_at = Instant::now();
-            if senders[worker_idx].send(sent_at).is_err() {
-                break;
-            }
-            match result_rx.recv() {
-                Ok(latency_ns) => timings.push(latency_ns),
-                Err(_) => break,
-            }
-        }
-
-        // Drop senders to signal workers to exit.
-        drop(senders);
-
-        extract_timing_entropy(&timings, n_samples)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// VMPageTimingSource
-// ---------------------------------------------------------------------------
-
-/// Page size for mmap allocations.
-const PAGE_SIZE: usize = 4096;
-
-static VM_PAGE_TIMING_INFO: SourceInfo = SourceInfo {
-    name: "vm_page_timing",
-    description: "Mach VM page fault timing jitter from mmap/munmap cycles",
-    physics: "Times Mach VM operations (mmap/munmap cycles). Each operation requires: \
-              VM map entry allocation, page table updates, TLB shootdown across cores \
-              (IPI interrupt), and physical page management. The timing depends on: \
-              VM map fragmentation, physical memory pressure, and cross-core \
-              synchronization latency.",
-    category: SourceCategory::Timing,
-    platform: Platform::Any,
-    requirements: &[],
-    entropy_rate_estimate: 1300.0,
-    composite: false,
-};
-
-/// Entropy source that harvests timing jitter from VM page allocation/deallocation.
-pub struct VMPageTimingSource;
-
-impl EntropySource for VMPageTimingSource {
-    fn info(&self) -> &SourceInfo {
-        &VM_PAGE_TIMING_INFO
-    }
-
-    fn is_available(&self) -> bool {
-        cfg!(unix)
-    }
-
-    fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let raw_count = n_samples * 10 + 64;
-        let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
-
-        for _ in 0..raw_count {
-            let t0 = Instant::now();
-
-            // SAFETY: mmap with MAP_ANONYMOUS|MAP_PRIVATE creates a private anonymous
-            // mapping. We check for MAP_FAILED before using the returned address.
-            let addr = unsafe {
-                libc::mmap(
-                    ptr::null_mut(),
-                    PAGE_SIZE,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_ANONYMOUS | libc::MAP_PRIVATE,
-                    -1,
-                    0,
-                )
-            };
-
-            if addr == libc::MAP_FAILED {
-                continue;
-            }
-
-            // SAFETY: addr is a valid mmap'd region of PAGE_SIZE bytes (checked
-            // != MAP_FAILED). Writes are within bounds of the mapping.
-            unsafe {
-                ptr::write_volatile(addr as *mut u8, 0xBE);
-                ptr::write_volatile((addr as *mut u8).add(PAGE_SIZE - 1), 0xEF);
-
-                // Read back to force a full round-trip.
-                let _v = ptr::read_volatile(addr as *const u8);
-            }
-
-            // SAFETY: addr was returned by mmap (checked != MAP_FAILED) with size PAGE_SIZE.
-            unsafe {
-                libc::munmap(addr, PAGE_SIZE);
-            }
-
-            let elapsed_ns = t0.elapsed().as_nanos() as u64;
-            timings.push(elapsed_ns);
-        }
-
-        extract_timing_entropy(&timings, n_samples)
-    }
-}
 
 // ---------------------------------------------------------------------------
 // SpotlightTimingSource
@@ -198,7 +36,7 @@ static SPOTLIGHT_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Signal,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 800.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 
@@ -269,48 +107,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dispatch_queue_info() {
-        let src = DispatchQueueSource;
-        assert_eq!(src.name(), "dispatch_queue");
-        assert_eq!(src.info().category, SourceCategory::Scheduling);
-        assert!((src.info().entropy_rate_estimate - 1500.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    #[ignore] // Run with: cargo test -- --ignored
-    fn dispatch_queue_collects_bytes() {
-        let src = DispatchQueueSource;
-        assert!(src.is_available());
-        let data = src.collect(64);
-        assert!(!data.is_empty());
-        assert!(data.len() <= 64);
-    }
-
-    #[test]
-    fn vm_page_timing_info() {
-        let src = VMPageTimingSource;
-        assert_eq!(src.name(), "vm_page_timing");
-        assert_eq!(src.info().category, SourceCategory::Timing);
-        assert!((src.info().entropy_rate_estimate - 1300.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    #[cfg(unix)]
-    #[ignore] // Run with: cargo test -- --ignored
-    fn vm_page_timing_collects_bytes() {
-        let src = VMPageTimingSource;
-        assert!(src.is_available());
-        let data = src.collect(64);
-        assert!(!data.is_empty());
-        assert!(data.len() <= 64);
-    }
-
-    #[test]
     fn spotlight_timing_info() {
         let src = SpotlightTimingSource;
         assert_eq!(src.name(), "spotlight_timing");
         assert_eq!(src.info().category, SourceCategory::Signal);
-        assert!((src.info().entropy_rate_estimate - 800.0).abs() < f64::EPSILON);
+        assert!((src.info().entropy_rate_estimate - 2.0).abs() < f64::EPSILON);
     }
 
     #[test]

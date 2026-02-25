@@ -44,7 +44,7 @@ static DVFS_RACE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 5000.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 

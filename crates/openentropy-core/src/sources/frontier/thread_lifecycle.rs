@@ -42,7 +42,7 @@ static THREAD_LIFECYCLE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Scheduling,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 3000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 

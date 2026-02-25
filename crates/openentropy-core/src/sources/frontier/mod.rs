@@ -8,19 +8,19 @@
 //!
 //! ```text
 //! frontier/
-//! ├── mod.rs              ← you are here (re-exports + shared helpers)
-//! ├── amx_timing.rs       ← AMX coprocessor matrix multiply jitter
-//! ├── thread_lifecycle.rs ← pthread create/join scheduling jitter
-//! ├── mach_ipc.rs         ← Mach port OOL message + VM remapping jitter
-//! ├── tlb_shootdown.rs    ← mprotect-induced TLB invalidation IPI jitter
-//! ├── pipe_buffer.rs      ← multi-pipe kernel zone allocator contention
-//! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
-//! ├── dvfs_race.rs        ← cross-core DVFS frequency race
-//! ├── cas_contention.rs   ← CAS atomic contention timing
-//! ├── keychain_timing.rs  ← Keychain/securityd round-trip timing
-//! ├── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
-//! ├── display_pll.rs      ← Display PLL phase noise from pixel clock domain crossing
-//! └── pcie_pll.rs         ← PCIe PHY PLL jitter from IOKit clock domain crossings
+//! ├── mod.rs                  ← you are here (re-exports + shared helpers)
+//! ├── amx_timing.rs           ← AMX coprocessor matrix multiply jitter
+//! ├── thread_lifecycle.rs     ← pthread create/join scheduling jitter
+//! ├── mach_ipc.rs             ← Mach port OOL message + VM remapping jitter
+//! ├── tlb_shootdown.rs        ← mprotect-induced TLB invalidation IPI jitter
+//! ├── pipe_buffer.rs          ← multi-pipe kernel zone allocator contention
+//! ├── kqueue_events.rs        ← kqueue event multiplexing (timers + files + sockets)
+//! ├── dvfs_race.rs            ← cross-core DVFS frequency race
+//! ├── keychain_timing.rs      ← Keychain/securityd round-trip timing
+//! ├── display_pll.rs          ← Display PLL phase noise from pixel clock domain crossing
+//! ├── pcie_pll.rs             ← PCIe PHY PLL jitter from IOKit clock domain crossings
+//! ├── pe_core_arithmetic.rs   ← P-core/E-core migration arithmetic timing (6.35 bits/byte)
+//! └── memory_bus_crypto.rs    ← AES-XTS context switch timing from cache flush cycles
 //! ```
 //!
 //! Each source measures a single, independent physical entropy domain.
@@ -35,53 +35,85 @@
 //! to tune for specific hardware or entropy requirements. See each source's
 //! config struct documentation for field descriptions and valid ranges.
 
-// Shared CoreAudio FFI bindings (used by audio_pll_timing + counter_beat).
+// Shared CoreAudio FFI bindings (used by audio_pll_timing).
 #[cfg(target_os = "macos")]
 mod coreaudio_ffi;
 
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
 mod audio_pll_timing;
-mod cas_contention;
-mod counter_beat;
-mod denormal_timing;
 mod display_pll;
 mod dvfs_race;
 mod fsync_journal;
+mod getentropy_timing;
 mod gpu_divergence;
 mod iosurface_crossing;
+mod aprr_jit_timing;
+mod commpage_clock_timing;
+mod dispatch_queue_timing;
+mod icc_atomic_contention;
+mod preemption_boundary;
+mod prefetcher_state;
+mod usb_enumeration;
+mod sev_event_timing;
 mod keychain_timing;
+mod nl_inference_timing;
 mod kqueue_events;
+mod mach_continuous_timing;
 mod mach_ipc;
+mod timer_coalescing;
+mod memory_bus_crypto;
 mod nvme_latency;
+mod cntfrq_cache_timing;
+mod gxf_register_timing;
+mod commoncrypto_aes_timing;
+mod dual_clock_domain;
+mod sitva;
 mod pcie_pll;
-mod pdn_resonance;
+mod pe_core_arithmetic;
 mod pipe_buffer;
+mod proc_info_timing;
+mod smc_highvar_timing;
 mod thread_lifecycle;
 mod tlb_shootdown;
-mod usb_timing;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
 pub use audio_pll_timing::AudioPLLTimingSource;
-pub use cas_contention::{CASContentionConfig, CASContentionSource};
-pub use counter_beat::CounterBeatSource;
-pub use denormal_timing::DenormalTimingSource;
 pub use display_pll::DisplayPllSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
+pub use getentropy_timing::GetentropyTimingSource;
 pub use gpu_divergence::GPUDivergenceSource;
 pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
+pub use mach_continuous_timing::MachContinuousTimingSource;
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
+pub use aprr_jit_timing::APRRJitTimingSource;
+pub use commpage_clock_timing::CommPageClockTimingSource;
+pub use dispatch_queue_timing::DispatchQueueTimingSource;
+pub use icc_atomic_contention::ICCAtomicContentionSource;
+pub use preemption_boundary::PreemptionBoundarySource;
+pub use prefetcher_state::PrefetcherStateSource;
+pub use usb_enumeration::USBEnumerationSource;
+pub use sev_event_timing::SEVEventTimingSource;
+pub use nl_inference_timing::NLInferenceTimingSource;
+pub use timer_coalescing::TimerCoalescingSource;
+pub use memory_bus_crypto::MemoryBusCryptoSource;
 pub use nvme_latency::NVMeLatencySource;
+pub use cntfrq_cache_timing::CntfrqCacheTimingSource;
+pub use gxf_register_timing::GxfRegisterTimingSource;
+pub use commoncrypto_aes_timing::CommonCryptoAesTimingSource;
+pub use dual_clock_domain::DualClockDomainSource;
+pub use sitva::SITVASource;
 pub use pcie_pll::PciePllSource;
-pub use pdn_resonance::PDNResonanceSource;
+pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
+pub use proc_info_timing::ProcInfoTimingSource;
+pub use smc_highvar_timing::SMCHighVarTimingSource;
 pub use thread_lifecycle::ThreadLifecycleSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
-pub use usb_timing::USBTimingSource;
 
 // ---------------------------------------------------------------------------
 // Shared extraction helpers (used by multiple frontier sources)
@@ -217,19 +249,33 @@ mod tests {
             Box::new(PipeBufferSource::default()),
             Box::new(KqueueEventsSource::default()),
             Box::new(DVFSRaceSource),
-            Box::new(CASContentionSource::default()),
             Box::new(KeychainTimingSource::default()),
-            Box::new(DenormalTimingSource),
             Box::new(AudioPLLTimingSource),
-            Box::new(USBTimingSource),
             Box::new(NVMeLatencySource),
+            Box::new(MachContinuousTimingSource),
             Box::new(GPUDivergenceSource),
-            Box::new(PDNResonanceSource),
             Box::new(IOSurfaceCrossingSource),
             Box::new(FsyncJournalSource),
-            Box::new(CounterBeatSource),
             Box::new(DisplayPllSource),
             Box::new(PciePllSource),
+            Box::new(PECoreArithmeticSource),
+            Box::new(MemoryBusCryptoSource),
+            Box::new(TimerCoalescingSource),
+            Box::new(DispatchQueueTimingSource),
+            Box::new(NLInferenceTimingSource),
+            Box::new(ICCAtomicContentionSource),
+            Box::new(APRRJitTimingSource),
+            Box::new(PreemptionBoundarySource),
+            Box::new(SEVEventTimingSource),
+            Box::new(CommPageClockTimingSource),
+            Box::new(SMCHighVarTimingSource),
+            Box::new(ProcInfoTimingSource),
+            Box::new(GetentropyTimingSource),
+            Box::new(PrefetcherStateSource),
+            Box::new(USBEnumerationSource),
+            Box::new(CntfrqCacheTimingSource),
+            Box::new(GxfRegisterTimingSource),
+            Box::new(CommonCryptoAesTimingSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

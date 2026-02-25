@@ -27,7 +27,7 @@ static BLUETOOTH_NOISE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Sensor,
     platform: Platform::MacOS,
     requirements: &[Requirement::Bluetooth],
-    entropy_rate_estimate: 50.0,
+    entropy_rate_estimate: 1.0,
     composite: false,
 };
 

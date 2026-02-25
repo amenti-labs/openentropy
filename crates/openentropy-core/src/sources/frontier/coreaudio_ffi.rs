@@ -1,8 +1,7 @@
 //! Shared CoreAudio FFI bindings used by audio-based entropy sources.
 //!
 //! Provides the minimal CoreAudio bindings needed to query audio device
-//! properties. Used by `audio_pll_timing` and `counter_beat` to avoid
-//! duplicating ~80 lines of identical FFI code.
+//! properties. Used by `audio_pll_timing` to avoid duplicating FFI code.
 
 #[cfg(target_os = "macos")]
 pub use inner::*;
@@ -94,30 +93,4 @@ mod inner {
         t0.elapsed()
     }
 
-    /// Force a clock domain crossing by querying an audio device property.
-    ///
-    /// The return value is discarded — the point is forcing the CPU to synchronize
-    /// with the audio PLL. Used by `counter_beat` for CNTVCT_EL0 phase measurements.
-    pub fn query_audio_property(device: u32, selector: u32, scope: u32) {
-        let addr = AudioObjectPropertyAddress {
-            m_selector: selector,
-            m_scope: scope,
-            m_element: AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
-        };
-        let mut data = [0u8; 8];
-        let mut size: u32 = 8;
-        // SAFETY: AudioObjectGetPropertyData reads a property from a valid audio device.
-        // `data` is an 8-byte stack buffer sufficient for all queried properties.
-        unsafe {
-            AudioObjectGetPropertyData(
-                device,
-                &addr,
-                0,
-                std::ptr::null(),
-                &mut size,
-                data.as_mut_ptr() as *mut std::ffi::c_void,
-            );
-        }
-        std::hint::black_box(data);
-    }
 }

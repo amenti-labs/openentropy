@@ -107,7 +107,7 @@ static MACH_IPC_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IPC,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 

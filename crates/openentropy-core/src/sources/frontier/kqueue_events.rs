@@ -149,7 +149,7 @@ static KQUEUE_EVENTS_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IPC,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 2500.0,
+    entropy_rate_estimate: 2.5,
     composite: false,
 };
 

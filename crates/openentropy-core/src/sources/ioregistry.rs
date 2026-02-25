@@ -31,7 +31,7 @@ static IOREGISTRY_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform: Platform::MacOS,
     requirements: &[Requirement::IOKit],
-    entropy_rate_estimate: 1000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 
@@ -187,7 +187,7 @@ mod tests {
         let src = IORegistryEntropySource;
         assert_eq!(src.name(), "ioregistry");
         assert_eq!(src.info().category, SourceCategory::System);
-        assert!((src.info().entropy_rate_estimate - 1000.0).abs() < f64::EPSILON);
+        assert!((src.info().entropy_rate_estimate - 2.0).abs() < f64::EPSILON);
     }
 
     #[test]

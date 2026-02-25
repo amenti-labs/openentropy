@@ -21,7 +21,7 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       └── sources/            # 45 source implementations
+│   │       └── sources/            # 55 source implementations
 │   │           ├── mod.rs          # all_sources() registry
 │   │           ├── timing.rs       # ClockJitter, MachTiming, SleepJitter
 │   │           ├── sysctl.rs       # Kernel counter mining
@@ -35,9 +35,8 @@ openentropy/
 │   │           ├── bluetooth.rs    # BLE RF noise
 │   │           ├── ioregistry.rs   # IOKit deep mining
 │   │           ├── silicon.rs      # DRAM row buffer, cache, page fault, speculative
-│   │           ├── cross_domain.rs # Beat frequency sources
 │   │           ├── compression.rs  # Compression/hash timing oracles
-│   │           └── novel.rs        # GCD dispatch, VM page, Spotlight
+│   │           └── novel.rs        # Spotlight metadata query timing
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
@@ -79,7 +78,7 @@ openentropy/
 
 ### 1. openentropy-core
 
-The foundational library. Contains all 45 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
+The foundational library. Contains all 55 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
 **Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `log`, `getrandom`
 
@@ -122,10 +121,10 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
 
 ```
                          ┌─────────────────────────────────────────────┐
-                         │          45 ENTROPY SOURCES                 │
+                         │          55 ENTROPY SOURCES                 │
                          │                                             │
                          │  Timing      System      Network   Hardware │
-                         │  Silicon     CrossDomain  Novel             │
+                         │  Silicon     Frontier     Novel             │
                          └──────────────────┬──────────────────────────┘
                                             │
                            each: collect(n_samples) -> Vec<u8>

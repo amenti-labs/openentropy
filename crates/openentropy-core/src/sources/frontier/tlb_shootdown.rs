@@ -107,7 +107,7 @@ static TLB_SHOOTDOWN_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 

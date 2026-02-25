@@ -44,7 +44,7 @@ static PCIE_PLL_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AppleSilicon, Requirement::IOKit],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 4.0,
     composite: false,
 };
 

@@ -34,7 +34,7 @@ static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::GPU,
     platform: Platform::MacOS,
     requirements: &[Requirement::Metal],
-    entropy_rate_estimate: 6000.0,
+    entropy_rate_estimate: 4.0,
     composite: false,
 };
 

@@ -36,7 +36,7 @@ htmlcov/
 target/
 tmp/
 venv/
-research/internal/
+research/
 
 # Local session/snapshot artifacts
 sessions/

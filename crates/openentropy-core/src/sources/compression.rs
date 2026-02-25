@@ -38,7 +38,7 @@ static COMPRESSION_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Signal,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 1800.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 
@@ -112,7 +112,7 @@ static HASH_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Signal,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.5,
     composite: false,
 };
 

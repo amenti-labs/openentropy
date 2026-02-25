@@ -43,7 +43,7 @@ static WIFI_RSSI_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Network,
     platform: Platform::MacOS,
     requirements: &[Requirement::Wifi],
-    entropy_rate_estimate: 30.0,
+    entropy_rate_estimate: 0.5,
     composite: false,
 };
 
@@ -342,7 +342,7 @@ mod tests {
         let src = WiFiRSSISource::new();
         assert_eq!(src.info().name, "wifi_rssi");
         assert_eq!(src.info().category, SourceCategory::Network);
-        assert!((src.info().entropy_rate_estimate - 30.0).abs() < f64::EPSILON);
+        assert!((src.info().entropy_rate_estimate - 0.5).abs() < f64::EPSILON);
         assert_eq!(src.info().platform, Platform::MacOS);
         assert_eq!(src.info().requirements, &[Requirement::Wifi]);
         assert!(!src.info().composite);

@@ -23,15 +23,10 @@ const FAST_SOURCES: &[&str] = &[
     "vmstat_deltas",
     "disk_io",
     "dram_row_buffer",
-    "cache_contention",
     "page_fault_timing",
     "speculative_execution",
-    "cpu_io_beat",
-    "cpu_memory_beat",
     "hash_timing",
     "compression_timing",
-    "dispatch_queue",
-    "vm_page_timing",
     // Frontier sources (all < 0.1s)
     "amx_timing",
     "thread_lifecycle",
@@ -40,15 +35,10 @@ const FAST_SOURCES: &[&str] = &[
     "pipe_buffer",
     "kqueue_events",
     "dvfs_race",
-    "cas_contention",
-    "denormal_timing",
     "audio_pll_timing",
-    "usb_timing",
     // Unprecedented entropy sources (fast ones only)
     "nvme_latency",
-    "pdn_resonance",
     // Independent oscillator sources
-    "counter_beat",
     "display_pll",
     "pcie_pll",
     // GPU sources (moderate speed)
@@ -68,14 +58,14 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
         if filter == "all" {
             // Include everything
             for source in sources {
-                pool.add_source(source, 1.0);
+                pool.add_source(source);
             }
         } else {
             let names: Vec<&str> = filter.split(',').map(|s| s.trim()).collect();
             for source in sources {
                 let src_name = source.name().to_lowercase();
                 if names.iter().any(|n| src_name.contains(&n.to_lowercase())) {
-                    pool.add_source(source, 1.0);
+                    pool.add_source(source);
                 }
             }
         }
@@ -83,7 +73,7 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
         // Default: fast sources only
         for source in sources {
             if FAST_SOURCES.contains(&source.name()) {
-                pool.add_source(source, 1.0);
+                pool.add_source(source);
             }
         }
     }

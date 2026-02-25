@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Core entropy harvesting library — 45 hardware noise sources, raw or SHA-256 conditioned"
+description = "Core entropy harvesting library — hardware noise sources, raw or SHA-256 conditioned"
 readme = "README.md"
 
 [[example]]

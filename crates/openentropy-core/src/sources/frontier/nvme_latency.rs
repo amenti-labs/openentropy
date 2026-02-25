@@ -36,7 +36,7 @@ static NVME_LATENCY_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 1000.0,
+    entropy_rate_estimate: 1.5,
     composite: false,
 };
 

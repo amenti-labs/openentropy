@@ -1,6 +1,6 @@
 //! Silicon-level entropy sources that exploit CPU and DRAM microarchitecture
-//! timing: row buffer contention, cache hierarchy interference, page fault
-//! resolution, and speculative execution pipeline state.
+//! timing: row buffer contention, page fault resolution, and speculative
+//! execution pipeline state.
 
 use rand::Rng;
 
@@ -31,7 +31,7 @@ static DRAM_ROW_BUFFER_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Timing,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 3000.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 
@@ -84,104 +84,7 @@ impl EntropySource for DRAMRowBufferSource {
 }
 
 // ---------------------------------------------------------------------------
-// 2. CacheContentionSource
-// ---------------------------------------------------------------------------
-
-/// Measures L1/L2 cache miss patterns by alternating between sequential
-/// (cache-friendly) and random (cache-hostile) access patterns on an 8 MB
-/// buffer that spans the L2 boundary. Cache timing depends on what every other
-/// process and hardware unit is doing — the cache is a shared resource whose
-/// state is fundamentally unpredictable.
-pub struct CacheContentionSource;
-
-static CACHE_CONTENTION_INFO: SourceInfo = SourceInfo {
-    name: "cache_contention",
-    description: "L1/L2 cache contention timing from alternating access patterns",
-    physics: "Measures L1/L2 cache miss patterns by alternating access patterns. Cache \
-              timing depends on what every other process and hardware unit is doing \
-              \u{2014} the cache is a shared resource whose state is fundamentally \
-              unpredictable. A cache miss requires main memory access (100+ ns vs \
-              1 ns for L1 hit).",
-    category: SourceCategory::Timing,
-    platform: Platform::Any,
-    requirements: &[],
-    entropy_rate_estimate: 2500.0,
-    composite: false,
-};
-
-impl EntropySource for CacheContentionSource {
-    fn info(&self) -> &SourceInfo {
-        &CACHE_CONTENTION_INFO
-    }
-
-    fn is_available(&self) -> bool {
-        true
-    }
-
-    fn collect(&self, n_samples: usize) -> Vec<u8> {
-        const BUF_SIZE: usize = 8 * 1024 * 1024; // 8 MB — spans L2 boundary
-
-        let mut buffer: Vec<u8> = vec![0u8; BUF_SIZE];
-        // Touch pages to ensure they are resident.
-        for i in (0..BUF_SIZE).step_by(4096) {
-            buffer[i] = i as u8;
-        }
-
-        // 4x oversampling for better XOR-fold quality.
-        let num_rounds = n_samples * 4 + 64;
-        let mut rng = rand::rng();
-        let mut timings = Vec::with_capacity(num_rounds);
-
-        for round in 0..num_rounds {
-            let t0 = mach_time();
-
-            // Cycle through 3 access patterns for more contention diversity:
-            // sequential, random, and strided (cache-line bouncing).
-            match round % 3 {
-                0 => {
-                    // Sequential access — cache-friendly.
-                    let start = rng.random_range(0..BUF_SIZE.saturating_sub(512));
-                    let mut sink: u8 = 0;
-                    for offset in 0..512 {
-                        // SAFETY: start + offset < BUF_SIZE due to saturating_sub(512) bound.
-                        sink ^= unsafe { std::ptr::read_volatile(&buffer[start + offset]) };
-                    }
-                    std::hint::black_box(sink);
-                }
-                1 => {
-                    // Random access — cache-hostile.
-                    let mut sink: u8 = 0;
-                    for _ in 0..512 {
-                        let idx = rng.random_range(0..BUF_SIZE);
-                        // SAFETY: idx is bounded by BUF_SIZE via random_range.
-                        sink ^= unsafe { std::ptr::read_volatile(&buffer[idx]) };
-                    }
-                    std::hint::black_box(sink);
-                }
-                _ => {
-                    // Strided access — cache-line bouncing (64-byte stride).
-                    let start = rng.random_range(0..BUF_SIZE.saturating_sub(512 * 64));
-                    let mut sink: u8 = 0;
-                    for i in 0..512 {
-                        // SAFETY: start + i*64 < BUF_SIZE due to saturating_sub(512*64) bound.
-                        sink ^= unsafe { std::ptr::read_volatile(&buffer[start + i * 64]) };
-                    }
-                    std::hint::black_box(sink);
-                }
-            }
-
-            let t1 = mach_time();
-            timings.push(t1.wrapping_sub(t0));
-        }
-
-        std::hint::black_box(&buffer);
-
-        extract_timing_entropy(&timings, n_samples)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 3. PageFaultTimingSource
+// 2. PageFaultTimingSource
 // ---------------------------------------------------------------------------
 
 /// Triggers and times minor page faults via `mmap`/`munmap`. Page fault
@@ -200,7 +103,7 @@ static PAGE_FAULT_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Timing,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 1500.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
 };
 
@@ -272,7 +175,7 @@ impl EntropySource for PageFaultTimingSource {
 }
 
 // ---------------------------------------------------------------------------
-// 4. SpeculativeExecutionSource
+// 3. SpeculativeExecutionSource
 // ---------------------------------------------------------------------------
 
 /// Measures timing variations from the CPU's speculative execution engine. The
@@ -294,7 +197,7 @@ static SPECULATIVE_EXECUTION_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.5,
     composite: false,
 };
 
@@ -388,20 +291,6 @@ mod tests {
 
     #[test]
     #[ignore] // Run with: cargo test -- --ignored
-    fn cache_contention_collects_bytes() {
-        let src = CacheContentionSource;
-        assert!(src.is_available());
-        let data = src.collect(128);
-        assert!(!data.is_empty());
-        assert!(data.len() <= 128);
-        if data.len() > 1 {
-            let first = data[0];
-            assert!(data.iter().any(|&b| b != first), "all bytes were identical");
-        }
-    }
-
-    #[test]
-    #[ignore] // Run with: cargo test -- --ignored
     fn page_fault_timing_collects_bytes() {
         let src = PageFaultTimingSource;
         assert!(src.is_available());
@@ -428,10 +317,6 @@ mod tests {
     fn source_info_categories() {
         assert_eq!(DRAMRowBufferSource.info().category, SourceCategory::Timing);
         assert_eq!(
-            CacheContentionSource.info().category,
-            SourceCategory::Timing
-        );
-        assert_eq!(
             PageFaultTimingSource.info().category,
             SourceCategory::Timing
         );
@@ -444,7 +329,6 @@ mod tests {
     #[test]
     fn source_info_names() {
         assert_eq!(DRAMRowBufferSource.name(), "dram_row_buffer");
-        assert_eq!(CacheContentionSource.name(), "cache_contention");
         assert_eq!(PageFaultTimingSource.name(), "page_fault_timing");
         assert_eq!(SpeculativeExecutionSource.name(), "speculative_execution");
     }

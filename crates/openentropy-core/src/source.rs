@@ -165,7 +165,6 @@ pub trait EntropySource: Send + Sync {
 /// Runtime state for a registered source in the pool.
 pub struct SourceState {
     pub source: std::sync::Arc<dyn EntropySource>,
-    pub weight: f64,
     pub total_bytes: u64,
     pub failures: u64,
     pub last_entropy: f64,
@@ -175,10 +174,9 @@ pub struct SourceState {
 }
 
 impl SourceState {
-    pub fn new(source: Box<dyn EntropySource>, weight: f64) -> Self {
+    pub fn new(source: Box<dyn EntropySource>) -> Self {
         Self {
             source: std::sync::Arc::from(source),
-            weight,
             total_bytes: 0,
             failures: 0,
             last_entropy: 0.0,

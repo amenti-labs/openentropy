@@ -30,7 +30,7 @@ static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::GPU,
     platform: Platform::MacOS,
     requirements: &[Requirement::IOSurface],
-    entropy_rate_estimate: 3000.0,
+    entropy_rate_estimate: 2.5,
     composite: false,
 };
 

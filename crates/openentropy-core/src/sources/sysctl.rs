@@ -34,7 +34,7 @@ static SYSCTL_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 5000.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 

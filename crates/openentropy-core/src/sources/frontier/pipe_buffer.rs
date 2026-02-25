@@ -112,7 +112,7 @@ static PIPE_BUFFER_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IPC,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 1500.0,
+    entropy_rate_estimate: 1.5,
     composite: false,
 };
 

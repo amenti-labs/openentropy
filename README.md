@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*45 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*55 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -90,13 +90,13 @@ Raw mode enables:
 
 Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy continuously harvests **real physical noise** from your hardware:
 
-- **Thermal noise** — four independent oscillator beats (CPU crystal vs audio PLL, display PLL, PCIe PHY PLLs), denormal FPU micropower, power delivery network resonance
-- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, cache contention, speculative execution variance, TLB shootdowns, DVFS races
-- **I/O and IPC** — disk and NVMe latency, USB timing, Mach port IPC, pipe buffer allocation, kqueue event multiplexing
-- **GPU and compute** — GPU dispatch scheduling, warp divergence, IOSurface cross-domain timing
-- **Scheduling and system** — nanosleep drift, GCD dispatch queues, thread lifecycle, kernel counters, process table snapshots
+- **Thermal noise** — three independent oscillator beats (CPU crystal vs audio PLL, display PLL, PCIe PHY PLLs)
+- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, speculative execution variance, TLB shootdowns, DVFS races, ICC bus contention, prefetcher state, APRR JIT timing
+- **I/O and IPC** — disk and NVMe latency, USB enumeration, Mach port IPC, pipe buffer allocation, kqueue events, fsync journal
+- **GPU and compute** — GPU warp divergence, IOSurface cross-domain timing, Neural Engine inference timing
+- **Scheduling and system** — nanosleep drift, GCD dispatch queues, thread lifecycle, P/E-core migration, timer coalescing, kernel counters, process table snapshots
 - **Network and sensors** — DNS resolution timing, TCP handshake variance, WiFi RSSI, BLE ambient RF, audio ADC noise
-- **Composite beat frequencies** — interference patterns between CPU, memory, and I/O subsystems
+- **Deep hardware** — dual clock domain beats, SITVA, AES-XTS context switching, SEV broadcast, COMMPAGE seqlock, SMC thermistor, getentropy TRNG reseed
 
 The pool XOR-combines independent streams. No single source failure can compromise the pool.
 
@@ -118,7 +118,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 45 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 55 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
@@ -133,114 +133,119 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-45 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+55 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
-### Thermal (6)
+### Thermal (3)
 
-Each source taps a **physically independent** noise mechanism. The oscillator sources are especially noteworthy: they beat the CPU's 24 MHz crystal against other independent oscillators on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise from separate crystal sustaining amplifiers or PLL VCO transistors.
+Each source taps a **physically independent** oscillator. They beat the CPU's 24 MHz crystal against other independent PLLs on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise.
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `denormal_timing` | <0.01s | Denormal FPU micropower thermal noise |
-| `audio_pll_timing` | 0.08s | Audio PLL clock drift from thermal perturbation |
-| `pdn_resonance` | <0.01s | Power delivery network LC resonance noise |
-| `counter_beat` | 0.09s | Two-oscillator beat: CPU crystal (24 MHz) vs audio PLL crystal |
-| `display_pll` | 0.07s | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
-| `pcie_pll` | 0.10s | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
+| Source | Description |
+|--------|-------------|
+| `audio_pll_timing` | Audio PLL clock drift from CoreAudio device property queries |
+| `display_pll` | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
+| `pcie_pll` | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
-### Timing (6)
+### Timing (4)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `clock_jitter` | 0.00s | Phase noise between performance counter and monotonic clocks |
-| `mach_timing` | 0.00s | Mach absolute time LSB jitter |
-| `dram_row_buffer` | 0.00s | DRAM row buffer conflict timing |
-| `cache_contention` | 0.01s | CPU cache line contention noise |
-| `page_fault_timing` | 0.01s | Virtual memory page fault latency |
-| `vm_page_timing` | 0.07s | Mach VM page allocation timing |
+| Source | Description |
+|--------|-------------|
+| `clock_jitter` | Phase noise between performance counter and monotonic clocks |
+| `dram_row_buffer` | DRAM row buffer hit/miss timing from random memory accesses |
+| `page_fault_timing` | Minor page fault timing via mmap/munmap cycles |
+| `mach_continuous_timing` | mach_continuous_time() kernel sleep-offset path |
 
-### Scheduling (3)
+### Scheduling (5)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `sleep_jitter` | 0.00s | Scheduling jitter in nanosleep() calls |
-| `dispatch_queue` | 0.09s | GCD dispatch queue scheduling jitter |
-| `thread_lifecycle` | 0.08s | pthread create/join cycle timing |
+| Source | Description |
+|--------|-------------|
+| `sleep_jitter` | Scheduling jitter in nanosleep() calls |
+| `thread_lifecycle` | Thread create/join kernel scheduling and allocation jitter |
+| `pe_core_arithmetic` | P-core/E-core migration timing entropy from arithmetic loop jitter |
+| `dispatch_queue_timing` | GCD libdispatch global queue timing — system-wide thread pool entropy |
+| `timer_coalescing` | OS timer coalescing wakeup jitter from system-wide timer queue state |
 
 ### IO (4)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `disk_io` | 0.02s | Block device I/O timing jitter |
-| `nvme_latency` | 0.01s | NVMe command submission/completion timing |
-| `usb_timing` | 0.03s | USB bus transaction timing jitter |
-| `fsync_journal` | 16.69s | fsync journal commit latency noise |
+| Source | Description |
+|--------|-------------|
+| `disk_io` | Block device I/O timing jitter |
+| `nvme_latency` | NVMe command submission/completion timing |
+| `fsync_journal` | APFS journal commit timing from full storage stack traversal |
+| `usb_enumeration` | IOKit USB device enumeration timing |
 
 ### IPC (4)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `mach_ipc` | 0.04s | Mach port IPC allocation/deallocation timing |
-| `pipe_buffer` | 0.01s | Kernel zone allocator via pipe lifecycle |
-| `kqueue_events` | 12.25s | BSD kqueue event multiplexing timer/file/socket jitter |
-| `keychain_timing` | 0.02s | macOS Keychain Services API timing jitter |
+| Source | Description |
+|--------|-------------|
+| `mach_ipc` | Mach port complex OOL message and VM remapping timing jitter |
+| `pipe_buffer` | Multi-pipe kernel zone allocator competition and buffer timing jitter |
+| `kqueue_events` | Kqueue event multiplexing timing from timers, files, and sockets |
+| `keychain_timing` | Keychain/securityd round-trip timing jitter |
 
-### Microarch (5)
+### Microarch (15)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `speculative_execution` | 0.00s | Branch prediction / speculative execution jitter |
-| `dvfs_race` | 0.13s | Cross-core DVFS frequency race |
-| `cas_contention` | <0.01s | Multi-thread atomic CAS arbitration contention |
-| `tlb_shootdown` | 0.03s | mprotect() TLB invalidation IPI latency |
-| `amx_timing` | 0.05s | Apple AMX coprocessor matrix dispatch jitter |
+| Source | Description |
+|--------|-------------|
+| `speculative_execution` | Branch predictor state timing via data-dependent branches |
+| `dvfs_race` | Cross-core DVFS frequency race between thread pairs |
+| `tlb_shootdown` | TLB invalidation broadcast timing via mprotect IPI storms |
+| `amx_timing` | Apple AMX coprocessor matrix multiply timing jitter (debiased) |
+| `icc_atomic_contention` | Apple Silicon ICC bus arbitration via cross-core atomic contention |
+| `prefetcher_state` | Hardware prefetcher stride-learning state |
+| `aprr_jit_timing` | Apple APRR undocumented register JIT toggle timing |
+| `preemption_boundary` | Kernel scheduler preemption timing via CNTVCT_EL0 reads |
+| `sev_event_timing` | ARM64 SEV/SEVL broadcast event timing via ICC fabric load |
+| `cntfrq_cache_timing` | CNTFRQ_EL0 system-register cache timing |
+| `gxf_register_timing` | Apple GXF EL0-accessible register trap-path timing |
+| `dual_clock_domain` | 24 MHz CNTVCT x 41 MHz Apple private timer beat-frequency |
+| `sitva` | Scheduler-induced timing variance amplification via NEON FMLA |
+| `memory_bus_crypto` | AES-XTS crypto context switching timing from cache flush cycles |
+| `commoncrypto_aes_timing` | CommonCrypto AES-128-CBC warm/cold key schedule bimodal timing |
 
-### GPU (2)
+### GPU (3)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `gpu_divergence` | 0.76s | GPU warp divergence timing variance |
-| `iosurface_crossing` | 0.08s | IOSurface CPU-GPU cross-domain timing |
+| Source | Description |
+|--------|-------------|
+| `gpu_divergence` | GPU shader thread execution order divergence entropy |
+| `iosurface_crossing` | IOSurface GPU/CPU memory domain crossing coherence jitter |
+| `nl_inference_timing` | NaturalLanguage ANE inference timing via system-wide NLP cache state |
 
 ### Network (3)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `dns_timing` | 21.91s | DNS resolution timing jitter |
-| `tcp_connect_timing` | 39.08s | TCP handshake timing variance |
-| `wifi_rssi` | — | WiFi received signal strength fluctuations *(requires WiFi)* |
+| Source | Description |
+|--------|-------------|
+| `dns_timing` | DNS resolution timing jitter |
+| `tcp_connect_timing` | TCP handshake timing variance |
+| `wifi_rssi` | WiFi received signal strength fluctuations *(requires WiFi)* |
 
-### System (4)
+### System (7)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `sysctl_deltas` | 0.28s | Kernel counter fluctuations across 50+ sysctl keys |
-| `vmstat_deltas` | 0.38s | VM subsystem page fault and swap counters |
-| `process_table` | 1.99s | Process table snapshot entropy |
-| `ioregistry` | 2.15s | IOKit registry value mining |
-
-### Composite (2)
-
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `cpu_io_beat` | 0.04s | CPU and I/O subsystem beat frequency |
-| `cpu_memory_beat` | 0.00s | CPU and memory controller beat pattern |
+| Source | Description |
+|--------|-------------|
+| `sysctl_deltas` | Kernel counter fluctuations across 50+ sysctl keys |
+| `vmstat_deltas` | VM subsystem page fault and swap counters |
+| `process_table` | Process table snapshot entropy |
+| `ioregistry` | IOKit registry value mining |
+| `commpage_clock_timing` | macOS COMMPAGE seqlock update synchronization timing |
+| `proc_info_timing` | proc_pidinfo / proc_pid_rusage syscall kernel proc_lock contention |
+| `getentropy_timing` | getentropy() SEP TRNG reseed timing |
 
 ### Signal (3)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `compression_timing` | 1.02s | zlib compression timing oracle |
-| `hash_timing` | 0.04s | SHA-256 hash timing data-dependency |
-| `spotlight_timing` | 12.91s | Spotlight metadata query timing |
+| Source | Description |
+|--------|-------------|
+| `compression_timing` | zlib compression timing oracle |
+| `hash_timing` | SHA-256 hash timing data-dependency |
+| `spotlight_timing` | Spotlight metadata query timing |
 
-### Sensor (3)
+### Sensor (4)
 
-| Source | Time | Description |
-|--------|-----:|-------------|
-| `audio_noise` | — | Microphone ADC thermal noise (Johnson-Nyquist) *(requires mic)* |
-| `camera_noise` | — | Camera sensor noise (read noise + dark current) *(requires camera)* |
-| `bluetooth_noise` | 10.01s | BLE ambient RF noise |
+| Source | Description |
+|--------|-------------|
+| `audio_noise` | Microphone ADC thermal noise (Johnson-Nyquist) *(requires mic)* |
+| `camera_noise` | Camera sensor noise (read noise + dark current) *(requires camera)* |
+| `bluetooth_noise` | BLE ambient RF noise |
+| `smc_highvar_timing` | SMC thermistor ADC + fuel gauge I2C bus timing |
 
 Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
 
@@ -396,7 +401,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (55) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -411,8 +416,8 @@ Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **45/45** | Full suite — WiFi, BLE, camera, mic |
-| **Mac Mini / Studio / Pro** | 37–39 | No built-in camera, mic on some models |
+| **MacBook (M-series)** | **55/55** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 47–49 | No built-in camera, mic on some models |
 | **Intel Mac** | ~18 | Some silicon/microarch sources are ARM-specific |
 | **Linux** | 10–13 | Timing, network, disk, process sources |
 

@@ -72,7 +72,7 @@ static KEYCHAIN_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IPC,
     platform: Platform::MacOS,
     requirements: &[Requirement::SecurityFramework],
-    entropy_rate_estimate: 6500.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 

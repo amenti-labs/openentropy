@@ -32,7 +32,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 ```rust
 pub fn new(seed: Option<&[u8]>) -> Self
 pub fn auto() -> Self
-pub fn add_source(&mut self, source: Box<dyn EntropySource>, weight: f64)
+pub fn add_source(&mut self, source: Box<dyn EntropySource>)
 pub fn source_count(&self) -> usize
 
 pub fn collect_all(&self) -> usize
