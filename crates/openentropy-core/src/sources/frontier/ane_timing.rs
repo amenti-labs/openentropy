@@ -52,7 +52,7 @@ pub struct AneTimingSource;
 #[cfg(target_os = "macos")]
 mod iokit {
     use crate::sources::helpers::read_cntvct;
-    use std::ffi::{c_char, c_void, CString};
+    use std::ffi::{CString, c_char, c_void};
 
     type IOReturn = i32;
 
@@ -101,10 +101,10 @@ mod iokit {
     /// IOKit service class names for Apple Neural Engine subsystem.
     /// Different Apple Silicon generations use different class names.
     const ANE_SERVICE_CLASSES: &[&str] = &[
-        "H11ANEIn",                // ANE input/dispatch service (M1/M2/M3/M4)
-        "H11ANE",                  // ANE controller (all Apple Silicon)
-        "AppleT6041ANEHAL",        // ANE HAL (chip-specific, e.g. M3)
-        "ANEClientHints",          // ANE client hints service
+        "H11ANEIn",         // ANE input/dispatch service (M1/M2/M3/M4)
+        "H11ANE",           // ANE controller (all Apple Silicon)
+        "AppleT6041ANEHAL", // ANE HAL (chip-specific, e.g. M3)
+        "ANEClientHints",   // ANE client hints service
     ];
 
     /// Probe an ANE IOKit service. Returns CNTVCT tick duration.
@@ -169,8 +169,7 @@ mod iokit {
                     continue;
                 }
                 let mut iter: io_iterator_t = 0;
-                let kr =
-                    IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter);
+                let kr = IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter);
                 if kr == 0 {
                     let svc = IOIteratorNext(iter);
                     IOObjectRelease(iter);

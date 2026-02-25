@@ -26,8 +26,7 @@ use crate::sources::helpers::extract_timing_entropy;
 
 static NVME_IOKIT_SENSORS_INFO: SourceInfo = SourceInfo {
     name: "nvme_iokit_sensors",
-    description:
-        "NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps",
+    description: "NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps",
     physics: "Reads NVMe controller properties (temperature, SMART counters) via IOKit C API, \
               forcing clock domain crossings between the CPU\u{2019}s 24 MHz crystal and the \
               NVMe controller\u{2019}s independent PLL (Apple ANS2/ANS3). CNTVCT_EL0 timestamps \
@@ -48,7 +47,7 @@ pub struct NvmeIokitSensorsSource;
 #[cfg(target_os = "macos")]
 mod iokit {
     use crate::sources::helpers::read_cntvct;
-    use std::ffi::{c_char, c_void, CString};
+    use std::ffi::{CString, c_char, c_void};
 
     type IOReturn = i32;
 
@@ -236,8 +235,7 @@ mod iokit {
                     continue;
                 }
                 let mut iter: io_iterator_t = 0;
-                let kr =
-                    IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter);
+                let kr = IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter);
                 if kr == 0 {
                     let svc = IOIteratorNext(iter);
                     IOObjectRelease(iter);

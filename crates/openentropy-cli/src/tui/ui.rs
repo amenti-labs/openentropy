@@ -822,7 +822,10 @@ fn draw_camera_shot_noise(f: &mut Frame, area: Rect, state: &SensorFlowState, na
         Line::from(vec![
             Span::styled("model ", Style::default().fg(Color::DarkGray)),
             Span::styled(
-                format!("rolling sensor-grain map from camera LSB nibbles {}", spinner(state.frame)),
+                format!(
+                    "rolling sensor-grain map from camera LSB nibbles {}",
+                    spinner(state.frame)
+                ),
                 Style::default().fg(pulse_color(state.frame)),
             ),
         ]),
@@ -844,7 +847,10 @@ fn draw_camera_shot_noise(f: &mut Frame, area: Rect, state: &SensorFlowState, na
         ]),
         Line::from(vec![
             Span::styled("nibbles ", Style::default().fg(Color::DarkGray)),
-            Span::styled(animated_cursor(&nib_tail, state.frame, 'X'), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                animated_cursor(&nib_tail, state.frame, 'X'),
+                Style::default().fg(Color::Yellow),
+            ),
         ]),
         Line::from(""),
     ];
@@ -866,7 +872,12 @@ fn draw_camera_shot_noise(f: &mut Frame, area: Rect, state: &SensorFlowState, na
     let block = Block::default()
         .borders(Borders::ALL)
         .title(format!(" {name}  [g] Camera Shot Noise "));
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,5 +1068,4 @@ mod tests {
         let vals = extract_chart_values(&history, ChartMode::Autocorrelation);
         assert_eq!(vals.len(), 9);
     }
-
 }
