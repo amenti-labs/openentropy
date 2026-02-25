@@ -1,5 +1,7 @@
 # Rust API Reference
 
+[< Back to README](../README.md) | [Sources](SOURCES.md) | [Architecture](ARCHITECTURE.md) | [Conditioning](CONDITIONING.md)
+
 Accurate reference for the current Rust workspace API.
 
 For Python bindings, see `docs/PYTHON_SDK.md`.
@@ -131,6 +133,7 @@ pub enum Requirement {
     IOKit,
     IOSurface,
     SecurityFramework,
+    RawBlockDevice,
 }
 ```
 
@@ -159,7 +162,7 @@ pub fn platform_info() -> PlatformInfo
 ```
 
 ```rust
-pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 45 sources
+pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 49 sources
 ```
 
 ## openentropy-tests

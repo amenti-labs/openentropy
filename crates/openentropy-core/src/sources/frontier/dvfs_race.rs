@@ -42,7 +42,7 @@ static DVFS_RACE_INFO: SourceInfo = SourceInfo {
               too short for DVFS transitions (~100\u{00b5}s-1ms); the primary entropy comes \
               from scheduling and cache-coherence nondeterminism.",
     category: SourceCategory::Microarch,
-    platform: Platform::Any,
+    platform: Platform::MacOS,
     requirements: &[],
     entropy_rate_estimate: 5000.0,
     composite: false,
@@ -54,7 +54,7 @@ impl EntropySource for DVFSRaceSource {
     }
 
     fn is_available(&self) -> bool {
-        true
+        cfg!(target_os = "macos")
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

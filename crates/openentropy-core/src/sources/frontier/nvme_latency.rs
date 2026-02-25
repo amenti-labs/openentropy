@@ -40,7 +40,7 @@ static NVME_LATENCY_INFO: SourceInfo = SourceInfo {
     composite: false,
 };
 
-/// Entropy source that harvests timing jitter from NVMe flash cell reads.
+/// Entropy source that harvests timing jitter from the NVMe I/O stack.
 pub struct NVMeLatencySource;
 
 impl EntropySource for NVMeLatencySource {

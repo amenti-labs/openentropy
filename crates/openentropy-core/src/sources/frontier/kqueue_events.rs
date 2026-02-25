@@ -147,7 +147,7 @@ static KQUEUE_EVENTS_INFO: SourceInfo = SourceInfo {
               create knote lock contention and dispatch queue interference. The combination of \
               independent event sources produces high min-entropy.",
     category: SourceCategory::IPC,
-    platform: Platform::MacOS,
+    platform: Platform::Any, // macOS + FreeBSD/NetBSD/OpenBSD (all BSDs with kqueue)
     requirements: &[],
     entropy_rate_estimate: 2500.0,
     composite: false,

@@ -97,6 +97,8 @@ pub enum Requirement {
     IOSurface,
     /// Security framework (Keychain).
     SecurityFramework,
+    /// Raw block device access (/dev/rdiskN, /dev/nvmeXnY).
+    RawBlockDevice,
 }
 
 impl std::fmt::Display for Requirement {
@@ -112,6 +114,7 @@ impl std::fmt::Display for Requirement {
             Self::IOKit => write!(f, "iokit"),
             Self::IOSurface => write!(f, "iosurface"),
             Self::SecurityFramework => write!(f, "security_framework"),
+            Self::RawBlockDevice => write!(f, "raw_block_device"),
         }
     }
 }

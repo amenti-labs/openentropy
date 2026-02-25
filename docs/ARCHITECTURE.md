@@ -1,5 +1,7 @@
 # Architecture
 
+[< Back to README](../README.md) | [Sources](SOURCES.md) | [Conditioning](CONDITIONING.md) | [API](API.md)
+
 ## Overview
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with multiple crates, each with a focused responsibility.
@@ -21,7 +23,7 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       └── sources/            # 45 source implementations
+│   │       └── sources/            # 49 source implementations
 │   │           ├── mod.rs          # all_sources() registry
 │   │           ├── timing.rs       # ClockJitter, MachTiming, SleepJitter
 │   │           ├── sysctl.rs       # Kernel counter mining
@@ -37,7 +39,15 @@ openentropy/
 │   │           ├── silicon.rs      # DRAM row buffer, cache, page fault, speculative
 │   │           ├── cross_domain.rs # Beat frequency sources
 │   │           ├── compression.rs  # Compression/hash timing oracles
-│   │           └── novel.rs        # GCD dispatch, VM page, Spotlight
+│   │           ├── novel.rs        # GCD dispatch, VM page, Spotlight
+│   │           └── frontier/       # Oscillator, IPC, microarch, NVMe sources
+│   │               ├── mod.rs
+│   │               ├── counter_beat.rs, audio_pll_timing.rs, display_pll.rs, pcie_pll.rs
+│   │               ├── denormal_timing.rs, pdn_resonance.rs, ane_timing.rs
+│   │               ├── mach_ipc.rs, pipe_buffer.rs, kqueue_events.rs, keychain_timing.rs
+│   │               ├── gpu_divergence.rs, iosurface_crossing.rs, fsync_journal.rs
+│   │               ├── nvme_latency.rs, nvme_iokit_sensors.rs, nvme_raw_device.rs
+│   │               └── ... (22 sources total)
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
@@ -79,7 +89,7 @@ openentropy/
 
 ### 1. openentropy-core
 
-The foundational library. Contains all 45 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
+The foundational library. Contains all 49 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
 **Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `log`, `getrandom`
 
@@ -122,7 +132,7 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
 
 ```
                          ┌─────────────────────────────────────────────┐
-                         │          45 ENTROPY SOURCES                 │
+                         │          49 ENTROPY SOURCES                 │
                          │                                             │
                          │  Timing      System      Network   Hardware │
                          │  Silicon     CrossDomain  Novel             │

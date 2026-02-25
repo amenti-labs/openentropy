@@ -36,6 +36,7 @@ htmlcov/
 target/
 tmp/
 venv/
+product/
 research/internal/
 
 # Local session/snapshot artifacts

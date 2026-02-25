@@ -1,6 +1,8 @@
 # Entropy Source Catalog
 
-45 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+[< Back to README](../README.md) | [Architecture](ARCHITECTURE.md) | [Conditioning](CONDITIONING.md) | [API](API.md)
+
+49 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -9,11 +11,11 @@
 | 1 | `clock_jitter` | Timing | PLL phase noise between clocks | ~500 b/s | All |
 | 2 | `mach_timing` | Timing | ARM system counter LSB jitter | ~300 b/s | macOS |
 | 3 | `sleep_jitter` | Scheduling | OS scheduler wake-up jitter | ~400 b/s | All |
-| 4 | `sysctl` | System | Kernel counter fluctuations | ~2000 b/s | macOS, Linux |
-| 5 | `vmstat` | System | VM subsystem page counters | ~500 b/s | macOS, Linux |
-| 6 | `process` | System | Process table snapshot hash | ~300 b/s | macOS |
+| 4 | `sysctl_deltas` | System | Kernel counter fluctuations | ~2000 b/s | macOS, Linux |
+| 5 | `vmstat_deltas` | System | VM subsystem page counters | ~500 b/s | macOS, Linux |
+| 6 | `process_table` | System | Process table snapshot hash | ~300 b/s | macOS |
 | 7 | `dns_timing` | Network | DNS resolution latency jitter | ~400 b/s | All |
-| 8 | `tcp_connect` | Network | TCP handshake timing variance | ~300 b/s | All |
+| 8 | `tcp_connect_timing` | Network | TCP handshake timing variance | ~300 b/s | All |
 | 9 | `wifi_rssi` | Network | WiFi signal strength noise floor | ~200 b/s | macOS |
 | 10 | `disk_io` | IO | Block device I/O timing jitter | ~500 b/s | All |
 | 11 | `audio_noise` | Sensor | Microphone ADC thermal noise (Johnson-Nyquist) | ~10000 b/s | Requires mic |
@@ -51,6 +53,10 @@
 | 43 | `pdn_resonance` | Thermal | Power delivery network LC resonance noise | ~3000 b/s | All (ARM) |
 | 44 | `display_pll` | Thermal | Display PLL phase noise (~533 MHz pixel clock) | ~2500 b/s | macOS (ARM) |
 | 45 | `pcie_pll` | Thermal | PCIe PHY PLL jitter (Thunderbolt/PCIe clock domains) | ~2000 b/s | macOS (ARM) |
+| 46 | `ane_timing` | Timing | Apple Neural Engine clock domain crossing jitter | ~1800 b/s | macOS (ARM) |
+| 47 | `nvme_iokit_sensors` | IO | NVMe controller sensor polling via IOKit | ~1500 b/s | macOS (ARM) |
+| 48 | `nvme_raw_device` | IO | Direct raw block device reads bypassing filesystem | ~2000 b/s | All |
+| 49 | `nvme_passthrough_linux` | IO | Raw NVMe admin commands via ioctl passthrough | ~2500 b/s | Linux |
 
 ---
 
@@ -106,7 +112,7 @@
 
 ## System Sources
 
-### 4. `sysctl`
+### 4. `sysctl_deltas`
 
 **Category:** System
 **Struct:** `SysctlSource`
@@ -119,7 +125,7 @@
 
 ---
 
-### 5. `vmstat`
+### 5. `vmstat_deltas`
 
 **Category:** System
 **Struct:** `VmstatSource`
@@ -132,7 +138,7 @@
 
 ---
 
-### 6. `process`
+### 6. `process_table`
 
 **Category:** System
 **Struct:** `ProcessSource`
@@ -162,7 +168,7 @@
 
 ---
 
-### 8. `tcp_connect`
+### 8. `tcp_connect_timing`
 
 **Category:** Network
 **Struct:** `TCPConnectSource`
@@ -382,7 +388,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ### 22. `hash_timing`
 
-**Category:** Novel
+**Category:** Signal
 **Struct:** `HashTimingSource`
 **Platform:** All
 **Estimated Rate:** ~400 b/s
@@ -395,7 +401,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ### 23. `dispatch_queue`
 
-**Category:** Novel
+**Category:** Scheduling
 **Struct:** `DispatchQueueSource`
 **Platform:** macOS
 **Estimated Rate:** ~500 b/s
@@ -408,7 +414,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ### 24. `vm_page_timing`
 
-**Category:** Novel
+**Category:** Timing
 **Struct:** `VMPageTimingSource`
 **Platform:** All
 **Estimated Rate:** ~400 b/s
@@ -421,7 +427,7 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ### 25. `spotlight_timing`
 
-**Category:** Novel
+**Category:** Signal
 **Struct:** `SpotlightTimingSource`
 **Platform:** macOS
 **Estimated Rate:** ~200 b/s
@@ -432,13 +438,13 @@ These sources exploit the interference patterns that arise when independent cloc
 
 ---
 
-## Frontier Sources
+## Kernel, Microarch, and Coprocessor Sources
 
-Experimental sources exploring unconventional entropy extraction mechanisms. These exploit OS kernel internals, cross-core interactions, and hardware coprocessor scheduling.
+Sources exploiting OS kernel internals, cross-core interactions, and hardware coprocessor scheduling.
 
 ### 26. `amx_timing`
 
-**Category:** Frontier
+**Category:** Microarch
 **Struct:** `AMXTimingSource`
 **Platform:** macOS (Apple Silicon)
 **Estimated Rate:** ~500 b/s
@@ -451,7 +457,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 27. `thread_lifecycle`
 
-**Category:** Frontier
+**Category:** Scheduling
 **Struct:** `ThreadLifecycleSource`
 **Platform:** All
 **Estimated Rate:** ~400 b/s
@@ -464,7 +470,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 28. `mach_ipc`
 
-**Category:** Frontier
+**Category:** IPC
 **Struct:** `MachIPCSource`
 **Platform:** macOS
 **Estimated Rate:** ~300 b/s
@@ -477,7 +483,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 29. `tlb_shootdown`
 
-**Category:** Frontier
+**Category:** Microarch
 **Struct:** `TLBShootdownSource`
 **Platform:** macOS
 **Estimated Rate:** ~400 b/s
@@ -490,7 +496,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 30. `pipe_buffer`
 
-**Category:** Frontier
+**Category:** IPC
 **Struct:** `PipeBufferSource`
 **Platform:** macOS
 **Estimated Rate:** ~200 b/s
@@ -503,7 +509,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 31. `kqueue_events`
 
-**Category:** Frontier
+**Category:** IPC
 **Struct:** `KqueueEventsSource`
 **Platform:** macOS, BSD
 **Estimated Rate:** ~300 b/s
@@ -516,7 +522,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 32. `dvfs_race`
 
-**Category:** Frontier
+**Category:** Microarch
 **Struct:** `DVFSRaceSource`
 **Platform:** All
 **Estimated Rate:** ~500 b/s
@@ -529,7 +535,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 33. `cas_contention`
 
-**Category:** Frontier
+**Category:** Microarch
 **Struct:** `CASContentionSource`
 **Platform:** All
 **Estimated Rate:** ~200 b/s
@@ -542,7 +548,7 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ### 34. `keychain_timing`
 
-**Category:** Frontier
+**Category:** IPC
 **Struct:** `KeychainTimingSource`
 **Platform:** macOS
 **Estimated Rate:** ~300 b/s
@@ -550,6 +556,8 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 **Physics:** macOS Keychain Services API calls traverse the Security framework into `securityd`, involving XPC IPC, database access, and cryptographic operations. The timing jitter captures XPC message delivery, SQLite page cache state, and encryption overhead.
 
 **Implementation:** Performs Keychain API queries (searching for non-existent items) and measures the round-trip timing through the Security framework.
+
+---
 
 ### 35. `denormal_timing`
 
@@ -703,6 +711,66 @@ Experimental sources exploring unconventional entropy extraction mechanisms. The
 
 ---
 
+### 46. `ane_timing`
+
+**Category:** Timing
+**Struct:** `AneTimingSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~1800 b/s
+
+**Physics:** The Apple Neural Engine (ANE) has its own independent clock domain, separate from the CPU, GPU, audio PLL, display PLL, and PCIe PHY. IOKit property reads from AppleH13ANEInterface / AppleANE* services force clock domain crossings between the CPU's 24 MHz crystal and the ANE's independent PLL. CNTVCT_EL0 timestamps before/after each IOKit call capture the beat between CPU and ANE clock domains. Entropy arises from ANE PLL thermal noise (VCO Johnson-Nyquist), power state transition latency, DMA setup variance, and memory fabric contention.
+
+**What makes it unique:** Taps the **fifth independent oscillator domain** on Apple Silicon — the neural accelerator is a completely separate compute block with its own clocking, power gating, and DMA engine. No published entropy source extracts timing jitter from neural accelerator dispatch.
+
+**Hardware caveat:** Only available on Apple Silicon Macs with a Neural Engine (M1 and later). The ANE may be in a low-power state, adding wake jitter that contributes to entropy but also increases initial collection latency.
+
+---
+
+### 47. `nvme_iokit_sensors`
+
+**Category:** IO
+**Struct:** `NvmeIokitSensorsSource`
+**Platform:** macOS (Apple Silicon)
+**Estimated Rate:** ~1500 b/s
+
+**Physics:** Reads NVMe controller properties (temperature, SMART counters) via the IOKit C API, forcing clock domain crossings between the CPU's 24 MHz crystal and the NVMe controller's independent PLL (Apple ANS2/ANS3). CNTVCT_EL0 timestamps before/after each IOKit call capture the beat between CPU and NVMe clock domains. Entropy arises from PLL thermal noise, IOKit kernel path traversal variance, and SMART counter deltas between consecutive polls.
+
+**What makes it unique:** Combines clock domain crossing timing with actual hardware sensor data (temperature ADC noise, SMART counter deltas). Unlike `nvme_latency` which times block I/O operations, this source reads controller telemetry directly.
+
+**Hardware caveat:** Requires Apple Silicon with an NVMe controller accessible via IOKit (standard on all M-series Macs). The dominant timing variance comes from kernel lock contention and IOKit serialization — not PLL thermal noise. This is an honest high-quality hardware timing source, not a quantum random number generator.
+
+---
+
+### 48. `nvme_raw_device`
+
+**Category:** IO
+**Struct:** `NvmeRawDeviceSource`
+**Platform:** All (macOS, Linux)
+**Estimated Rate:** ~2000 b/s
+
+**Physics:** Reads directly from raw block devices (`/dev/rdiskN` on macOS, `/dev/nvmeXnYpZ` on Linux) with page-aligned buffers and cache bypass (`F_NOCACHE` / `O_DIRECT`). This eliminates the filesystem, buffer cache, and VFS layers from the timing path. The remaining timing variance comes from NVMe controller firmware (FTL lookup, wear leveling, garbage collection) and NAND flash page read latency. Reads at widely-spaced offsets (1 MB apart) hit different NAND dies/planes with independent timing characteristics.
+
+**What makes it unique:** The most direct userspace path to NVMe/NAND timing on both macOS and Linux. By bypassing the filesystem and buffer cache, a larger fraction of timing noise comes from the storage hardware itself.
+
+**Hardware caveat:** Requires read access to raw block devices, which typically means root/sudo. NAND charge sensing has quantum-mechanical underpinnings (Fowler-Nordheim tunneling for writes, threshold voltage sensing for reads), but the dominant timing variance is classical (firmware scheduling, DRAM cache hits). There is also no guarantee that reads are served from NAND rather than the controller's DRAM cache. On SSDs with large DRAM caches, the timing may reflect DRAM access patterns more than NAND physics.
+
+---
+
+### 49. `nvme_passthrough_linux`
+
+**Category:** IO
+**Struct:** `NvmePassthroughLinuxSource`
+**Platform:** Linux only
+**Estimated Rate:** ~2500 b/s
+
+**Physics:** Submits raw NVMe admin commands (Get Log Page for SMART/Health Information, Log ID 02h) via `ioctl(NVME_IOCTL_ADMIN_CMD)` on `/dev/nvme0`. This bypasses the filesystem, block layer, and I/O scheduler entirely — the timing path is: userspace -> NVMe kernel driver -> NVMe controller -> NAND flash. Command round-trip timing is dominated by NVMe controller firmware processing (FTL lookup, wear leveling, garbage collection scheduling) and NAND flash page access. SMART temperature values provide additional ADC quantization noise.
+
+**What makes it unique:** The closest to NVMe hardware achievable from userspace on Linux. Every host-side software layer except the NVMe kernel driver is eliminated.
+
+**Hardware caveat:** Linux-only, requires read access to `/dev/nvme0` (typically root). Like `nvme_raw_device`, the NAND charge sensing physics has quantum-mechanical underpinnings, but quantifying the fraction of timing variance attributable to quantum effects is not possible without specialized metrology equipment. The ~4us driver submission/completion overhead is a non-trivial fraction of total latency.
+
+---
+
 ## Oscillator Independence Map
 
 The thermal/oscillator sources each tap a **physically independent** noise source. This table clarifies what makes each one unique:
@@ -713,6 +781,7 @@ The thermal/oscillator sources each tap a **physically independent** noise sourc
 | `audio_pll_timing` | Audio PLL crystal | ~48 kHz | CoreAudio property timing | CPU, Display, PCIe |
 | `display_pll` | Display PLL | ~533 MHz | CoreGraphics mode query | CPU, Audio, PCIe |
 | `pcie_pll` | PCIe PHY PLLs | Various | IOKit service property reads | CPU, Audio, Display |
+| `ane_timing` | ANE PLL | Unknown | IOKit ANE property reads | CPU, Audio, Display, PCIe |
 | `denormal_timing` | *(none — FPU thermal)* | N/A | Denormal FPU computation | All oscillators |
 | `pdn_resonance` | *(none — PDN analog)* | LC resonant | Computation burst/idle | All oscillators |
 
@@ -724,10 +793,10 @@ All oscillator sources use **CNTVCT_EL0** (CPU's 24 MHz crystal) as the timing r
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **45/45** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
-| **Mac Mini/Studio/Pro** | 42–43/45 | Most sources — no built-in camera or mic on some models |
-| **Intel Mac** | ~18/45 | Timing, system, network, disk sources work; ARM-specific sources unavailable |
-| **Linux** | ~12/45 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
+| **MacBook (M-series)** | **49/49** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
+| **Mac Mini/Studio/Pro** | 46–47/49 | Most sources — no built-in camera or mic on some models |
+| **Intel Mac** | ~20/49 | Timing, system, network, disk sources work; ARM-specific sources unavailable |
+| **Linux** | ~14/49 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
 
 The package gracefully detects available hardware via `detect_available_sources()` and only activates sources that pass `is_available()`. MacBooks provide the richest entropy because they pack the most sensors into one device.
 

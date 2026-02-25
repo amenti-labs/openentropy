@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*45 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*49 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -44,7 +44,7 @@ openentropy stream --format hex --bytes 64
 openentropy monitor
 ```
 
-> By default, only fast sources (<2s) are used. Add `--sources all` to include slower sources (DNS, TCP, GPU, BLE).
+> By default, only fast sources (<2s) are used. Pass `--sources all` to include slower sources (DNS, TCP, GPU, BLE).
 
 ### Python
 
@@ -118,7 +118,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 45 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 49 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
@@ -133,7 +133,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-45 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+49 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
 ### Thermal (6)
 
@@ -148,7 +148,7 @@ Each source taps a **physically independent** noise mechanism. The oscillator so
 | `display_pll` | 0.07s | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
 | `pcie_pll` | 0.10s | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
-### Timing (6)
+### Timing (7)
 
 | Source | Time | Description |
 |--------|-----:|-------------|
@@ -158,6 +158,7 @@ Each source taps a **physically independent** noise mechanism. The oscillator so
 | `cache_contention` | 0.01s | CPU cache line contention noise |
 | `page_fault_timing` | 0.01s | Virtual memory page fault latency |
 | `vm_page_timing` | 0.07s | Mach VM page allocation timing |
+| `ane_timing` | 0.22s | Apple Neural Engine clock domain crossing jitter |
 
 ### Scheduling (3)
 
@@ -167,13 +168,16 @@ Each source taps a **physically independent** noise mechanism. The oscillator so
 | `dispatch_queue` | 0.09s | GCD dispatch queue scheduling jitter |
 | `thread_lifecycle` | 0.08s | pthread create/join cycle timing |
 
-### IO (4)
+### IO (7)
 
 | Source | Time | Description |
 |--------|-----:|-------------|
 | `disk_io` | 0.02s | Block device I/O timing jitter |
 | `nvme_latency` | 0.01s | NVMe command submission/completion timing |
 | `usb_timing` | 0.03s | USB bus transaction timing jitter |
+| `nvme_iokit_sensors` | 0.82s | NVMe controller sensor polling via IOKit |
+| `nvme_raw_device` | — | Direct raw block device reads *(requires root)* |
+| `nvme_passthrough_linux` | — | Raw NVMe admin commands via ioctl *(Linux only)* |
 | `fsync_journal` | 16.69s | fsync journal commit latency noise |
 
 ### IPC (4)
@@ -291,15 +295,23 @@ openentropy monitor --telemetry
 
 | Key | Action |
 |-----|--------|
-| ↑/↓ | Navigate source list |
-| Space | Select source (starts collecting) |
-| r | Force refresh |
-| q | Quit |
+| ↑/↓ or j/k | Navigate source list |
+| Space/Enter | Select source (starts collecting) |
+| g | Cycle chart mode (time series, histogram, random walk, etc.) |
+| c | Cycle conditioning mode (SHA-256 → Von Neumann → Raw) |
+| n | Cycle sample size |
+| +/- | Adjust refresh rate |
+| Tab | Compare two sources (select one, move cursor to another, Tab) |
+| p | Pause/resume collection |
+| r | Start/stop recording |
+| s | Export snapshot |
+| q/Esc | Quit |
 
-### `bench --source` — Test a single source
+### `bench --sources` — Test specific sources
 
 ```bash
-openentropy bench --source mach_timing
+openentropy bench --sources mach_timing
+openentropy bench --sources mach_timing,clock_jitter
 ```
 
 ### `bench` pool quality section
@@ -396,7 +408,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (49) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -411,10 +423,10 @@ Sources (45) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **45/45** | Full suite — WiFi, BLE, camera, mic |
-| **Mac Mini / Studio / Pro** | 37–39 | No built-in camera, mic on some models |
-| **Intel Mac** | ~18 | Some silicon/microarch sources are ARM-specific |
-| **Linux** | 10–13 | Timing, network, disk, process sources |
+| **MacBook (M-series)** | **49/49** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 42–44 | No built-in camera, mic on some models |
+| **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
+| **Linux** | 12–15 | Timing, network, disk, process sources |
 
 The library detects available hardware at runtime and only activates working sources.
 

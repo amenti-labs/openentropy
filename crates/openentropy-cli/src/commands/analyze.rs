@@ -23,29 +23,30 @@ struct SourceInterpretation {
     meaning: &'static str,
 }
 
-pub struct AnalyzeCommandConfig<'a> {
-    pub source_filter: Option<&'a str>,
-    pub output_path: Option<&'a str>,
+pub struct AnalyzeArgs {
+    pub positional: Vec<String>,
+    pub all: bool,
     pub samples: usize,
+    pub output: Option<String>,
     pub cross_correlation: bool,
     pub entropy: bool,
-    pub conditioning: &'a str,
-    pub view: &'a str,
+    pub conditioning: String,
+    pub view: String,
     pub include_telemetry: bool,
     pub report: bool,
 }
 
-pub fn run(cfg: AnalyzeCommandConfig<'_>) {
-    if cfg.report {
-        if cfg.entropy || cfg.cross_correlation || cfg.view != "summary" {
+pub fn run(args: AnalyzeArgs) {
+    if args.report {
+        if args.entropy || args.cross_correlation || args.view != "summary" {
             eprintln!(
                 "Note: --report mode runs the NIST test battery; \
                  --entropy, --cross-correlation, and --view are ignored."
             );
         }
-        run_report(&cfg);
+        run_report(&args);
     } else {
-        run_analysis(&cfg);
+        run_analysis(&args);
     }
 }
 
@@ -53,23 +54,18 @@ pub fn run(cfg: AnalyzeCommandConfig<'_>) {
 // Statistical analysis path (default)
 // ---------------------------------------------------------------------------
 
-fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
-    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
-    let all_sources = openentropy_core::platform::detect_available_sources();
-    let mode = super::parse_conditioning(cfg.conditioning);
-    let view = AnalyzeView::parse(cfg.view);
+fn run_analysis(args: &AnalyzeArgs) {
+    let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
+    let mode = super::parse_conditioning(&args.conditioning);
+    let view = AnalyzeView::parse(&args.view);
 
-    let sources: Vec<_> = super::filter_sources(all_sources, cfg.source_filter);
-
-    if sources.is_empty() {
-        eprintln!("No sources matched filter.");
-        std::process::exit(1);
-    }
+    let resolved = super::resolve_sources(&args.positional, args.all);
+    let sources = resolved.into_vec();
 
     println!(
         "Analyzing {} source(s), {} samples each (view: {})...\n",
         sources.len(),
-        cfg.samples,
+        args.samples,
         view.as_str()
     );
 
@@ -81,7 +77,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let data = source.collect(cfg.samples);
+        let data = source.collect(args.samples);
         let collect_time = t0.elapsed();
 
         if data.is_empty() {
@@ -105,7 +101,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
         }
 
         // Min-entropy breakdown (MCV primary + diagnostic estimators)
-        if cfg.entropy {
+        if args.entropy {
             let entropy_input = if mode == ConditioningMode::Raw {
                 data.clone()
             } else {
@@ -115,7 +111,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
             let report_str = format!("{report}");
             println!(
                 "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {}, {} bytes)",
-                cfg.conditioning,
+                args.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
@@ -126,7 +122,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
 
         all_results.push(result);
 
-        if cfg.cross_correlation {
+        if args.cross_correlation {
             all_data.push((name, data));
         }
     }
@@ -146,7 +142,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
     }
 
     // Cross-correlation matrix.
-    let cross_matrix = if cfg.cross_correlation && all_data.len() >= 2 {
+    let cross_matrix = if args.cross_correlation && all_data.len() >= 2 {
         Some(analysis::cross_correlation_matrix(&all_data))
     } else {
         None
@@ -162,7 +158,7 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
     }
 
     // JSON output.
-    if let Some(path) = cfg.output_path {
+    if let Some(ref path) = args.output {
         let mut json = if let Some(matrix) = cross_matrix {
             serde_json::json!({
                 "sources": all_results,
@@ -183,12 +179,12 @@ fn run_analysis(cfg: &AnalyzeCommandConfig<'_>) {
 // NIST-inspired test battery path (--report)
 // ---------------------------------------------------------------------------
 
-fn run_report(cfg: &AnalyzeCommandConfig<'_>) {
-    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
-    let mode = super::parse_conditioning(cfg.conditioning);
-    let all_sources = openentropy_core::platform::detect_available_sources();
+fn run_report(args: &AnalyzeArgs) {
+    let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
+    let mode = super::parse_conditioning(&args.conditioning);
 
-    let sources: Vec<_> = super::filter_sources(all_sources, cfg.source_filter);
+    let resolved = super::resolve_sources(&args.positional, args.all);
+    let sources = resolved.into_vec();
 
     if sources.is_empty() {
         eprintln!("No sources matched filter.");
@@ -198,7 +194,7 @@ fn run_report(cfg: &AnalyzeCommandConfig<'_>) {
     println!(
         "Running NIST test battery on {} source(s), {} samples each...\n",
         sources.len(),
-        cfg.samples
+        args.samples
     );
 
     let mut all_results = Vec::new();
@@ -208,7 +204,7 @@ fn run_report(cfg: &AnalyzeCommandConfig<'_>) {
         print!("  Collecting from {}...", info.name);
 
         let t0 = Instant::now();
-        let raw_data = src.collect(cfg.samples);
+        let raw_data = src.collect(args.samples);
         let data = condition(&raw_data, raw_data.len(), mode);
         print!(" {} bytes", data.len());
 
@@ -281,7 +277,7 @@ fn run_report(cfg: &AnalyzeCommandConfig<'_>) {
     let telemetry_report = telemetry.finish_and_print("analyze --report");
 
     // Markdown output.
-    if let Some(path) = cfg.output_path {
+    if let Some(ref path) = args.output {
         let report = generate_markdown_report(&all_results, telemetry_report.as_ref());
         if let Err(e) = std::fs::write(path, &report) {
             eprintln!("Failed to write report to {path}: {e}");

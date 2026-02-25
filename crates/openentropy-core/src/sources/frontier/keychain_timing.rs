@@ -19,8 +19,6 @@ use super::extract_timing_entropy_variance;
 pub struct KeychainTimingConfig {
     /// Use SecItemAdd/Delete (write path) instead of SecItemCopyMatching (read path).
     ///
-
-    ///
     /// **Default:** `false` (use read path for speed)
     pub use_write_path: bool,
 }
@@ -49,7 +47,7 @@ pub struct KeychainTimingConfig {
 ///
 /// # Caveats
 /// - High autocorrelation at lag-1 (~0.43): variance extraction mitigates this
-/// - Warm-up effect: first ~500 reads are slower due to securityd cold caches
+/// - Warm-up effect: first ~100 reads are slower due to securityd cold caches
 /// - Slow: ~0.6ms per sample, not suitable for high-throughput collection
 ///
 /// # Configuration
@@ -67,7 +65,7 @@ static KEYCHAIN_TIMING_INFO: SourceInfo = SourceInfo {
               database lookup → access control evaluation → return. Each domain (IPC \
               scheduling, securityd process scheduling, database page I/O, kernel context \
               switches) contributes independent jitter. Variance extraction removes serial \
-              correlation (lag-1 autocorrelation ~0.43 in raw timings). First 500 samples \
+              correlation (lag-1 autocorrelation ~0.43 in raw timings). First 100 samples \
               discarded to avoid warm-up transient from securityd cold caches.",
     category: SourceCategory::IPC,
     platform: Platform::MacOS,

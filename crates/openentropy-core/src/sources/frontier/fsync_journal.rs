@@ -21,14 +21,13 @@ use crate::sources::helpers::extract_timing_entropy;
 
 static FSYNC_JOURNAL_INFO: SourceInfo = SourceInfo {
     name: "fsync_journal",
-    description: "APFS journal commit timing from full storage stack traversal",
+    description: "Filesystem journal commit timing from full storage stack traversal",
     physics: "Creates a file, writes data, and calls fsync to force a full journal commit. \
-              Each commit traverses the entire storage stack: CPU \u{2192} APFS filesystem \
-              (B-tree update, copy-on-write allocation, checksum) \u{2192} NVMe controller \
-              (command queuing, arbitration) \u{2192} NAND flash (cell programming, charge \
-              injection timing, wear-dependent oxide characteristics) \u{2192} barrier flush \
-              (controller firmware scheduling). Every layer contributes independent \
-              timing noise from physically distinct sources.",
+              Each commit traverses the entire storage stack: CPU \u{2192} filesystem \
+              (journal/CoW update, metadata allocation, checksum) \u{2192} storage controller \
+              (command queuing, arbitration) \u{2192} storage media (NAND cell programming or \
+              magnetic head seek). Every layer contributes independent timing noise from \
+              physically distinct sources. On macOS this exercises APFS; on Linux, ext4/XFS.",
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],

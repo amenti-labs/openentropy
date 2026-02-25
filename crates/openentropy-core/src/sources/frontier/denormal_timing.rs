@@ -24,7 +24,7 @@ static DENORMAL_TIMING_INFO: SourceInfo = SourceInfo {
               Even on Apple Silicon where denormal handling is fast in hardware, \
               residual timing jitter comes from FPU pipeline state, cache line \
               alignment, and memory controller arbitration.",
-    category: SourceCategory::Thermal,
+    category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],
     entropy_rate_estimate: 300.0,
@@ -89,7 +89,7 @@ mod tests {
     fn info() {
         let src = DenormalTimingSource;
         assert_eq!(src.name(), "denormal_timing");
-        assert_eq!(src.info().category, SourceCategory::Thermal);
+        assert_eq!(src.info().category, SourceCategory::Microarch);
         assert!(!src.info().composite);
     }
 

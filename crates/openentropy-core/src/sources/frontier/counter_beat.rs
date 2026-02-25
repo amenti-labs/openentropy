@@ -37,6 +37,7 @@
 //! `mach_absolute_time()` — which on Apple Silicon is the *same* counter, not an
 //! independent oscillator. This version fixes that by using the audio PLL as the
 //! genuinely independent second clock domain, validated by `audio_pll_timing`'s
+//! confirmation that CoreAudio queries cross an independent PLL clock domain.
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 #[cfg(target_os = "macos")]

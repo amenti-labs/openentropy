@@ -4,25 +4,6 @@
 //! macOS/BSD kernel internals. These sources exploit entropy domains that no
 //! prior work has tapped.
 //!
-//! ## Architecture
-//!
-//! ```text
-//! frontier/
-//! ├── mod.rs              ← you are here (re-exports + shared helpers)
-//! ├── amx_timing.rs       ← AMX coprocessor matrix multiply jitter
-//! ├── thread_lifecycle.rs ← pthread create/join scheduling jitter
-//! ├── mach_ipc.rs         ← Mach port OOL message + VM remapping jitter
-//! ├── tlb_shootdown.rs    ← mprotect-induced TLB invalidation IPI jitter
-//! ├── pipe_buffer.rs      ← multi-pipe kernel zone allocator contention
-//! ├── kqueue_events.rs    ← kqueue event multiplexing (timers + files + sockets)
-//! ├── dvfs_race.rs        ← cross-core DVFS frequency race
-//! ├── cas_contention.rs   ← CAS atomic contention timing
-//! ├── keychain_timing.rs  ← Keychain/securityd round-trip timing
-//! ├── counter_beat.rs     ← Two-oscillator beat frequency: CPU counter vs audio PLL
-//! ├── display_pll.rs      ← Display PLL phase noise from pixel clock domain crossing
-//! └── pcie_pll.rs         ← PCIe PHY PLL jitter from IOKit clock domain crossings
-//! ```
-//!
 //! Each source measures a single, independent physical entropy domain.
 //! They work in isolation and can be benchmarked independently. Source
 //! combination is handled by the [`EntropyPool`](crate::pool::EntropyPool),
@@ -41,6 +22,7 @@ mod coreaudio_ffi;
 
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
+mod ane_timing;
 mod audio_pll_timing;
 mod cas_contention;
 mod counter_beat;
@@ -53,7 +35,10 @@ mod iosurface_crossing;
 mod keychain_timing;
 mod kqueue_events;
 mod mach_ipc;
+mod nvme_iokit_sensors;
 mod nvme_latency;
+mod nvme_passthrough_linux;
+mod nvme_raw_device;
 mod pcie_pll;
 mod pdn_resonance;
 mod pipe_buffer;
@@ -63,6 +48,7 @@ mod usb_timing;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
+pub use ane_timing::AneTimingSource;
 pub use audio_pll_timing::AudioPLLTimingSource;
 pub use cas_contention::{CASContentionConfig, CASContentionSource};
 pub use counter_beat::CounterBeatSource;
@@ -75,7 +61,10 @@ pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
+pub use nvme_iokit_sensors::NvmeIokitSensorsSource;
 pub use nvme_latency::NVMeLatencySource;
+pub use nvme_passthrough_linux::NvmePassthroughLinuxSource;
+pub use nvme_raw_device::NvmeRawDeviceSource;
 pub use pcie_pll::PciePllSource;
 pub use pdn_resonance::PDNResonanceSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
@@ -230,6 +219,10 @@ mod tests {
             Box::new(CounterBeatSource),
             Box::new(DisplayPllSource),
             Box::new(PciePllSource),
+            Box::new(AneTimingSource),
+            Box::new(NvmeIokitSensorsSource),
+            Box::new(NvmeRawDeviceSource),
+            Box::new(NvmePassthroughLinuxSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());

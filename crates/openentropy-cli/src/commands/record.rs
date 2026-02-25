@@ -9,43 +9,60 @@ use std::time::{Duration, Instant};
 use openentropy_core::conditioning::condition;
 use openentropy_core::session::{SessionConfig, SessionMeta, SessionWriter};
 
-use super::make_pool;
+pub struct RecordArgs {
+    pub positional: Vec<String>,
+    pub duration: Option<String>,
+    pub tags: Vec<String>,
+    pub note: Option<String>,
+    pub output: Option<String>,
+    pub interval: Option<String>,
+    pub analyze: bool,
+    pub conditioning: String,
+    pub include_telemetry: bool,
+}
 
 /// Run the record command.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn run(
-    sources_filter: &str,
-    duration: Option<&str>,
-    tags: &[String],
-    note: Option<&str>,
-    output: Option<&str>,
-    interval: Option<&str>,
-    analyze: bool,
-    conditioning: &str,
-    include_telemetry: bool,
-) {
+#[allow(clippy::too_many_lines)]
+pub fn run(args: RecordArgs) {
     // Parse conditioning mode
-    let mode = super::parse_conditioning(conditioning);
+    let mode = super::parse_conditioning(&args.conditioning);
 
-    // Build pool from source filter
-    let pool = make_pool(Some(sources_filter));
+    // Resolve sources from positional args (required)
+    let sources = super::find_sources(&args.positional);
+    if sources.is_empty() {
+        eprintln!(
+            "Error: no matching sources found. Run 'openentropy scan' to list available sources."
+        );
+        std::process::exit(1);
+    }
 
-    // Verify we got the requested sources
+    // Build pool from the resolved sources for per-source raw byte collection
+    let pool = super::make_pool(Some(
+        &sources
+            .iter()
+            .map(|s| s.name().to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    ));
+
     let available: Vec<String> = pool.source_infos().iter().map(|i| i.name.clone()).collect();
     if available.is_empty() {
-        eprintln!("Error: no matching sources found for '{sources_filter}'");
+        eprintln!(
+            "Error: no matching sources found for '{}'",
+            args.positional.join(", ")
+        );
         std::process::exit(1);
     }
 
     // Parse duration
-    let max_duration = duration.map(parse_duration);
+    let max_duration = args.duration.as_deref().map(parse_duration);
 
     // Parse interval
-    let interval_dur = interval.map(parse_duration);
+    let interval_dur = args.interval.as_deref().map(parse_duration);
 
     // Parse tags
     let mut tag_map = HashMap::new();
-    for tag in tags {
+    for tag in &args.tags {
         if let Some((k, v)) = tag.split_once(':') {
             tag_map.insert(k.to_string(), v.to_string());
         } else {
@@ -54,7 +71,12 @@ pub fn run(
     }
 
     // Build session config
-    let output_dir = output.map_or_else(|| PathBuf::from("sessions"), PathBuf::from);
+    let output_dir = args
+        .output
+        .as_ref()
+        .map_or_else(|| PathBuf::from("sessions"), PathBuf::from);
+
+    let include_telemetry = args.include_telemetry;
 
     let config = SessionConfig {
         sources: available.clone(),
@@ -62,10 +84,10 @@ pub fn run(
         interval: interval_dur,
         output_dir,
         tags: tag_map,
-        note: note.map(str::to_string),
+        note: args.note.clone(),
         duration: max_duration,
         sample_size: 1000,
-        include_analysis: analyze,
+        include_analysis: args.analyze,
         include_telemetry,
     };
 
@@ -103,7 +125,7 @@ pub fn run(
     }
     println!(
         "  Analysis:  {}",
-        if analyze { "enabled" } else { "disabled" }
+        if args.analyze { "enabled" } else { "disabled" }
     );
     println!(
         "  Telemetry: {}",

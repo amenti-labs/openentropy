@@ -1,12 +1,14 @@
 # Troubleshooting
 
+[< Back to README](../README.md) | [Sources](SOURCES.md) | [Architecture](ARCHITECTURE.md)
+
 ## "No sources available"
 
 **Symptom**: `openentropy scan` shows 0 sources.
 
 **Causes & Fixes**:
 
-- **Unsupported platform**: OpenEntropy primarily targets macOS on Apple Silicon. Linux support covers ~12 of 45 sources. Windows is not yet supported.
+- **Unsupported platform**: OpenEntropy primarily targets macOS on Apple Silicon. Linux support covers ~14 of 49 sources. Windows is not yet supported.
 - **Permissions**: Some sources require elevated permissions or entitlements. Try running with `sudo` to rule out permission issues.
 - **Binary mismatch**: Ensure you're running a binary built for your architecture (`uname -m` should match the binary target).
 

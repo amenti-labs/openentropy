@@ -125,14 +125,32 @@ kernel void divergence(
 
                 let queue = msg_send(device, "newCommandQueue");
                 if queue.is_null() {
+                    // Release device to avoid leak.
+                    msg_send_fn!(unsafe extern "C" fn(Id, Sel))(device, sel("release"));
                     return None;
                 }
 
-                let pipeline = compile_shader(device)?;
+                let pipeline = match compile_shader(device) {
+                    Some(p) => p,
+                    None => {
+                        msg_send_fn!(unsafe extern "C" fn(Id, Sel))(queue, sel("release"));
+                        msg_send_fn!(unsafe extern "C" fn(Id, Sel))(device, sel("release"));
+                        return None;
+                    }
+                };
 
                 let counter_buf = new_buffer(device, 4); // 1 x uint32
                 let output_buf = new_buffer(device, THREADS as u64 * 4); // THREADS x uint32
                 if counter_buf.is_null() || output_buf.is_null() {
+                    if !output_buf.is_null() {
+                        msg_send_fn!(unsafe extern "C" fn(Id, Sel))(output_buf, sel("release"));
+                    }
+                    if !counter_buf.is_null() {
+                        msg_send_fn!(unsafe extern "C" fn(Id, Sel))(counter_buf, sel("release"));
+                    }
+                    msg_send_fn!(unsafe extern "C" fn(Id, Sel))(pipeline, sel("release"));
+                    msg_send_fn!(unsafe extern "C" fn(Id, Sel))(queue, sel("release"));
+                    msg_send_fn!(unsafe extern "C" fn(Id, Sel))(device, sel("release"));
                     return None;
                 }
 
@@ -326,6 +344,19 @@ kernel void divergence(
         unsafe {
             let s = sel("dispatchThreads:threadsPerThreadgroup:");
             msg_send_fn!(unsafe extern "C" fn(Id, Sel, MTLSize, MTLSize))(encoder, s, grid, group);
+        }
+    }
+
+    impl Drop for MetalState {
+        fn drop(&mut self) {
+            // Release all retained Objective-C objects to prevent leaks.
+            unsafe {
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(self.output_buf, sel("release"));
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(self.counter_buf, sel("release"));
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(self.pipeline, sel("release"));
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(self.queue, sel("release"));
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(self._device, sel("release"));
+            }
         }
     }
 }

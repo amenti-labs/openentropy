@@ -66,7 +66,7 @@ impl Default for CASContentionSource {
 static CAS_CONTENTION_INFO: SourceInfo = SourceInfo {
     name: "cas_contention",
     description: "Multi-thread atomic CAS arbitration contention jitter",
-    physics: "Spawns 4 threads performing atomic compare-and-swap operations on \
+    physics: "Spawns multiple threads (default 4) performing atomic compare-and-swap operations on \
               shared targets spread across 128-byte-aligned cache lines. The \
               hardware coherence engine (MOESI protocol on Apple Silicon) must \
               arbitrate concurrent exclusive-access requests. This arbitration is \

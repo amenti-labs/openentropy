@@ -29,6 +29,7 @@ pub mod timing;
 pub mod vmstat;
 pub mod wifi;
 
+
 use crate::source::EntropySource;
 
 /// All entropy source constructors. Each returns a boxed source.
@@ -93,5 +94,11 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         // Frontier: independent oscillator/PLL sources (2026-02-15)
         Box::new(frontier::DisplayPllSource),
         Box::new(frontier::PciePllSource),
+        // Frontier: novel hardware domain sources (2026-02-22)
+        Box::new(frontier::AneTimingSource),
+        // Frontier: NVMe kernel-level entropy sources
+        Box::new(frontier::NvmeIokitSensorsSource),
+        Box::new(frontier::NvmeRawDeviceSource),
+        Box::new(frontier::NvmePassthroughLinuxSource),
     ]
 }
