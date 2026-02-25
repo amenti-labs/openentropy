@@ -321,6 +321,7 @@ pub struct App {
     running: bool,
     source_names: Vec<String>,
     source_categories: Vec<String>,
+    source_platforms: Vec<String>,
     shared: Arc<Mutex<SharedState>>,
     collector_flag: Arc<AtomicBool>,
     conditioning_mode: ConditioningMode,
@@ -344,6 +345,7 @@ impl App {
         let infos = pool.source_infos();
         let names: Vec<String> = infos.iter().map(|i| i.name.clone()).collect();
         let cats: Vec<String> = infos.iter().map(|i| i.category.clone()).collect();
+        let plats: Vec<String> = infos.iter().map(|i| i.platform.clone()).collect();
 
         Self {
             pool: Arc::new(pool),
@@ -353,6 +355,7 @@ impl App {
             running: true,
             source_names: names,
             source_categories: cats,
+            source_platforms: plats,
             shared: Arc::new(Mutex::new(SharedState {
                 raw_hex: String::new(),
                 rng_hex: String::new(),
@@ -713,6 +716,9 @@ impl App {
     }
     pub fn source_categories(&self) -> &[String] {
         &self.source_categories
+    }
+    pub fn source_platforms(&self) -> &[String] {
+        &self.source_platforms
     }
     pub fn chart_mode(&self) -> ChartMode {
         self.chart_mode

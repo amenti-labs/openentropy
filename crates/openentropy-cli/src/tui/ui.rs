@@ -250,6 +250,7 @@ fn truncate_message(s: &str, max_chars: usize) -> String {
 fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     let names = app.source_names();
     let cats = app.source_categories();
+    let plats = app.source_platforms();
 
     let items: Vec<Row> = names
         .iter()
@@ -260,6 +261,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
 
             let pointer = if is_cursor { "▸" } else { " " };
             let marker = if is_active { "●" } else { " " };
+            let plat_icon = if plats[i] == "macos" { "" } else { " " };
             let cat = short_cat(&cats[i]);
 
             let stat = snap.source_stats.get(name.as_str());
@@ -288,6 +290,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
             Row::new(vec![
                 Cell::from(pointer.to_string()),
                 Cell::from(marker.to_string()),
+                Cell::from(plat_icon.to_string()),
                 Cell::from(name.clone()),
                 Cell::from(cat.to_string()),
                 Cell::from(entropy_str),
@@ -297,7 +300,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
         })
         .collect();
 
-    let header = Row::new(vec!["", "", "Source", "Cat", "H", "Time"])
+    let header = Row::new(vec!["", "", "", "Source", "Cat", "H", "Time"])
         .style(Style::default().bold().fg(Color::DarkGray))
         .bottom_margin(0);
 
@@ -306,6 +309,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
         [
             Constraint::Length(2),  // pointer
             Constraint::Length(2),  // active marker
+            Constraint::Length(2),  // platform icon
             Constraint::Length(22), // name
             Constraint::Length(4),  // category
             Constraint::Length(5),  // entropy
