@@ -26,8 +26,6 @@ pub enum SourceCategory {
     Network,
     /// OS counters/state.
     System,
-    /// Combines multiple sources.
-    Composite,
     /// Signal processing entropy.
     Signal,
     /// Hardware sensor readings.
@@ -46,7 +44,6 @@ impl std::fmt::Display for SourceCategory {
             Self::GPU => write!(f, "gpu"),
             Self::Network => write!(f, "network"),
             Self::System => write!(f, "system"),
-            Self::Composite => write!(f, "composite"),
             Self::Signal => write!(f, "signal"),
             Self::Sensor => write!(f, "sensor"),
         }
@@ -146,6 +143,8 @@ pub struct SourceInfo {
     /// They combine or interleave other sources. The CLI displays them
     /// separately from standalone sources.
     pub composite: bool,
+    /// Whether this source collects in <2 seconds and is safe for real-time use.
+    pub is_fast: bool,
 }
 
 /// Trait that every entropy source must implement.

@@ -296,6 +296,11 @@ enum Commands {
 }
 
 fn main() {
+    // Ensure terminal is in cooked mode. A previous TUI crash or ctrl-c may
+    // have left raw mode enabled, which breaks newline handling for all
+    // subsequent CLI commands (println! outputs \n without \r).
+    let _ = crossterm::terminal::disable_raw_mode();
+
     let cli = Cli::parse();
 
     match cli.command {

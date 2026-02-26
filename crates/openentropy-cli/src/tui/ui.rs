@@ -3,7 +3,7 @@
 //! All draw functions receive an `&App` (non-shared fields) and `&Snapshot`
 //! (shared state captured in a single mutex lock per frame).
 
-use super::app::{App, ChartMode, Sample, SensorFlowState, Snapshot, rolling_autocorr};
+use super::app::{App, ChartMode, Sample, SensorFlowState, Snapshot, VirtualRow, rolling_autocorr};
 use openentropy_core::ConditioningMode;
 use ratatui::{prelude::*, widgets::*};
 
@@ -251,69 +251,115 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     let names = app.source_names();
     let cats = app.source_categories();
     let plats = app.source_platforms();
+    let virtual_rows = app.virtual_rows();
+    let category_sources = app.category_sources();
 
-    let items: Vec<Row> = names
+    let items: Vec<Row> = virtual_rows
         .iter()
         .enumerate()
-        .map(|(i, name)| {
-            let is_cursor = i == app.cursor();
-            let is_active = app.active() == Some(i);
+        .map(|(vi, vrow)| match vrow {
+            VirtualRow::Header { cat_key } => {
+                let is_cursor = vi == app.cursor();
+                let is_collapsed = app.is_collapsed(cat_key);
+                let arrow = if is_collapsed { "▸" } else { "▾" };
+                let label = display_cat(cat_key);
+                let count = category_sources
+                    .get(cat_key)
+                    .map_or(0, |v| v.len());
 
-            let pointer = if is_cursor { "▸" } else { " " };
-            let marker = if is_active { "●" } else { " " };
-            let plat_icon = if plats[i] == "macos" { "" } else { " " };
-            let cat = short_cat(&cats[i]);
+                // Show ● if any active source is in this collapsed category
+                let has_active = is_collapsed
+                    && app.active().is_some_and(|active_idx| {
+                        cats.get(active_idx).is_some_and(|c| c == cat_key)
+                    });
+                let active_dot = if has_active { " ●" } else { "" };
 
-            let stat = snap.source_stats.get(name.as_str());
-            let entropy_str = match stat {
-                Some(s) => format!("{:.1}", s.entropy),
-                None => "—".into(),
-            };
-            let time_str = match stat {
-                Some(s) => format_time(s.time),
-                None => "—".into(),
-            };
+                let header_text = format!("{arrow} {label} ({count}){active_dot}");
 
-            let style = if is_cursor {
-                Style::default().bg(Color::DarkGray).fg(Color::White)
-            } else if is_active {
-                Style::default().fg(Color::Yellow).bold()
-            } else {
-                match stat {
-                    Some(s) if s.entropy >= 7.5 => Style::default().fg(Color::Green),
-                    Some(s) if s.entropy >= 5.0 => Style::default().fg(Color::Yellow),
-                    Some(_) => Style::default().fg(Color::Red),
-                    None => Style::default().fg(Color::White),
-                }
-            };
+                let style = if is_cursor {
+                    Style::default()
+                        .bg(Color::DarkGray)
+                        .fg(Color::Cyan)
+                        .bold()
+                } else {
+                    Style::default().fg(Color::Cyan).bold()
+                };
 
-            Row::new(vec![
-                Cell::from(pointer.to_string()),
-                Cell::from(marker.to_string()),
-                Cell::from(plat_icon.to_string()),
-                Cell::from(name.clone()),
-                Cell::from(cat.to_string()),
-                Cell::from(entropy_str),
-                Cell::from(time_str),
-            ])
-            .style(style)
+                // Header spans entire row via first cell
+                Row::new(vec![
+                    Cell::from(""),
+                    Cell::from(""),
+                    Cell::from(header_text),
+                    Cell::from(""),
+                    Cell::from(""),
+                    Cell::from(""),
+                    Cell::from(""),
+                ])
+                .style(style)
+            }
+            VirtualRow::Source { source_idx } => {
+                let i = *source_idx;
+                let is_cursor = vi == app.cursor();
+                let is_active = app.active() == Some(i);
+                let name = &names[i];
+
+                let pointer = if is_cursor { " ▸" } else { "  " };
+                let marker = if is_active { "●" } else { " " };
+                let plat_icon = if plats[i] == "macos" { "🍎" } else { "  " };
+                let cat = short_cat(&cats[i]);
+
+                let stat = snap.source_stats.get(name.as_str());
+                let entropy_str = match stat {
+                    Some(s) => format!("{:.1}", s.entropy),
+                    None => "—".into(),
+                };
+                let time_str = match stat {
+                    Some(s) => format_time(s.time),
+                    None => "—".into(),
+                };
+
+                let style = if is_cursor {
+                    Style::default().bg(Color::DarkGray).fg(Color::White)
+                } else if is_active {
+                    Style::default().fg(Color::Yellow).bold()
+                } else {
+                    match stat {
+                        Some(s) if s.entropy >= 7.5 => Style::default().fg(Color::Green),
+                        Some(s) if s.entropy >= 5.0 => Style::default().fg(Color::Yellow),
+                        Some(_) => Style::default().fg(Color::Red),
+                        None => Style::default().fg(Color::White),
+                    }
+                };
+
+                Row::new(vec![
+                    Cell::from(pointer.to_string()),
+                    Cell::from(marker.to_string()),
+                    Cell::from(name.clone()),
+                    Cell::from(cat.to_string()),
+                    Cell::from(entropy_str),
+                    Cell::from(time_str),
+                    Cell::from(plat_icon.to_string()),
+                ])
+                .style(style)
+            }
         })
         .collect();
 
-    let header = Row::new(vec!["", "", "", "Source", "Cat", "H", "Time"])
+    let total_sources = names.len();
+    let header = Row::new(vec!["", "", "Source", "Cat", "H", "Time", ""])
         .style(Style::default().bold().fg(Color::DarkGray))
         .bottom_margin(0);
 
     let table = Table::new(
         items,
         [
-            Constraint::Length(2),  // pointer
+            Constraint::Length(3),  // pointer (indent + ▸)
             Constraint::Length(2),  // active marker
-            Constraint::Length(2),  // platform icon
             Constraint::Length(22), // name
             Constraint::Length(4),  // category
             Constraint::Length(5),  // entropy
             Constraint::Length(7),  // time
+            Constraint::Length(3),  // platform icon (🍎 = 2 cells + pad)
         ],
     )
     .header(header)
@@ -321,7 +367,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     .block(
         Block::default()
             .borders(Borders::ALL)
-            .title(" Sources (space to select) "),
+            .title(format!(" Sources ({total_sources}) ")),
     );
 
     f.render_stateful_widget(table, area, app.table_state_mut());
@@ -333,7 +379,9 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
 
 fn draw_info(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     let infos = app.source_infos();
-    let idx = app.active().unwrap_or(app.cursor());
+    let idx = app
+        .active()
+        .unwrap_or_else(|| app.cursor_source_idx().unwrap_or(0));
 
     let text = if idx < infos.len() {
         let info = &infos[idx];
@@ -924,7 +972,7 @@ fn draw_output(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // ---------------------------------------------------------------------------
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(" ↑↓ nav  space: select  r: record  g: graph  c: cond  n: size  Tab: compare  p: pause  s: export  +/-: speed  q: quit")
+    let bar = Paragraph::new(" ↑↓ nav  {/} jump  space: select  C: fold all  r: rec  g: graph  c: cond  n: size  Tab: cmp  p: pause  q: quit")
         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }

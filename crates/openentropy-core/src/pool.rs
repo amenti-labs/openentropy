@@ -107,9 +107,9 @@ impl EntropyPool {
             return 0;
         }
 
-        let (tx, rx) = std::sync::mpsc::channel::<(usize, Vec<u8>)>();
         let now = Instant::now();
         let mut scheduled: Vec<usize> = Vec::new();
+        let mut to_launch: Vec<(usize, Arc<Mutex<SourceState>>)> = Vec::new();
 
         for (idx, ss_mutex) in self.sources.iter().enumerate() {
             // Skip sources still in backoff.
@@ -131,47 +131,74 @@ impl EntropyPool {
             }
 
             scheduled.push(idx);
-
-            let tx = tx.clone();
-            let src = Arc::clone(ss_mutex);
-            let in_flight = Arc::clone(&self.in_flight);
-            let backoff = Arc::clone(&self.backoff_until);
-
-            std::thread::spawn(move || {
-                let data = Self::collect_one_n(&src, n_samples);
-                {
-                    let mut in_flight = in_flight.lock().unwrap();
-                    in_flight.remove(&idx);
-                }
-                let mut bo = backoff.lock().unwrap();
-                bo.remove(&idx);
-                let _ = tx.send((idx, data));
-            });
+            to_launch.push((idx, Arc::clone(ss_mutex)));
         }
-        drop(tx);
 
         if scheduled.is_empty() {
             return 0;
         }
 
-        let deadline = Instant::now() + timeout;
-        let mut received = HashSet::new();
+        // Limit concurrent collection threads to avoid resource exhaustion.
+        // Many sources use mmap, JIT pages, socket pairs, large allocations —
+        // running all 50+ simultaneously can cause SIGSEGV from memory pressure.
+        let max_concurrent = num_cpus().min(16);
+        let (tx, rx) = std::sync::mpsc::channel::<(usize, Vec<u8>)>();
         let mut results = Vec::new();
+        let mut received = HashSet::new();
 
-        while received.len() < scheduled.len() {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                break;
+        for chunk in to_launch.chunks(max_concurrent) {
+            let batch_start = Instant::now();
+
+            for &(idx, ref src) in chunk {
+                let tx = tx.clone();
+                let src = Arc::clone(src);
+                let in_flight = Arc::clone(&self.in_flight);
+                let backoff = Arc::clone(&self.backoff_until);
+
+                std::thread::spawn(move || {
+                    let data = Self::collect_one_n(&src, n_samples);
+                    {
+                        let mut in_flight = in_flight.lock().unwrap();
+                        in_flight.remove(&idx);
+                    }
+                    let mut bo = backoff.lock().unwrap();
+                    bo.remove(&idx);
+                    let _ = tx.send((idx, data));
+                });
             }
-            match rx.recv_timeout(remaining) {
+
+            // Wait for this batch to finish. Each batch gets its own full timeout
+            // window so that slow sources in early batches don't starve later ones.
+            let mut batch_done = 0;
+            while batch_done < chunk.len() {
+                let remaining = timeout.saturating_sub(batch_start.elapsed());
+                if remaining.is_zero() {
+                    break;
+                }
+                match rx.recv_timeout(remaining) {
+                    Ok((idx, data)) => {
+                        received.insert(idx);
+                        if !data.is_empty() {
+                            results.extend_from_slice(&data);
+                        }
+                        batch_done += 1;
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+        drop(tx);
+
+        // Drain any remaining results from threads that finished after batch loops.
+        while received.len() < scheduled.len() {
+            match rx.try_recv() {
                 Ok((idx, data)) => {
                     received.insert(idx);
                     if !data.is_empty() {
                         results.extend_from_slice(&data);
                     }
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(_) => break,
             }
         }
 
@@ -534,6 +561,13 @@ fn getrandom(buf: &mut [u8]) {
     getrandom::fill(buf).expect("OS CSPRNG failed");
 }
 
+/// Number of logical CPUs (for concurrency limits).
+fn num_cpus() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
+
 /// Overall health report for the entropy pool.
 #[derive(Debug, Clone)]
 pub struct HealthReport {
@@ -618,6 +652,7 @@ mod tests {
                     requirements: &[],
                     entropy_rate_estimate: 1.0,
                     composite: false,
+                    is_fast: true,
                 },
                 data,
             }
@@ -653,6 +688,7 @@ mod tests {
                     requirements: &[],
                     entropy_rate_estimate: 0.0,
                     composite: false,
+                    is_fast: true,
                 },
             }
         }

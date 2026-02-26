@@ -16,44 +16,8 @@ use openentropy_core::analysis::CrossCorrMatrix;
 use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::platform::detect_available_sources;
 
-/// Sources that collect in <2 seconds — safe for real-time use.
-const FAST_SOURCES: &[&str] = &[
-    "clock_jitter",
-    "mach_timing",
-    "sleep_jitter",
-    "sysctl_deltas",
-    "vmstat_deltas",
-    "disk_io",
-    "dram_row_buffer",
-    "page_fault_timing",
-    "speculative_execution",
-    "hash_timing",
-    "compression_timing",
-    // Frontier sources (all < 0.1s)
-    "amx_timing",
-    "thread_lifecycle",
-    "mach_ipc",
-    "tlb_shootdown",
-    "pipe_buffer",
-    "kqueue_events",
-    "dvfs_race",
-    "audio_pll_timing",
-    // Independent oscillator sources
-    "display_pll",
-    "pcie_pll",
-    // Novel hardware domain sources (fast, < 0.1s)
-    "ane_timing",
-    // NVMe kernel-level timing sources
-    "nvme_iokit_sensors",
-    "nvme_raw_device",
-    "nvme_passthrough_linux",
-    // GPU sources (moderate speed)
-    "gpu_divergence",
-    "iosurface_crossing",
-];
-
 /// Build an EntropyPool, optionally filtering sources by name.
-/// If no filter is given, only fast sources (<2s) are included to avoid hangs.
+/// If no filter is given, only fast sources (is_fast=true) are included to avoid hangs.
 /// Use `--sources all` to include every available source.
 pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
     let mut pool = EntropyPool::new(None);
@@ -76,9 +40,9 @@ pub fn make_pool(source_filter: Option<&str>) -> EntropyPool {
             }
         }
     } else {
-        // Default: fast sources only
+        // Default: fast sources only (derived from SourceInfo.is_fast)
         for source in sources {
-            if FAST_SOURCES.contains(&source.name()) {
+            if source.info().is_fast {
                 pool.add_source(source);
             }
         }
@@ -210,10 +174,10 @@ pub fn resolve_sources(positional: &[String], all: bool) -> ResolvedSources {
         return ResolvedSources::All(all_sources);
     }
 
-    // Default: fast sources only
+    // Default: fast sources only (derived from SourceInfo.is_fast)
     let fast: Vec<Box<dyn EntropySource>> = all_sources
         .into_iter()
-        .filter(|s| FAST_SOURCES.contains(&s.name()))
+        .filter(|s| s.info().is_fast)
         .collect();
 
     if fast.is_empty() {
@@ -309,29 +273,25 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // FAST_SOURCES constant tests
+    // is_fast metadata tests
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_fast_sources_not_empty() {
-        assert!(!FAST_SOURCES.is_empty());
+    fn test_fast_sources_derived_from_metadata() {
+        let sources = openentropy_core::detect_available_sources();
+        let fast: Vec<_> = sources.iter().filter(|s| s.info().is_fast).collect();
+        assert!(!fast.is_empty(), "Should have at least one fast source");
     }
 
     #[test]
-    fn test_fast_sources_contains_expected() {
-        assert!(FAST_SOURCES.contains(&"clock_jitter"));
-        assert!(FAST_SOURCES.contains(&"mach_timing"));
-        assert!(FAST_SOURCES.contains(&"sleep_jitter"));
-        assert!(FAST_SOURCES.contains(&"disk_io"));
-    }
-
-    #[test]
-    fn test_fast_sources_excludes_slow() {
-        // These slow sources should not be in the fast list
-        assert!(!FAST_SOURCES.contains(&"audio_noise"));
-        assert!(!FAST_SOURCES.contains(&"camera_noise"));
-        assert!(!FAST_SOURCES.contains(&"bluetooth_rssi"));
-        assert!(!FAST_SOURCES.contains(&"wifi_rssi"));
+    fn test_slow_sources_not_fast() {
+        let sources = openentropy_core::detect_available_sources();
+        for s in &sources {
+            let name = s.name();
+            if ["audio_noise", "camera_noise", "bluetooth_noise", "wifi_rssi"].contains(&name) {
+                assert!(!s.info().is_fast, "{name} should not be fast");
+            }
+        }
     }
 
     // -----------------------------------------------------------------------

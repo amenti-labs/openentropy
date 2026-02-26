@@ -142,6 +142,12 @@ pub fn run(args: BenchArgs) {
         settings.timeout_sec = v.max(0.1);
     }
 
+    // When --all is used, slow sources (GPU, network, sensor) need more time.
+    // Double the per-batch timeout unless the user explicitly set --timeout.
+    if args.all && args.timeout_sec.is_none() {
+        settings.timeout_sec *= 2.0;
+    }
+
     // Build pool from positional args, --all, or default fast sources
     let source_filter = if args.all {
         Some("all".to_string())
@@ -296,35 +302,37 @@ pub fn run(args: BenchArgs) {
     }
 
     rows.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
+        b.avg_min_entropy
+            .partial_cmp(&a.avg_min_entropy)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    println!("\n{}", "=".repeat(96));
+    println!("\n{}", "=".repeat(100));
     println!(
-        "{:<25} {:>5} {:>7} {:>7} {:>10} {:>8} {:>10} {:>6} {:>9}",
+        "{:<26} {:>5} {:>7} {:>7} {:>10} {:>9} {:>10} {:>6} {:>8}",
         "Source", "Grade", "H", "H∞", "KB/s", "Stability", "Rounds", "Fail", "State"
     );
-    println!("{}", "-".repeat(96));
+    println!("{}", "-".repeat(100));
     for row in &rows {
         let grade = openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0));
-        let state = if row.success_rounds == 0 || row.failures > 0 {
+        let state = if row.success_rounds == 0 {
             "UNSTABLE"
+        } else if row.success_rounds < settings.rounds {
+            "SLOW"
         } else {
             "OK"
         };
         let composite = if row.composite { " [C]" } else { "" };
+        let rounds_str = format!("{}/{}", row.success_rounds, settings.rounds);
         println!(
-            "{:<25} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>8.2} {:>6}/{} {:>6} {:>9}{}",
+            "{:<26} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>9.2} {:>10} {:>6} {:>8}{}",
             row.name,
             grade,
             row.avg_shannon,
             row.avg_min_entropy,
             row.avg_throughput_bps / 1024.0,
             row.stability,
-            row.success_rounds,
-            settings.rounds,
+            rounds_str,
             row.failures,
             state,
             composite

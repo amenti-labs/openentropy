@@ -4,7 +4,7 @@
 //! a source. Only the active source collects — keeps everything fast and focused.
 //! Collection runs on a background thread so the UI never blocks.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io;
 use std::path::PathBuf;
 use std::sync::{
@@ -212,6 +212,34 @@ pub const SAMPLE_SIZES: [usize; 4] = [16, 32, 64, 128];
 /// Maximum samples retained per source.
 const MAX_HISTORY: usize = 120;
 
+/// Canonical category display order for the TUI source list.
+const CATEGORY_ORDER: &[&str] = &[
+    "timing",
+    "scheduling",
+    "system",
+    "network",
+    "io",
+    "sensor",
+    "microarch",
+    "ipc",
+    "thermal",
+    "gpu",
+    "signal",
+];
+
+// ---------------------------------------------------------------------------
+// VirtualRow — mixed header/source list for category grouping
+// ---------------------------------------------------------------------------
+
+/// A row in the TUI source list: either a category header or a source entry.
+#[derive(Debug, Clone)]
+pub enum VirtualRow {
+    /// Category header row (collapsible).
+    Header { cat_key: String },
+    /// Source row — `source_idx` indexes into `source_names` / `source_categories` / etc.
+    Source { source_idx: usize },
+}
+
 // ---------------------------------------------------------------------------
 // Utility functions
 // ---------------------------------------------------------------------------
@@ -405,6 +433,14 @@ pub struct App {
     recording_path: Option<PathBuf>,
     /// Last start/stop recording error to surface in the TUI.
     recording_error: Option<String>,
+    /// Which categories are collapsed in the source list.
+    collapsed: HashSet<String>,
+    /// Computed virtual row list (headers + sources).
+    virtual_rows: Vec<VirtualRow>,
+    /// Ordered category keys present in the pool.
+    category_order: Vec<String>,
+    /// Map from category key to list of source indices in that category.
+    category_sources: HashMap<String, Vec<usize>>,
 }
 
 impl App {
@@ -414,11 +450,34 @@ impl App {
         let cats: Vec<String> = infos.iter().map(|i| i.category.clone()).collect();
         let plats: Vec<String> = infos.iter().map(|i| i.platform.clone()).collect();
 
-        Self {
+        // Build category_sources map: category key -> [source indices]
+        let mut category_sources: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, cat) in cats.iter().enumerate() {
+            category_sources.entry(cat.clone()).or_default().push(i);
+        }
+
+        // Build category_order: only categories that have sources, in canonical order
+        let mut category_order: Vec<String> = CATEGORY_ORDER
+            .iter()
+            .filter(|&&k| category_sources.contains_key(k))
+            .map(|&k| k.to_string())
+            .collect();
+        // Append any categories not in CATEGORY_ORDER (shouldn't happen, but be safe)
+        for cat in category_sources.keys() {
+            if !category_order.contains(cat) {
+                category_order.push(cat.clone());
+            }
+        }
+
+        let collapsed: HashSet<String> = category_order.iter().cloned().collect();
+        let virtual_rows =
+            build_virtual_rows(&category_order, &category_sources, &collapsed);
+
+        let mut app = Self {
             pool: Arc::new(pool),
             refresh_rate: Duration::from_secs_f64(refresh_secs),
             cursor: 0,
-            active: Some(0),
+            active: None,
             running: true,
             source_names: names,
             source_categories: cats,
@@ -449,7 +508,23 @@ impl App {
             recording_since: None,
             recording_path: None,
             recording_error: None,
+            collapsed,
+            virtual_rows,
+            category_order,
+            category_sources,
+        };
+
+        // Find first source row to auto-activate, or stay on first header
+        for (i, row) in app.virtual_rows.iter().enumerate() {
+            if let VirtualRow::Source { source_idx } = row {
+                app.cursor = i;
+                app.table_state.select(Some(i));
+                app.active = Some(*source_idx);
+                break;
+            }
         }
+
+        app
     }
 
     pub fn run(&mut self) -> io::Result<()> {
@@ -529,24 +604,71 @@ impl App {
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.cursor < self.source_names.len().saturating_sub(1) {
+                if self.cursor < self.virtual_rows.len().saturating_sub(1) {
                     self.cursor += 1;
                     self.table_state.select(Some(self.cursor));
                 }
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
-                if self.active == Some(self.cursor) {
-                    self.active = None;
-                } else {
-                    let name = &self.source_names[self.cursor];
-                    let mut s = self.shared.lock().unwrap();
-                    s.source_history.remove(name);
-                    s.byte_freq = [0u64; 256];
-                    drop(s);
-                    self.active = Some(self.cursor);
-                    self.chart_mode = preferred_chart_mode_for_source(name);
-                    self.kick_collect();
+                match &self.virtual_rows[self.cursor] {
+                    VirtualRow::Header { cat_key } => {
+                        let cat_key = cat_key.clone();
+                        if self.collapsed.contains(&cat_key) {
+                            self.collapsed.remove(&cat_key);
+                        } else {
+                            self.collapsed.insert(cat_key);
+                        }
+                        self.rebuild_virtual_rows();
+                    }
+                    VirtualRow::Source { source_idx } => {
+                        let source_idx = *source_idx;
+                        if self.active == Some(source_idx) {
+                            self.active = None;
+                        } else {
+                            let name = &self.source_names[source_idx];
+                            let mut s = self.shared.lock().unwrap();
+                            s.source_history.remove(name);
+                            s.byte_freq = [0u64; 256];
+                            drop(s);
+                            self.active = Some(source_idx);
+                            self.chart_mode = preferred_chart_mode_for_source(name);
+                            self.kick_collect();
+                        }
+                    }
                 }
+            }
+            KeyCode::Char('{') => {
+                // Jump to previous category header
+                for i in (0..self.cursor).rev() {
+                    if matches!(&self.virtual_rows[i], VirtualRow::Header { .. }) {
+                        self.cursor = i;
+                        self.table_state.select(Some(self.cursor));
+                        break;
+                    }
+                }
+            }
+            KeyCode::Char('}') => {
+                // Jump to next category header
+                for i in (self.cursor + 1)..self.virtual_rows.len() {
+                    if matches!(&self.virtual_rows[i], VirtualRow::Header { .. }) {
+                        self.cursor = i;
+                        self.table_state.select(Some(self.cursor));
+                        break;
+                    }
+                }
+            }
+            KeyCode::Char('C') => {
+                // Toggle collapse/expand all
+                if self.collapsed.len() == self.category_order.len() {
+                    // All collapsed → expand all
+                    self.collapsed.clear();
+                } else {
+                    // Some or none collapsed → collapse all
+                    for cat in &self.category_order {
+                        self.collapsed.insert(cat.clone());
+                    }
+                }
+                self.rebuild_virtual_rows();
             }
             KeyCode::Char('r') | KeyCode::Char('R') => {
                 if self.recording {
@@ -586,12 +708,13 @@ impl App {
                 self.refresh_rate = Duration::from_secs_f64(secs);
             }
             KeyCode::Tab => {
+                // Compare only works when cursor is on a source row
                 if self.compare_source.is_some() {
                     self.compare_source = None;
-                } else if let Some(active) = self.active
-                    && self.cursor != active
+                } else if let Some(source_idx) = self.cursor_source_idx()
+                    && self.active != Some(source_idx)
                 {
-                    self.compare_source = Some(self.cursor);
+                    self.compare_source = Some(source_idx);
                 }
             }
             KeyCode::Char('n') => {
@@ -601,6 +724,22 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Rebuild virtual rows after collapse state changes. Clamps cursor.
+    fn rebuild_virtual_rows(&mut self) {
+        self.virtual_rows = build_virtual_rows(
+            &self.category_order,
+            &self.category_sources,
+            &self.collapsed,
+        );
+        // Clamp cursor
+        if self.virtual_rows.is_empty() {
+            self.cursor = 0;
+        } else if self.cursor >= self.virtual_rows.len() {
+            self.cursor = self.virtual_rows.len() - 1;
+        }
+        self.table_state.select(Some(self.cursor));
     }
 
     fn start_recording(&mut self) {
@@ -794,6 +933,26 @@ impl App {
     pub fn active(&self) -> Option<usize> {
         self.active
     }
+    /// Returns the source index if the cursor is on a source row, None if on a header.
+    pub fn cursor_source_idx(&self) -> Option<usize> {
+        self.virtual_rows.get(self.cursor).and_then(|row| match row {
+            VirtualRow::Source { source_idx } => Some(*source_idx),
+            VirtualRow::Header { .. } => None,
+        })
+    }
+    pub fn virtual_rows(&self) -> &[VirtualRow] {
+        &self.virtual_rows
+    }
+    pub fn is_collapsed(&self, cat_key: &str) -> bool {
+        self.collapsed.contains(cat_key)
+    }
+    #[cfg(test)]
+    pub fn category_order(&self) -> &[String] {
+        &self.category_order
+    }
+    pub fn category_sources(&self) -> &HashMap<String, Vec<usize>> {
+        &self.category_sources
+    }
     pub fn source_names(&self) -> &[String] {
         &self.source_names
     }
@@ -930,6 +1089,28 @@ fn stream_fingerprint(bytes: &VecDeque<u8>) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+/// Build the virtual row list from category order, source map, and collapse state.
+fn build_virtual_rows(
+    category_order: &[String],
+    category_sources: &HashMap<String, Vec<usize>>,
+    collapsed: &HashSet<String>,
+) -> Vec<VirtualRow> {
+    let mut rows = Vec::new();
+    for cat in category_order {
+        rows.push(VirtualRow::Header {
+            cat_key: cat.clone(),
+        });
+        if !collapsed.contains(cat)
+            && let Some(sources) = category_sources.get(cat)
+        {
+            for &idx in sources {
+                rows.push(VirtualRow::Source { source_idx: idx });
+            }
+        }
+    }
+    rows
 }
 
 fn update_flow_state(state: &mut SensorFlowState, raw_bytes: &[u8]) {
@@ -1181,5 +1362,84 @@ mod tests {
         for w in SAMPLE_SIZES.windows(2) {
             assert!(w[0] < w[1], "SAMPLE_SIZES not sorted: {} >= {}", w[0], w[1]);
         }
+    }
+
+    // --- Virtual row / category grouping tests ---
+
+    fn make_test_categories() -> (Vec<String>, HashMap<String, Vec<usize>>) {
+        // Simulate 5 sources across 2 categories
+        let order = vec!["timing".to_string(), "io".to_string()];
+        let mut map = HashMap::new();
+        map.insert("timing".to_string(), vec![0, 1, 2]);
+        map.insert("io".to_string(), vec![3, 4]);
+        (order, map)
+    }
+
+    #[test]
+    fn build_virtual_rows_all_expanded() {
+        let (order, map) = make_test_categories();
+        let collapsed = HashSet::new();
+        let rows = build_virtual_rows(&order, &map, &collapsed);
+        // 2 headers + 5 sources = 7 rows
+        assert_eq!(rows.len(), 7);
+        assert!(matches!(&rows[0], VirtualRow::Header { cat_key } if cat_key == "timing"));
+        assert!(matches!(&rows[1], VirtualRow::Source { source_idx: 0 }));
+        assert!(matches!(&rows[2], VirtualRow::Source { source_idx: 1 }));
+        assert!(matches!(&rows[3], VirtualRow::Source { source_idx: 2 }));
+        assert!(matches!(&rows[4], VirtualRow::Header { cat_key } if cat_key == "io"));
+        assert!(matches!(&rows[5], VirtualRow::Source { source_idx: 3 }));
+        assert!(matches!(&rows[6], VirtualRow::Source { source_idx: 4 }));
+    }
+
+    #[test]
+    fn build_virtual_rows_collapsed_hides_sources() {
+        let (order, map) = make_test_categories();
+        let mut collapsed = HashSet::new();
+        collapsed.insert("timing".to_string());
+        let rows = build_virtual_rows(&order, &map, &collapsed);
+        // timing collapsed: 1 header, io expanded: 1 header + 2 sources = 4
+        assert_eq!(rows.len(), 4);
+        assert!(matches!(&rows[0], VirtualRow::Header { cat_key } if cat_key == "timing"));
+        assert!(matches!(&rows[1], VirtualRow::Header { cat_key } if cat_key == "io"));
+        assert!(matches!(&rows[2], VirtualRow::Source { source_idx: 3 }));
+    }
+
+    #[test]
+    fn build_virtual_rows_all_collapsed() {
+        let (order, map) = make_test_categories();
+        let mut collapsed = HashSet::new();
+        collapsed.insert("timing".to_string());
+        collapsed.insert("io".to_string());
+        let rows = build_virtual_rows(&order, &map, &collapsed);
+        // Only 2 header rows
+        assert_eq!(rows.len(), 2);
+        assert!(matches!(&rows[0], VirtualRow::Header { .. }));
+        assert!(matches!(&rows[1], VirtualRow::Header { .. }));
+    }
+
+    #[test]
+    fn cursor_source_idx_returns_none_for_header() {
+        let (order, map) = make_test_categories();
+        let collapsed = HashSet::new();
+        let rows = build_virtual_rows(&order, &map, &collapsed);
+        // Row 0 is a header
+        let result = rows.get(0).and_then(|r| match r {
+            VirtualRow::Source { source_idx } => Some(*source_idx),
+            VirtualRow::Header { .. } => None,
+        });
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn cursor_source_idx_returns_some_for_source() {
+        let (order, map) = make_test_categories();
+        let collapsed = HashSet::new();
+        let rows = build_virtual_rows(&order, &map, &collapsed);
+        // Row 1 is a source (idx 0)
+        let result = rows.get(1).and_then(|r| match r {
+            VirtualRow::Source { source_idx } => Some(*source_idx),
+            VirtualRow::Header { .. } => None,
+        });
+        assert_eq!(result, Some(0));
     }
 }

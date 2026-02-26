@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-58 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+59 sources across 11 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -64,10 +64,11 @@
 | 56 | `nvme_iokit_sensors` | IO | NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps | 2.0 | macOS |
 | 57 | `nvme_raw_device` | IO | Direct raw block device reads bypassing filesystem with page-aligned I/O | 2.0 | Any |
 | 58 | `nvme_passthrough_linux` | IO | Raw NVMe admin commands via ioctl passthrough on Linux (closest to NAND hardware) | 2.0 | Linux |
+| 59 | `mach_timing` | Timing | mach_absolute_time() nanosecond timing jitter | 0.3 | macOS |
 
 ---
 
-## Timing Sources (5)
+## Timing Sources (7)
 
 ### `clock_jitter`
 
@@ -104,6 +105,12 @@ Reads the macOS COMMPAGE seqlock update synchronization timing. Bimodal clock re
 **Category:** Timing | **Platform:** macOS | **Est. Rate:** 1800.0
 
 Apple Neural Engine clock domain crossing jitter via IOKit property reads. The ANE has its own independent clock domain, separate from the CPU, GPU, audio PLL, display PLL, and PCIe PHY. IOKit property reads from ANE services force clock domain crossings between the CPU's 24 MHz crystal and the ANE's independent PLL. Entropy arises from ANE PLL thermal noise, power state transition latency, DMA setup variance, and memory fabric contention.
+
+### `mach_timing`
+
+**Category:** Timing | **Platform:** macOS | **Est. Rate:** 0.3
+
+Reads the ARM system counter (mach_absolute_time) at sub-nanosecond resolution with variable micro-workloads between samples. Timing jitter comes from CPU pipeline state: instruction reordering, branch prediction, cache state, interrupt coalescing, and power-state transitions.
 
 ---
 
@@ -480,9 +487,9 @@ The conditioning pipeline extracts genuine entropy from biased sources and produ
 
 ## Adding a New Source
 
-1. Create a struct implementing `EntropySource` in `crates/openentropy-core/src/sources/`
-2. Define a static `SourceInfo` with physics explanation, category, and platform requirements
-3. Register in `all_sources()` in `crates/openentropy-core/src/sources/mod.rs`
+1. Create a struct implementing `EntropySource` in `crates/openentropy-core/src/sources/<category>/`
+2. Define a static `SourceInfo` with physics explanation, category, platform requirements, and `is_fast` flag
+3. Register in `sources()` in the category's `mod.rs` (e.g., `sources/timing/mod.rs`)
 4. Add unit tests in the same file
 5. Document the physics in this file
 

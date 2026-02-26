@@ -23,25 +23,20 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       └── sources/            # 58 source implementations
-│   │           ├── mod.rs          # all_sources() registry
-│   │           ├── timing.rs       # ClockJitter, MachTiming, SleepJitter
-│   │           ├── sysctl.rs       # Kernel counter mining
-│   │           ├── vmstat.rs       # VM subsystem counters
-│   │           ├── process.rs      # Process table entropy
-│   │           ├── network.rs      # DNS timing, TCP connect
-│   │           ├── wifi.rs         # WiFi RSSI noise
-│   │           ├── disk.rs         # Block I/O timing
-│   │           ├── audio.rs        # Microphone thermal noise
-│   │           ├── camera.rs       # Sensor dark current
-│   │           ├── bluetooth.rs    # BLE RF noise
-│   │           ├── ioregistry.rs   # IOKit deep mining
-│   │           ├── silicon.rs      # DRAM row buffer, page fault, speculative
-│   │           ├── compression.rs  # Compression/hash timing oracles
-│   │           ├── novel.rs        # Spotlight metadata query timing
-│   │           └── frontier/       # 40 Apple Silicon-specific and deep hardware sources
-│   │               ├── mod.rs
-│   │               └── ... (amx_timing, ane_timing, nvme_*, etc.)
+│   │       └── sources/            # 58 source implementations, organized by category
+│   │           ├── mod.rs          # all_sources() composed from category modules
+│   │           ├── helpers.rs      # Shared: mach_time, extract_lsbs, xor_fold, etc.
+│   │           ├── timing/         # Clock jitter, DRAM row buffer, page fault (7 sources)
+│   │           ├── scheduling/     # Sleep jitter, thread lifecycle, timers (6 sources)
+│   │           ├── system/         # Sysctl, vmstat, process, IORegistry (6 sources)
+│   │           ├── network/        # DNS timing, TCP connect, WiFi RSSI (3 sources)
+│   │           ├── io/             # Disk I/O, NVMe sensors, fsync (6 sources)
+│   │           ├── sensor/         # Audio noise, camera noise, Bluetooth (4 sources)
+│   │           ├── microarch/      # Branch prediction, TLB, AMX timing (14 sources)
+│   │           ├── ipc/            # Mach ports, pipes, kqueue, keychain (4 sources)
+│   │           ├── thermal/        # Audio/display/PCIe PLL crossings (3 sources)
+│   │           ├── gpu/            # Metal divergence, IOSurface, NL inference (3 sources)
+│   │           └── signal/         # Compression, hash, Spotlight timing (3 sources)
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
