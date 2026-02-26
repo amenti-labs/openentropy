@@ -4,7 +4,7 @@
 //! sources: autocorrelation profiles, spectral analysis, bit bias, distribution
 //! statistics, stationarity, runs analysis, and entropy scaling.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ pub struct ThroughputPoint {
 }
 
 /// Cross-correlation between two sources.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossCorrPair {
     pub source_a: String,
     pub source_b: String,
@@ -149,7 +149,7 @@ pub struct CrossCorrPair {
 }
 
 /// Cross-correlation matrix result.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossCorrMatrix {
     pub pairs: Vec<CrossCorrPair>,
     /// Pairs with |r| > 0.3.
@@ -598,7 +598,7 @@ pub fn full_analysis(source_name: &str, data: &[u8]) -> SourceAnalysis {
 // ---------------------------------------------------------------------------
 
 /// Pearson correlation coefficient between two byte slices.
-fn pearson_correlation(a: &[u8], b: &[u8]) -> f64 {
+pub fn pearson_correlation(a: &[u8], b: &[u8]) -> f64 {
     let n = a.len() as f64;
     let a_f: Vec<f64> = a.iter().map(|&x| x as f64).collect();
     let b_f: Vec<f64> = b.iter().map(|&x| x as f64).collect();

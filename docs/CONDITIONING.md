@@ -1,12 +1,14 @@
 # OpenEntropy — Conditioning Architecture
 
+[< Back to README](../README.md) | [Sources](SOURCES.md) | [Architecture](ARCHITECTURE.md) | [API](API.md)
+
 How raw hardware entropy becomes cryptographically uniform random bytes.
 
 ## Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     Entropy Sources (45)                      │
+│                     Entropy Sources (49)                      │
 │  clock_jitter, dns_timing, page_fault_timing, ...            │
 │  Each returns raw bytes — NO internal conditioning           │
 └──────────────────┬───────────────────────────────────────────┘
@@ -59,7 +61,7 @@ Raw mode returns XOR-combined source bytes with **no conditioning at all** — n
 |-----------|---------------|
 | Rust API | `pool.get_raw_bytes(n)` |
 | CLI | `openentropy stream --unconditioned` |
-| CLI | `openentropy device <name> --unconditioned` |
+| CLI | `openentropy stream --fifo <path> --conditioning raw` |
 | HTTP API | `GET /api/v1/random?length=N&type=hex&raw=true` (requires `--allow-raw` flag) |
 | Python SDK | `pool.get_raw_bytes(n)` |
 
@@ -95,7 +97,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 | Feature | OpenEntropy | ANU QRNG | Outshift QRNG | Linux `/dev/urandom` |
 |---------|-----------------|----------|---------------|---------------------|
 | Raw output available | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Source diversity | 45 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
+| Source diversity | 49 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
 | Conditioning visible | ✅ Optional, documented | ❌ Opaque | ❌ DRBG post-processing | ❌ ChaCha20 CSPRNG |
 | Self-hosted | ✅ Local binary | ❌ Cloud API | ❌ Cloud API | ✅ Kernel |
 | Statistical tests | ✅ Built-in NIST SP 800-22 | ❌ | ❌ | ❌ |
@@ -116,7 +118,7 @@ OpenEntropy's raw mode is the equivalent of tapping the wire *before* the DRBG. 
 | Entropy source research | Raw |
 | NIST SP 800-90B compliance testing | Raw |
 | Hardware characterization | Raw |
-| Consciousness/QRNG experiments | Raw |
+| QRNG experiments | Raw |
 | Comparing to DRBG-based APIs | Raw |
 
 ## Security Considerations

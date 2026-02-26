@@ -3,7 +3,6 @@ use std::time::Instant;
 
 use openentropy_core::TelemetryWindowReport;
 use openentropy_core::conditioning::{quick_min_entropy, quick_quality, quick_shannon};
-use openentropy_core::platform::detect_available_sources;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug)]
@@ -96,53 +95,67 @@ struct PoolQualityReport {
     total_sources: usize,
 }
 
-pub struct BenchCommandConfig<'a> {
-    pub source_filter: Option<&'a str>,
-    pub conditioning: &'a str,
-    pub source: Option<&'a str>,
-    pub profile: &'a str,
+pub struct BenchArgs {
+    pub positional: Vec<String>,
+    pub all: bool,
+    pub conditioning: String,
+    pub profile: String,
     pub samples_per_round: Option<usize>,
     pub rounds: Option<usize>,
     pub warmup_rounds: Option<usize>,
     pub timeout_sec: Option<f64>,
-    pub rank_by: &'a str,
-    pub output_path: Option<&'a str>,
-    pub include_pool_quality: bool,
+    pub rank_by: String,
+    pub output: Option<String>,
+    pub no_pool: bool,
     pub include_telemetry: bool,
 }
 
-pub fn run(cfg: BenchCommandConfig<'_>) {
-    // Single-source mode (replaces `probe`)
-    if let Some(source_name) = cfg.source {
-        let mode = super::parse_conditioning(cfg.conditioning);
-        let samples = cfg.samples_per_round.unwrap_or(5000);
-        run_single_source(source_name, mode, samples, cfg.conditioning);
+pub fn run(args: BenchArgs) {
+    // Single-source detail mode: exactly one positional arg (and no multi-source flags)
+    if args.positional.len() == 1 && !args.all {
+        if args.rounds.is_some() || args.warmup_rounds.is_some() || args.output.is_some() {
+            eprintln!(
+                "Note: --rounds, --warmup-rounds, and --output are ignored in single-source probe mode."
+            );
+        }
+        let mode = super::parse_conditioning(&args.conditioning);
+        let samples = args.samples_per_round.unwrap_or(5000);
+        run_single_source(&args.positional[0], mode, samples, &args.conditioning);
         return;
     }
 
-    let profile = BenchProfile::parse(cfg.profile);
-    let rank_by = RankBy::parse(cfg.rank_by);
-    let telemetry = super::telemetry::TelemetryCapture::start(cfg.include_telemetry);
-    let mode = super::parse_conditioning(cfg.conditioning);
+    let profile = BenchProfile::parse(&args.profile);
+    let rank_by = RankBy::parse(&args.rank_by);
+    let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
+    let mode = super::parse_conditioning(&args.conditioning);
     let mut settings = profile.defaults();
-    if let Some(v) = cfg.samples_per_round {
+    if let Some(v) = args.samples_per_round {
         settings.samples_per_round = v.max(1);
     }
-    if let Some(v) = cfg.rounds {
+    if let Some(v) = args.rounds {
         settings.rounds = v.max(1);
     }
-    if let Some(v) = cfg.warmup_rounds {
+    if let Some(v) = args.warmup_rounds {
         settings.warmup_rounds = v;
     }
-    if let Some(v) = cfg.timeout_sec {
+    if let Some(v) = args.timeout_sec {
         settings.timeout_sec = v.max(0.1);
     }
 
-    let pool_instance = super::make_pool(cfg.source_filter);
+    // Build pool from positional args, --all, or default fast sources
+    let source_filter = if args.all {
+        Some("all".to_string())
+    } else if !args.positional.is_empty() {
+        Some(args.positional.join(","))
+    } else {
+        None
+    };
+    let pool_instance = super::make_pool(source_filter.as_deref());
     let infos = pool_instance.source_infos();
     let count = infos.len();
+    let is_filtered = source_filter.is_some();
 
-    if cfg.source_filter.is_none() {
+    if !is_filtered {
         println!("Benchmarking {count} fast sources...");
     } else {
         println!("Benchmarking {count} sources...");
@@ -321,7 +334,7 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
     println!("Grade is based on min-entropy (H∞), not Shannon.");
     println!("Stability is derived from run-to-run min-entropy consistency (1.0 = most stable).");
 
-    let pool_report = if cfg.include_pool_quality {
+    let pool_report = if !args.no_pool {
         let bytes = 65_536usize;
         let output = pool_instance.get_bytes(bytes, mode);
         let health = pool_instance.health_report();
@@ -334,7 +347,10 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
         };
 
         println!("\n{}", "=".repeat(68));
-        println!("Pool Output Quality (conditioning: {})\n", cfg.conditioning);
+        println!(
+            "Pool Output Quality (conditioning: {})\n",
+            args.conditioning
+        );
         println!("  Conditioned output: {} bytes", report.bytes);
         println!(
             "  Shannon entropy: {:.4} / 8.0 bits/byte",
@@ -353,16 +369,17 @@ pub fn run(cfg: BenchCommandConfig<'_>) {
     } else {
         None
     };
+
     let telemetry_report = telemetry.finish();
     if let Some(ref window) = telemetry_report {
         super::telemetry::print_window_summary("bench", window);
     }
 
-    if let Some(path) = cfg.output_path {
+    if let Some(path) = args.output.as_deref() {
         let report = BenchReport {
             generated_unix: super::unix_timestamp_now(),
             profile: profile.as_str().to_string(),
-            conditioning: cfg.conditioning.to_string(),
+            conditioning: args.conditioning.to_string(),
             rank_by: rank_by.as_str().to_string(),
             settings: BenchSettingsJson {
                 samples_per_round: settings.samples_per_round,
@@ -484,25 +501,14 @@ fn run_single_source(
     samples: usize,
     conditioning_label: &str,
 ) {
-    let sources = detect_available_sources();
-    let matches: Vec<_> = sources
-        .into_iter()
-        .filter(|s| {
-            s.name()
-                .to_lowercase()
-                .contains(&source_name.to_lowercase())
-        })
-        .collect();
-
-    if matches.is_empty() {
-        eprintln!(
-            "Source '{}' not found. Run 'scan' to list sources.",
-            source_name
-        );
-        std::process::exit(1);
-    }
-
-    let src = &matches[0];
+    let src = match super::find_source(source_name) {
+        Some(s) => s,
+        None => {
+            eprintln!("Source '{source_name}' not found. Run 'openentropy scan' to list sources.");
+            std::process::exit(1);
+        }
+    };
+    let src = &src;
     let info = src.info();
     println!("Probing: {}", info.name);
     println!("  {}", info.description);

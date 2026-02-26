@@ -70,49 +70,37 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
         Box::new(frontier::KqueueEventsSource::default()),
         Box::new(frontier::DVFSRaceSource),
         Box::new(frontier::KeychainTimingSource::default()),
-        // Frontier: thermal noise research (2026-02-14)
         Box::new(frontier::AudioPLLTimingSource),
-        // Frontier: unprecedented entropy sources (2026-02-14)
-        Box::new(frontier::NVMeLatencySource),
         Box::new(frontier::MachContinuousTimingSource),
         Box::new(frontier::GPUDivergenceSource),
         Box::new(frontier::IOSurfaceCrossingSource),
         Box::new(frontier::FsyncJournalSource),
-        // Frontier: independent oscillator/PLL sources (2026-02-15)
         Box::new(frontier::DisplayPllSource),
         Box::new(frontier::PciePllSource),
-        // Frontier: deep hardware sources (2026-02-22)
         Box::new(frontier::PECoreArithmeticSource),
         Box::new(frontier::MemoryBusCryptoSource),
-        // Frontier: esoteric sources — SMC, OS timer, DRBG oracle (2026-02-24)
         Box::new(frontier::TimerCoalescingSource),
         Box::new(frontier::DispatchQueueTimingSource),
         Box::new(frontier::NLInferenceTimingSource),
-        // Frontier: covert-channel level sources — ICC, DVFS boost, AES pipeline (2026-02-24)
         Box::new(frontier::ICCAtomicContentionSource),
-        // Frontier: Apple APRR undocumented register JIT toggle (2026-02-24)
         Box::new(frontier::APRRJitTimingSource),
-        // Frontier: instruction-level entropy — ISB pipeline, preemption, SEV broadcast (2026-02-24)
         Box::new(frontier::PreemptionBoundarySource),
         Box::new(frontier::SEVEventTimingSource),
-        // Frontier: crypto + exclusive monitor (2026-02-24)
-        // Frontier: PAC unit, COMMPAGE seqlock, physical timer (2026-02-24)
         Box::new(frontier::CommPageClockTimingSource),
-        // Frontier: PMULL sparse event detector, cross-core coherency, DC CIVAC (2026-02-24)
-        // Frontier: SMC thermistor/fuel-gauge outliers, proc_lock contention (2026-02-24)
         Box::new(frontier::SMCHighVarTimingSource),
         Box::new(frontier::ProcInfoTimingSource),
-        // Frontier: SEP TRNG reseed timing via getentropy (2026-02-24)
         Box::new(frontier::GetentropyTimingSource),
-        // Frontier: hardware prefetcher state, USB enumeration (2026-02-24)
         Box::new(frontier::PrefetcherStateSource),
         Box::new(frontier::USBEnumerationSource),
-        // Frontier: JIT register timing, CNTFRQ cache, CommonCrypto AES (2026-02-24)
         Box::new(frontier::GxfRegisterTimingSource),
         Box::new(frontier::CntfrqCacheTimingSource),
         Box::new(frontier::CommonCryptoAesTimingSource),
-        // Frontier: dual clock domain beat, SITVA (2026-02-24)
         Box::new(frontier::DualClockDomainSource),
         Box::new(frontier::SITVASource),
+        // Frontier: ANE + NVMe deep sources
+        Box::new(frontier::AneTimingSource),
+        Box::new(frontier::NvmeIokitSensorsSource),
+        Box::new(frontier::NvmeRawDeviceSource),
+        Box::new(frontier::NvmePassthroughLinuxSource),
     ]
 }

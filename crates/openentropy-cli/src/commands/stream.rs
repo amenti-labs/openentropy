@@ -1,34 +1,108 @@
 use std::io::Write;
 
-pub fn run(
-    format: &str,
-    rate: usize,
-    source_filter: Option<&str>,
-    n_bytes: usize,
-    conditioning: &str,
-    fifo_path: Option<&str>,
-) {
-    if let Some(path) = fifo_path {
-        run_fifo(path, rate, source_filter, conditioning);
+use openentropy_core::conditioning::condition;
+
+pub struct StreamArgs {
+    pub positional: Vec<String>,
+    pub format: String,
+    pub rate: usize,
+    pub bytes: usize,
+    pub conditioning: String,
+    pub pool: bool,
+    pub all: bool,
+    pub fifo: Option<String>,
+}
+
+pub fn run(args: StreamArgs) {
+    if let Some(ref path) = args.fifo {
+        run_fifo(path, &args);
     } else {
-        run_stdout(format, rate, source_filter, n_bytes, conditioning);
+        run_stdout(&args);
     }
 }
 
-fn run_stdout(
-    format: &str,
-    rate: usize,
-    source_filter: Option<&str>,
-    n_bytes: usize,
-    conditioning: &str,
-) {
-    let pool = super::make_pool(source_filter);
-    let mode = super::parse_conditioning(conditioning);
-    let chunk_size = if rate > 0 { rate.min(4096) } else { 4096 };
-    let mut total = 0usize;
+fn run_stdout(args: &StreamArgs) {
+    let mode = super::parse_conditioning(&args.conditioning);
+    let chunk_size = if args.rate > 0 {
+        args.rate.min(4096)
+    } else {
+        4096
+    };
 
+    // Decide: single-source direct mode vs pool mode
+    let use_pool = args.pool || args.all || args.positional.is_empty() || args.positional.len() > 1;
+
+    if use_pool {
+        // Pool mode: build pool from positional args, --all, or default fast sources
+        let source_filter = if args.all {
+            Some("all".to_string())
+        } else if !args.positional.is_empty() {
+            Some(args.positional.join(","))
+        } else {
+            None
+        };
+        let pool = super::make_pool(source_filter.as_deref());
+        run_pool_stdout(pool, &args.format, chunk_size, args.rate, args.bytes, mode);
+    } else {
+        // Single-source direct mode (no pool overhead)
+        let source_name = &args.positional[0];
+        let source = match super::find_source(source_name) {
+            Some(s) => s,
+            None => {
+                eprintln!(
+                    "Source '{source_name}' not found. Run 'openentropy scan' to list sources."
+                );
+                std::process::exit(1);
+            }
+        };
+
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        let mut total = 0usize;
+
+        loop {
+            if args.bytes > 0 && total >= args.bytes {
+                break;
+            }
+            let want = if args.bytes == 0 {
+                chunk_size
+            } else {
+                chunk_size.min(args.bytes - total)
+            };
+
+            let raw = source.collect(want);
+            if raw.is_empty() {
+                eprintln!("Warning: source '{}' returned no data", source.name());
+                break;
+            }
+            let data = condition(&raw, want, mode);
+
+            if write_formatted(&mut out, &data, &args.format).is_err() {
+                break; // Broken pipe
+            }
+            let _ = out.flush();
+            total += data.len();
+
+            if args.rate > 0 {
+                let sleep_dur =
+                    std::time::Duration::from_secs_f64(data.len() as f64 / args.rate as f64);
+                std::thread::sleep(sleep_dur);
+            }
+        }
+    }
+}
+
+fn run_pool_stdout(
+    pool: openentropy_core::EntropyPool,
+    format: &str,
+    chunk_size: usize,
+    rate: usize,
+    n_bytes: usize,
+    mode: openentropy_core::conditioning::ConditioningMode,
+) {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
+    let mut total = 0usize;
 
     loop {
         if n_bytes > 0 && total >= n_bytes {
@@ -42,24 +116,10 @@ fn run_stdout(
 
         let data = pool.get_bytes(want, mode);
 
-        let write_result = match format {
-            "raw" => out.write_all(&data),
-            "hex" => {
-                let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
-                out.write_all(hex.as_bytes())
-            }
-            "base64" => {
-                let encoded = base64_encode(&data);
-                out.write_all(encoded.as_bytes())
-            }
-            _ => out.write_all(&data),
-        };
-
-        if write_result.is_err() {
+        if write_formatted(&mut out, &data, format).is_err() {
             break; // Broken pipe
         }
         let _ = out.flush();
-
         total += data.len();
 
         if rate > 0 {
@@ -69,10 +129,17 @@ fn run_stdout(
     }
 }
 
-fn run_fifo(path: &str, buffer_size: usize, source_filter: Option<&str>, conditioning: &str) {
-    let pool = super::make_pool(source_filter);
-    let mode = super::parse_conditioning(conditioning);
-    let buffer_size = if buffer_size > 0 { buffer_size } else { 4096 };
+fn run_fifo(path: &str, args: &StreamArgs) {
+    let source_filter = if args.all {
+        Some("all".to_string())
+    } else if !args.positional.is_empty() {
+        Some(args.positional.join(","))
+    } else {
+        None
+    };
+    let pool = super::make_pool(source_filter.as_deref());
+    let mode = super::parse_conditioning(&args.conditioning);
+    let buffer_size = if args.rate > 0 { args.rate } else { 4096 };
 
     // Create FIFO if it doesn't exist; verify it's a FIFO if it does.
     if std::path::Path::new(path).exists() {
@@ -89,7 +156,13 @@ fn run_fifo(path: &str, buffer_size: usize, source_filter: Option<&str>, conditi
         #[cfg(unix)]
         {
             use std::ffi::CString;
-            let c_path = CString::new(path).unwrap();
+            let c_path = match CString::new(path) {
+                Ok(c) => c,
+                Err(_) => {
+                    eprintln!("Error: FIFO path contains invalid characters.");
+                    std::process::exit(1);
+                }
+            };
             // SAFETY: c_path is a valid NUL-terminated CString.
             let ret = unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) };
             if ret != 0 {
@@ -105,7 +178,10 @@ fn run_fifo(path: &str, buffer_size: usize, source_filter: Option<&str>, conditi
         }
     }
 
-    println!("Feeding entropy to {path} (conditioning={conditioning}, buffer={buffer_size}B)");
+    println!(
+        "Feeding entropy to {path} (conditioning={}, buffer={buffer_size}B)",
+        args.conditioning
+    );
     println!("Press Ctrl+C to stop.");
 
     let path_owned = path.to_string();
@@ -155,7 +231,6 @@ fn install_cleanup_handler(path: &str) {
 
 extern "C" fn signal_handler(_: libc::c_int) {
     // Only call async-signal-safe functions here.
-    // FIFO_CPATH.get() is a relaxed atomic load after initialization.
     if let Some(c_path) = FIFO_CPATH.get() {
         unsafe {
             libc::unlink(c_path.as_ptr());
@@ -163,6 +238,20 @@ extern "C" fn signal_handler(_: libc::c_int) {
     }
     unsafe {
         libc::_exit(0);
+    }
+}
+
+fn write_formatted(out: &mut impl Write, data: &[u8], format: &str) -> std::io::Result<()> {
+    match format {
+        "hex" => {
+            let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
+            out.write_all(hex.as_bytes())
+        }
+        "base64" => {
+            let encoded = base64_encode(data);
+            out.write_all(encoded.as_bytes())
+        }
+        _ => out.write_all(data),
     }
 }
 

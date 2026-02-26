@@ -42,6 +42,8 @@ pub enum ChartMode {
     RandomWalk,
     ByteDistribution,
     Autocorrelation,
+    /// Camera shot-noise visualization (sensor source)
+    CameraShotNoise,
 }
 
 impl ChartMode {
@@ -53,7 +55,22 @@ impl ChartMode {
             Self::OutputValue => Self::RandomWalk,
             Self::RandomWalk => Self::ByteDistribution,
             Self::ByteDistribution => Self::Autocorrelation,
-            Self::Autocorrelation => Self::Shannon,
+            Self::Autocorrelation => Self::CameraShotNoise,
+            Self::CameraShotNoise => Self::Shannon,
+        }
+    }
+
+    /// Returns true if this mode is source-specific
+    /// (only relevant for a particular source)
+    pub fn is_source_specific(self) -> bool {
+        matches!(self, Self::CameraShotNoise)
+    }
+
+    /// Check if this mode is appropriate for the given source name
+    pub fn is_applicable_for(self, source_name: &str) -> bool {
+        match self {
+            Self::CameraShotNoise => source_name == "camera_noise",
+            _ => true,
         }
     }
 
@@ -66,6 +83,7 @@ impl ChartMode {
             Self::RandomWalk => "Random walk",
             Self::ByteDistribution => "Byte dist",
             Self::Autocorrelation => "Autocorrelation",
+            Self::CameraShotNoise => "Camera Shot Noise",
         }
     }
 
@@ -77,6 +95,7 @@ impl ChartMode {
             Self::RandomWalk => "sum",
             Self::ByteDistribution => "count",
             Self::Autocorrelation => "r",
+            Self::CameraShotNoise => "pixels",
         }
     }
 
@@ -90,6 +109,7 @@ impl ChartMode {
             Self::RandomWalk => "Cumulative bias detector",
             Self::ByteDistribution => "Byte value histogram",
             Self::Autocorrelation => "Sequential independence check",
+            Self::CameraShotNoise => "Camera sensor shot-noise lattice",
         }
     }
 
@@ -138,6 +158,12 @@ impl ChartMode {
                 "|r| above 0.3 = concerning dependency between consecutive samples.",
                 "Persistent non-zero correlation = the source has memory/structure.",
             ],
+            Self::CameraShotNoise => &[
+                "Visualizes live camera sensor shot-noise and dark-current grain.",
+                "Grid intensity is driven directly by recent raw bytes from camera_noise.",
+                "Light level and lens coverage visibly change the texture pattern.",
+                "Quantum-origin noise is present, but mixed with analog readout effects.",
+            ],
         }
     }
 
@@ -148,7 +174,10 @@ impl ChartMode {
             Self::MinEntropy => s.min_entropy,
             Self::CollectTime => s.collect_time_ms,
             Self::OutputValue => s.output_value,
-            Self::RandomWalk | Self::ByteDistribution | Self::Autocorrelation => 0.0,
+            Self::RandomWalk
+            | Self::ByteDistribution
+            | Self::Autocorrelation
+            | Self::CameraShotNoise => 0.0,
         }
     }
 
@@ -168,9 +197,7 @@ impl ChartMode {
                 let bound = (min_val.abs().max(max_val.abs()) + 0.1).min(1.0);
                 (-bound, bound)
             }
-            Self::ByteDistribution => {
-                unreachable!()
-            }
+            Self::ByteDistribution | Self::CameraShotNoise => (0.0, 1.0),
         }
     }
 }
@@ -252,6 +279,13 @@ pub fn next_conditioning(mode: ConditioningMode) -> ConditioningMode {
     }
 }
 
+fn preferred_chart_mode_for_source(source_name: &str) -> ChartMode {
+    match source_name {
+        "camera_noise" => ChartMode::CameraShotNoise,
+        _ => ChartMode::RandomWalk,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Sample
 // ---------------------------------------------------------------------------
@@ -263,6 +297,35 @@ pub struct Sample {
     pub min_entropy: f64,
     pub collect_time_ms: f64,
     pub output_value: f64,
+}
+
+// ---------------------------------------------------------------------------
+// Visualization state
+// ---------------------------------------------------------------------------
+
+/// Keep latest raw bytes visible in visualization panels.
+const MAX_STREAM_BYTES: usize = 32;
+
+/// Keep latest raw bits visible in visualization panels.
+const MAX_STREAM_BITS: usize = 256;
+
+/// Generic stream state for source-specific visualizations.
+#[derive(Debug, Clone, Default)]
+pub struct SensorFlowState {
+    /// Latest raw bytes used to drive visualization
+    pub recent_bytes: VecDeque<u8>,
+    /// Latest raw bits used to drive visualization (0/1)
+    pub recent_bits: VecDeque<u8>,
+    /// Number of bits changed vs previous collection cycle
+    pub changed_bits_last: usize,
+    /// Number of consecutive cycles with identical raw bytes
+    pub repeat_streak: u64,
+    /// Fingerprint of recent stream tail (for quick visual comparison)
+    pub stream_fingerprint: u64,
+    /// Last cycle's raw bytes
+    pub last_cycle_bytes: Vec<u8>,
+    /// Frame counter
+    pub frame: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +348,8 @@ pub struct Snapshot {
     pub recording_samples: u64,
     /// Accumulated random walk values (cumulative sum across collections).
     pub walk: Vec<f64>,
+    /// Camera shot-noise visualization state
+    pub camera_noise: SensorFlowState,
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +372,8 @@ struct SharedState {
     walk: HashMap<String, Vec<f64>>,
     /// Session writer for TUI recording. Created when 'r' is pressed, dropped on stop.
     session_writer: Option<SessionWriter>,
+    /// Camera shot-noise visualization state
+    camera_noise: SensorFlowState,
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +436,7 @@ impl App {
                 byte_freq: [0u64; 256],
                 walk: HashMap::new(),
                 session_writer: None,
+                camera_noise: SensorFlowState::default(),
             })),
             collector_flag: Arc::new(AtomicBool::new(false)),
             conditioning_mode: ConditioningMode::default(),
@@ -476,6 +544,7 @@ impl App {
                     s.byte_freq = [0u64; 256];
                     drop(s);
                     self.active = Some(self.cursor);
+                    self.chart_mode = preferred_chart_mode_for_source(name);
                     self.kick_collect();
                 }
             }
@@ -495,7 +564,16 @@ impl App {
                 self.kick_collect();
             }
             KeyCode::Char('g') => {
-                self.chart_mode = self.chart_mode.next();
+                let active = self.active_name().unwrap_or("");
+                let mut next = self.chart_mode.next();
+                // Skip source-specific visualizations when they do not match active source.
+                for _ in 0..20 {
+                    if !next.is_source_specific() || next.is_applicable_for(active) {
+                        break;
+                    }
+                    next = next.next();
+                }
+                self.chart_mode = next;
             }
             KeyCode::Char('p') => self.paused = !self.paused,
             KeyCode::Char('s') => self.export_snapshot(),
@@ -619,6 +697,11 @@ impl App {
                     s.byte_freq[b as usize] += 1;
                 }
                 s.collecting = false;
+
+                // Update camera shot-noise visualization state
+                if active_name == "camera_noise" {
+                    update_flow_state(&mut s.camera_noise, &raw_bytes);
+                }
 
                 // Write to session if recording
                 if let Some(ref mut writer) = s.session_writer {
@@ -803,8 +886,64 @@ impl App {
                 .and_then(|n| s.walk.get(n))
                 .cloned()
                 .unwrap_or_default(),
+            camera_noise: s.camera_noise.clone(),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Visualization state update functions
+// ---------------------------------------------------------------------------
+
+fn append_stream(state_bytes: &mut VecDeque<u8>, state_bits: &mut VecDeque<u8>, raw_bytes: &[u8]) {
+    for &byte in raw_bytes {
+        state_bytes.push_back(byte);
+        while state_bytes.len() > MAX_STREAM_BYTES {
+            state_bytes.pop_front();
+        }
+
+        // MSB->LSB for readability in panel display.
+        for bit in (0..8).rev() {
+            state_bits.push_back((byte >> bit) & 1);
+        }
+        while state_bits.len() > MAX_STREAM_BITS {
+            state_bits.pop_front();
+        }
+    }
+}
+
+fn count_bit_changes(a: &[u8], b: &[u8]) -> usize {
+    let max_len = a.len().max(b.len());
+    let mut changes = 0usize;
+    for i in 0..max_len {
+        let av = *a.get(i).unwrap_or(&0);
+        let bv = *b.get(i).unwrap_or(&0);
+        changes += (av ^ bv).count_ones() as usize;
+    }
+    changes
+}
+
+fn stream_fingerprint(bytes: &VecDeque<u8>) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn update_flow_state(state: &mut SensorFlowState, raw_bytes: &[u8]) {
+    state.frame = state.frame.wrapping_add(1);
+    state.changed_bits_last = count_bit_changes(raw_bytes, &state.last_cycle_bytes);
+    if raw_bytes == state.last_cycle_bytes.as_slice() {
+        state.repeat_streak = state.repeat_streak.saturating_add(1);
+    } else {
+        state.repeat_streak = 0;
+    }
+    state.last_cycle_bytes.clear();
+    state.last_cycle_bytes.extend_from_slice(raw_bytes);
+    append_stream(&mut state.recent_bytes, &mut state.recent_bits, raw_bytes);
+    state.stream_fingerprint = stream_fingerprint(&state.recent_bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -831,6 +970,8 @@ mod tests {
         let mode = mode.next();
         assert_eq!(mode, ChartMode::Autocorrelation);
         let mode = mode.next();
+        assert_eq!(mode, ChartMode::CameraShotNoise);
+        let mode = mode.next();
         assert_eq!(mode, ChartMode::Shannon);
     }
 
@@ -848,6 +989,7 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.label(), "Random walk");
         assert_eq!(ChartMode::ByteDistribution.label(), "Byte dist");
         assert_eq!(ChartMode::Autocorrelation.label(), "Autocorrelation");
+        assert_eq!(ChartMode::CameraShotNoise.label(), "Camera Shot Noise");
     }
 
     #[test]
@@ -860,6 +1002,7 @@ mod tests {
             ChartMode::RandomWalk,
             ChartMode::ByteDistribution,
             ChartMode::Autocorrelation,
+            ChartMode::CameraShotNoise,
         ] {
             assert!(
                 !mode.description().is_empty(),
@@ -877,6 +1020,7 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.y_label(), "sum");
         assert_eq!(ChartMode::ByteDistribution.y_label(), "count");
         assert_eq!(ChartMode::Autocorrelation.y_label(), "r");
+        assert_eq!(ChartMode::CameraShotNoise.y_label(), "pixels");
     }
 
     #[test]

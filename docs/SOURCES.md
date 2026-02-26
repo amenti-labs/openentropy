@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-55 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+58 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -34,37 +34,40 @@
 | 26 | `dvfs_race` | Microarch | Cross-core DVFS frequency race | 3.0 | All |
 | 27 | `keychain_timing` | IPC | Keychain/securityd round-trip timing | 3.0 | macOS |
 | 28 | `audio_pll_timing` | Thermal | Audio PLL clock drift from CoreAudio queries | 5.0 | macOS |
-| 29 | `nvme_latency` | IO | NVMe command submission/completion timing | 1.5 | macOS |
-| 30 | `mach_continuous_timing` | Timing | mach_continuous_time() kernel sleep-offset path | 2.0 | macOS |
-| 31 | `gpu_divergence` | GPU | GPU shader thread divergence timing | 4.0 | macOS (Metal) |
-| 32 | `iosurface_crossing` | GPU | IOSurface CPU↔GPU memory domain crossing | 2.5 | macOS |
-| 33 | `fsync_journal` | IO | APFS journal commit timing | 2.0 | All |
-| 34 | `display_pll` | Thermal | Display PLL phase noise (~533 MHz pixel clock) | 4.0 | macOS (ARM) |
-| 35 | `pcie_pll` | Thermal | PCIe PHY PLL jitter from IOKit clock domains | 4.0 | macOS (ARM) |
-| 36 | `pe_core_arithmetic` | Scheduling | P-core/E-core migration arithmetic loop jitter | 6.0 | macOS (ARM) |
-| 37 | `memory_bus_crypto` | Microarch | AES-XTS crypto context switch cache flush timing | 2.0 | macOS (ARM) |
-| 38 | `timer_coalescing` | Scheduling | OS timer coalescing wakeup jitter | 2.0 | All |
-| 39 | `dispatch_queue_timing` | Scheduling | GCD libdispatch global queue timing | 3.0 | macOS |
-| 40 | `nl_inference_timing` | GPU | NaturalLanguage ANE inference timing | 2.0 | macOS |
-| 41 | `icc_atomic_contention` | Microarch | Apple Silicon ICC bus atomic contention | 2.5 | macOS (ARM) |
-| 42 | `aprr_jit_timing` | Microarch | Apple APRR undocumented register JIT toggle | 1.5 | macOS (ARM) |
-| 43 | `preemption_boundary` | Scheduling | Kernel preemption timing via CNTVCT_EL0 | 2.0 | macOS (ARM) |
-| 44 | `sev_event_timing` | Microarch | ARM64 SEV/SEVL broadcast event timing | 3.0 | macOS (ARM) |
-| 45 | `commpage_clock_timing` | Timing | COMMPAGE seqlock update synchronization | 1.5 | macOS |
-| 46 | `smc_highvar_timing` | Sensor | SMC thermistor ADC + fuel gauge I2C bus | 2.5 | macOS |
-| 47 | `proc_info_timing` | System | proc_pidinfo kernel proc_lock contention | 1.5 | macOS |
-| 48 | `getentropy_timing` | System | getentropy() SEP TRNG reseed timing | 1.0 | macOS |
-| 49 | `prefetcher_state` | Microarch | Hardware prefetcher stride-learning state | 2.0 | macOS (ARM) |
-| 50 | `usb_enumeration` | IO | IOKit USB device enumeration timing | 1.5 | macOS |
-| 51 | `gxf_register_timing` | Microarch | Apple GXF EL0-accessible register trap-path | 0.7 | macOS (ARM) |
-| 52 | `cntfrq_cache_timing` | Microarch | CNTFRQ_EL0 system-register cache timing | 1.5 | macOS (ARM) |
-| 53 | `commoncrypto_aes_timing` | Microarch | CommonCrypto AES-128-CBC bimodal timing | 2.0 | macOS |
-| 54 | `dual_clock_domain` | Microarch | 24 MHz CNTVCT × 41 MHz private timer beat | 6.0 | macOS (ARM) |
-| 55 | `sitva` | Microarch | Scheduler-induced timing variance via NEON FMLA | 2.0 | macOS (ARM) |
+| 29 | `mach_continuous_timing` | Timing | mach_continuous_time() kernel sleep-offset path | 2.0 | macOS |
+| 30 | `gpu_divergence` | GPU | GPU shader thread divergence timing | 4.0 | macOS (Metal) |
+| 31 | `iosurface_crossing` | GPU | IOSurface CPU↔GPU memory domain crossing | 2.5 | macOS |
+| 32 | `fsync_journal` | IO | APFS journal commit timing | 2.0 | All |
+| 33 | `display_pll` | Thermal | Display PLL phase noise (~533 MHz pixel clock) | 4.0 | macOS (ARM) |
+| 34 | `pcie_pll` | Thermal | PCIe PHY PLL jitter from IOKit clock domains | 4.0 | macOS (ARM) |
+| 35 | `pe_core_arithmetic` | Scheduling | P-core/E-core migration arithmetic loop jitter | 6.0 | macOS (ARM) |
+| 36 | `memory_bus_crypto` | Microarch | AES-XTS crypto context switch cache flush timing | 2.0 | macOS (ARM) |
+| 37 | `timer_coalescing` | Scheduling | OS timer coalescing wakeup jitter | 2.0 | All |
+| 38 | `dispatch_queue_timing` | Scheduling | GCD libdispatch global queue timing | 3.0 | macOS |
+| 39 | `nl_inference_timing` | GPU | NaturalLanguage ANE inference timing | 2.0 | macOS |
+| 40 | `icc_atomic_contention` | Microarch | Apple Silicon ICC bus atomic contention | 2.5 | macOS (ARM) |
+| 41 | `aprr_jit_timing` | Microarch | Apple APRR undocumented register JIT toggle | 1.5 | macOS (ARM) |
+| 42 | `preemption_boundary` | Scheduling | Kernel preemption timing via CNTVCT_EL0 | 2.0 | macOS (ARM) |
+| 43 | `sev_event_timing` | Microarch | ARM64 SEV/SEVL broadcast event timing | 3.0 | macOS (ARM) |
+| 44 | `commpage_clock_timing` | Timing | COMMPAGE seqlock update synchronization | 1.5 | macOS |
+| 45 | `smc_highvar_timing` | Sensor | SMC thermistor ADC + fuel gauge I2C bus | 2.5 | macOS |
+| 46 | `proc_info_timing` | System | proc_pidinfo kernel proc_lock contention | 1.5 | macOS |
+| 47 | `getentropy_timing` | System | getentropy() SEP TRNG reseed timing | 1.0 | macOS |
+| 48 | `prefetcher_state` | Microarch | Hardware prefetcher stride-learning state | 2.0 | macOS (ARM) |
+| 49 | `usb_enumeration` | IO | IOKit USB device enumeration timing | 1.5 | macOS |
+| 50 | `gxf_register_timing` | Microarch | Apple GXF EL0-accessible register trap-path | 0.7 | macOS (ARM) |
+| 51 | `cntfrq_cache_timing` | Microarch | CNTFRQ_EL0 system-register cache timing | 1.5 | macOS (ARM) |
+| 52 | `commoncrypto_aes_timing` | Microarch | CommonCrypto AES-128-CBC bimodal timing | 2.0 | macOS |
+| 53 | `dual_clock_domain` | Microarch | 24 MHz CNTVCT × 41 MHz private timer beat | 6.0 | macOS (ARM) |
+| 54 | `sitva` | Microarch | Scheduler-induced timing variance via NEON FMLA | 2.0 | macOS (ARM) |
+| 55 | `ane_timing` | Timing | Apple Neural Engine clock domain crossing jitter | 1800.0 | macOS |
+| 56 | `nvme_iokit_sensors` | IO | NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps | 2.0 | macOS |
+| 57 | `nvme_raw_device` | IO | Direct raw block device reads bypassing filesystem with page-aligned I/O | 2.0 | Any |
+| 58 | `nvme_passthrough_linux` | IO | Raw NVMe admin commands via ioctl passthrough on Linux (closest to NAND hardware) | 2.0 | Linux |
 
 ---
 
-## Timing Sources
+## Timing Sources (5)
 
 ### `clock_jitter`
 
@@ -96,9 +99,15 @@ mach_continuous_time() kernel sleep-offset path — CV=475% vs mach_absolute_tim
 
 Reads the macOS COMMPAGE seqlock update synchronization timing. Bimodal clock read latency from seqlock contention when the kernel updates the shared COMMPAGE clock values.
 
+### `ane_timing`
+
+**Category:** Timing | **Platform:** macOS | **Est. Rate:** 1800.0
+
+Apple Neural Engine clock domain crossing jitter via IOKit property reads. The ANE has its own independent clock domain, separate from the CPU, GPU, audio PLL, display PLL, and PCIe PHY. IOKit property reads from ANE services force clock domain crossings between the CPU's 24 MHz crystal and the ANE's independent PLL. Entropy arises from ANE PLL thermal noise, power state transition latency, DMA setup variance, and memory fabric contention.
+
 ---
 
-## Scheduling Sources
+## Scheduling Sources (6)
 
 ### `sleep_jitter`
 
@@ -138,7 +147,7 @@ Kernel scheduler preemption timing via consecutive CNTVCT_EL0 reads. Detects pre
 
 ---
 
-## System Sources
+## System Sources (6)
 
 ### `sysctl_deltas`
 
@@ -178,7 +187,7 @@ getentropy() SEP TRNG reseed timing — CV=267% bimodal distribution. Captures t
 
 ---
 
-## Network Sources
+## Network Sources (3)
 
 ### `dns_timing`
 
@@ -200,19 +209,13 @@ WiFi RSSI includes multipath fading, co-channel interference, thermal noise floo
 
 ---
 
-## IO Sources
+## IO Sources (6)
 
 ### `disk_io`
 
 **Category:** IO | **Platform:** All | **Est. Rate:** 3.0
 
 Block device I/O latency varies with NAND channel contention, write-back cache state, wear-leveling decisions, and thermal effects.
-
-### `nvme_latency`
-
-**Category:** IO | **Platform:** macOS | **Est. Rate:** 1.5
-
-NVMe controllers have their own firmware and clock domain. IOKit property reads traverse the NVMe driver stack. Faster and more direct than fsync_journal.
 
 ### `fsync_journal`
 
@@ -226,9 +229,27 @@ fsync() forces a full flush through the storage stack: APFS journal commit, bloc
 
 IOKit USB device enumeration timing — CV=116%. Traverses the USB stack crossing clock domains between CPU, XHCI controller, and downstream hubs.
 
+### `nvme_iokit_sensors`
+
+**Category:** IO | **Platform:** macOS | **Est. Rate:** 2.0
+
+NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps. Reads NVMe controller properties (temperature, SMART counters) via the IOKit C API, forcing clock domain crossings between the CPU's 24 MHz crystal and the NVMe controller's independent PLL. Combines clock domain crossing timing with actual hardware sensor data (temperature ADC noise, SMART counter deltas).
+
+### `nvme_raw_device`
+
+**Category:** IO | **Platform:** Any | **Est. Rate:** 2.0
+
+Direct raw block device reads bypassing filesystem with page-aligned I/O. Reads directly from raw block devices (`/dev/rdiskN` on macOS, `/dev/nvmeXnYpZ` on Linux) with page-aligned buffers and cache bypass (`F_NOCACHE` / `O_DIRECT`). This eliminates the filesystem, buffer cache, and VFS layers from the timing path, so the remaining timing variance comes from NVMe controller firmware and NAND flash page read latency.
+
+### `nvme_passthrough_linux`
+
+**Category:** IO | **Platform:** Linux | **Est. Rate:** 2.0
+
+Raw NVMe admin commands via ioctl passthrough on Linux (closest to NAND hardware). Submits raw NVMe admin commands (Get Log Page for SMART/Health Information) via `ioctl(NVME_IOCTL_ADMIN_CMD)` on `/dev/nvme0`. This bypasses the filesystem, block layer, and I/O scheduler entirely -- the closest to NVMe hardware achievable from userspace on Linux.
+
 ---
 
-## IPC Sources
+## IPC Sources (4)
 
 ### `mach_ipc`
 
@@ -256,7 +277,7 @@ Keychain Services API calls traverse the Security framework into securityd, invo
 
 ---
 
-## Microarchitecture Sources
+## Microarchitecture Sources (14)
 
 ### `speculative_execution`
 
@@ -292,7 +313,7 @@ Apple Silicon ICC bus arbitration timing via cross-core atomic contention. LDXR/
 
 **Category:** Microarch | **Platform:** macOS (ARM) | **Est. Rate:** 2.0
 
-Hardware prefetcher stride-learning state — 2.25× learned vs random speedup. Precise L2 prime+probe of the prefetcher's internal stride detector.
+Hardware prefetcher stride-learning state — 2.25x learned vs random speedup. Precise L2 prime+probe of the prefetcher's internal stride detector.
 
 ### `aprr_jit_timing`
 
@@ -322,13 +343,13 @@ Apple GXF EL0-accessible register trap-path timing entropy. Exercises the Guarde
 
 **Category:** Microarch | **Platform:** macOS (ARM) | **Est. Rate:** 6.0
 
-24 MHz CNTVCT × 41 MHz Apple private timer beat-frequency entropy. Two independent clock domains create interference patterns with high entropy content.
+24 MHz CNTVCT x 41 MHz Apple private timer beat-frequency entropy. Two independent clock domains create interference patterns with high entropy content.
 
 ### `sitva`
 
 **Category:** Microarch | **Platform:** macOS (ARM) | **Est. Rate:** 2.0
 
-Scheduler-induced timing variance amplification via NEON FMLA companion thread. CV=189% × AES sample rate. Amplifies scheduler jitter through compute-intensive companion threads.
+Scheduler-induced timing variance amplification via NEON FMLA companion thread. CV=189% x AES sample rate. Amplifies scheduler jitter through compute-intensive companion threads.
 
 ### `memory_bus_crypto`
 
@@ -344,7 +365,7 @@ CommonCrypto AES-128-CBC warm/cold key schedule bimodal timing. CCCrypt calls sh
 
 ---
 
-## GPU Sources
+## GPU Sources (3)
 
 ### `gpu_divergence`
 
@@ -356,7 +377,7 @@ Metal compute shaders where threads within a SIMD group take different execution
 
 **Category:** GPU | **Platform:** macOS | **Est. Rate:** 2.5
 
-IOSurface CPU↔GPU memory domain crossing coherence jitter. Forces cache coherence protocol operations between CPU and GPU memory controllers.
+IOSurface CPU-GPU memory domain crossing coherence jitter. Forces cache coherence protocol operations between CPU and GPU memory controllers.
 
 ### `nl_inference_timing`
 
@@ -366,7 +387,7 @@ NaturalLanguage ANE inference timing via system-wide NLP cache state. Exercises 
 
 ---
 
-## Thermal Sources
+## Thermal Sources (3)
 
 ### `audio_pll_timing`
 
@@ -388,7 +409,7 @@ PCIe PHY PLL jitter from IOKit property reads across PCIe/Thunderbolt clock doma
 
 ---
 
-## Signal Sources
+## Signal Sources (3)
 
 ### `compression_timing`
 
@@ -410,13 +431,13 @@ Spotlight metadata query timing via mdls. Depends on index size, disk cache resi
 
 ---
 
-## Sensor Sources
+## Sensor Sources (4)
 
 ### `audio_noise`
 
 **Category:** Sensor | **Platform:** Requires microphone | **Est. Rate:** 6.0
 
-Microphone ADC Johnson-Nyquist noise — thermal agitation of electrons in the input impedance. At audio frequencies, entirely classical. V_noise = sqrt(4kTR × bandwidth).
+Microphone ADC Johnson-Nyquist noise — thermal agitation of electrons in the input impedance. At audio frequencies, entirely classical. V_noise = sqrt(4kTR x bandwidth).
 
 ### `camera_noise`
 
@@ -434,7 +455,7 @@ BLE ambient RF environment scanning. RSSI fluctuates with multipath fading, move
 
 **Category:** Sensor | **Platform:** macOS | **Est. Rate:** 2.5
 
-SMC thermistor ADC + fuel gauge I2C bus — CV=64–66%, 8× outliers. Targets two SMC keys (TC0P: CPU proximity NTC thermistor via analog ADC, B0RM: battery fuel gauge IC over I2C) that show 8× higher variance than all other SMC keys. On MacBook reads live Li-ion electrochemical noise; on Mac mini captures I2C bus timeout randomness.
+SMC thermistor ADC + fuel gauge I2C bus — CV=64-66%, 8x outliers. Targets two SMC keys (TC0P: CPU proximity NTC thermistor via analog ADC, B0RM: battery fuel gauge IC over I2C) that show 8x higher variance than all other SMC keys. On MacBook reads live Li-ion electrochemical noise; on Mac mini captures I2C bus timeout randomness.
 
 ---
 
@@ -442,18 +463,18 @@ SMC thermistor ADC + fuel gauge I2C bus — CV=64–66%, 8× outliers. Targets t
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **55/55** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
-| **Mac Mini/Studio/Pro** | 47–49/55 | Most sources — no built-in camera or mic on some models |
-| **Intel Mac** | ~18/55 | Timing, system, network, disk sources; ARM-specific sources unavailable |
-| **Linux** | ~12/55 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
+| **MacBook (M-series)** | **59/59** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
+| **Mac Mini/Studio/Pro** | 50-53/59 | Most sources — no built-in camera or mic on some models |
+| **Intel Mac** | ~18/59 | Timing, system, network, disk sources; ARM-specific sources unavailable |
+| **Linux** | ~14/59 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
 
 ## Entropy Quality Notes
 
 Individual source quality varies. Raw (unconditioned) source output often has bias and correlation:
 
-- **Shannon entropy** of raw sources ranges from 0.7–8 bits/byte depending on the source
+- **Shannon entropy** of raw sources ranges from 0.7-8 bits/byte depending on the source
 - **Raw NIST test pass rates** for individual sources range from 11/31 to 28/31
-- **After pool conditioning** (SHA-256 + mixing + os.urandom), output passes 28–31/31 NIST tests
+- **After pool conditioning** (SHA-256 + mixing + os.urandom), output passes 28-31/31 NIST tests
 
 The conditioning pipeline extracts genuine entropy from biased sources and produces cryptographic-quality output. This is consistent with NIST SP 800-90B: measure min-entropy of the raw source, then apply SHA-256 conditioning.
 

@@ -3,7 +3,7 @@
 //! All draw functions receive an `&App` (non-shared fields) and `&Snapshot`
 //! (shared state captured in a single mutex lock per frame).
 
-use super::app::{App, ChartMode, Sample, Snapshot, rolling_autocorr};
+use super::app::{App, ChartMode, Sample, SensorFlowState, Snapshot, rolling_autocorr};
 use openentropy_core::ConditioningMode;
 use ratatui::{prelude::*, widgets::*};
 
@@ -429,6 +429,22 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         return;
     }
 
+    // Source-specific visualizations
+    if mode == ChartMode::CameraShotNoise {
+        if name == "camera_noise" {
+            draw_camera_shot_noise(f, chart_area, &snap.camera_noise, name);
+        } else {
+            draw_placeholder(
+                f,
+                chart_area,
+                format!(" {name} — [g] Camera Shot Noise "),
+                "Select 'camera_noise' source to view this visualization",
+            );
+        }
+        draw_description(f, desc_area, mode);
+        return;
+    }
+
     if snap.active_history.is_empty() {
         draw_placeholder(
             f,
@@ -682,6 +698,190 @@ fn draw_random_walk(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
         ]));
 
     f.render_widget(chart, area);
+}
+
+fn spinner(frame: u64) -> char {
+    match frame % 4 {
+        0 => '|',
+        1 => '/',
+        2 => '-',
+        _ => '\\',
+    }
+}
+
+fn pulse_color(frame: u64) -> Color {
+    match frame % 4 {
+        0 => Color::Cyan,
+        1 => Color::LightCyan,
+        2 => Color::LightBlue,
+        _ => Color::Blue,
+    }
+}
+
+fn animated_cursor(line: &str, frame: u64, glyph: char) -> String {
+    let mut chars: Vec<char> = line.chars().collect();
+    if chars.is_empty() {
+        return String::new();
+    }
+    let idx = (frame as usize) % chars.len();
+    chars[idx] = glyph;
+    chars.into_iter().collect()
+}
+
+fn flow_status_line(state: &SensorFlowState) -> Line<'static> {
+    let live = state.repeat_streak == 0;
+    Line::from(vec![
+        Span::styled("stream ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            if live { "LIVE" } else { "REPEATING" },
+            Style::default()
+                .fg(if live { Color::Green } else { Color::Red })
+                .bold(),
+        ),
+        Span::raw("  "),
+        Span::styled("changed ", Style::default().fg(Color::DarkGray)),
+        Span::raw(format!("{}", state.changed_bits_last)),
+        Span::raw("  "),
+        Span::styled("repeat ", Style::default().fg(Color::DarkGray)),
+        Span::raw(format!("{}", state.repeat_streak)),
+        Span::raw("  "),
+        Span::styled("fp ", Style::default().fg(Color::DarkGray)),
+        Span::raw(format!(
+            "{:08x}",
+            (state.stream_fingerprint & 0xffff_ffff) as u32
+        )),
+    ])
+}
+
+fn draw_camera_shot_noise(f: &mut Frame, area: Rect, state: &SensorFlowState, name: &str) {
+    if state.recent_bytes.is_empty() {
+        draw_placeholder(
+            f,
+            area,
+            format!(" {name} — [g] Camera Shot Noise "),
+            "Waiting for stream data...",
+        );
+        return;
+    }
+
+    let mut nibbles = Vec::with_capacity(state.recent_bytes.len() * 2);
+    for &b in &state.recent_bytes {
+        nibbles.push((b >> 4) & 0x0f);
+        nibbles.push(b & 0x0f);
+    }
+
+    let cols = area.width.saturating_sub(6).clamp(20, 64) as usize;
+    let rows = area.height.saturating_sub(12).clamp(6, 18) as usize;
+
+    // Use a rolling window over recent nibble stream so the panel is always full
+    // and movement reflects actual incoming data phase.
+    let window_len = nibbles.len().max(1);
+    let phase = (state.frame as usize) % window_len;
+    let start = nibbles.len().saturating_sub(window_len);
+
+    let nibble_to_glyph = |n: u8| -> char {
+        match n {
+            0 => ' ',
+            1 => '.',
+            2..=3 => ':',
+            4..=5 => '-',
+            6..=7 => '=',
+            8..=9 => '+',
+            10..=11 => '*',
+            12..=13 => '#',
+            14 => '%',
+            _ => '@',
+        }
+    };
+
+    let mut bins = [0usize; 16];
+    for &n in &nibbles {
+        bins[n as usize] += 1;
+    }
+    let max_bin = bins.iter().copied().max().unwrap_or(1).max(1);
+    let hist_half = |lo: usize, hi: usize| -> String {
+        (lo..=hi)
+            .map(|i| {
+                let h = ((bins[i] as f64 / max_bin as f64) * 6.0).round() as usize;
+                match h {
+                    0..=1 => '.',
+                    2..=3 => ':',
+                    4..=5 => '*',
+                    _ => '#',
+                }
+            })
+            .collect()
+    };
+
+    let nib_tail: String = nibbles
+        .iter()
+        .rev()
+        .take(24)
+        .rev()
+        .map(|n| format!("{n:x}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("model ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!(
+                    "rolling sensor-grain map from camera LSB nibbles {}",
+                    spinner(state.frame)
+                ),
+                Style::default().fg(pulse_color(state.frame)),
+            ),
+        ]),
+        flow_status_line(state),
+        Line::from(vec![
+            Span::styled("map ", Style::default().fg(Color::DarkGray)),
+            Span::raw("pixel nibble 0..f -> "),
+            Span::styled(" .:-=+*#%@", Style::default().fg(Color::Yellow)),
+            Span::raw("  "),
+            Span::styled("phase ", Style::default().fg(Color::DarkGray)),
+            Span::raw(format!("{phase}")),
+        ]),
+        Line::from(vec![
+            Span::styled("hist 0-7 ", Style::default().fg(Color::DarkGray)),
+            Span::styled(hist_half(0, 7), Style::default().fg(Color::Yellow)),
+            Span::raw("  "),
+            Span::styled("8-f ", Style::default().fg(Color::DarkGray)),
+            Span::styled(hist_half(8, 15), Style::default().fg(Color::Yellow)),
+        ]),
+        Line::from(vec![
+            Span::styled("nibbles ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                animated_cursor(&nib_tail, state.frame, 'X'),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]),
+        Line::from(""),
+    ];
+
+    for r in 0..rows {
+        let mut row = String::with_capacity(cols);
+        for c in 0..cols {
+            let idx = (phase + (r * cols) + c) % window_len;
+            let n = nibbles.get(start + idx).copied().unwrap_or(0);
+            let mut ch = nibble_to_glyph(n);
+            if c == (state.frame as usize + r) % cols && ch == ' ' {
+                ch = '.';
+            }
+            row.push(ch);
+        }
+        lines.push(Line::from(row));
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {name}  [g] Camera Shot Noise "));
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 // ---------------------------------------------------------------------------

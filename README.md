@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*55 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*58 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -44,7 +44,7 @@ openentropy stream --format hex --bytes 64
 openentropy monitor
 ```
 
-> By default, only fast sources (<2s) are used. Add `--sources all` to include slower sources (DNS, TCP, GPU, BLE).
+> By default, only fast sources (<2s) are used. Pass `--sources all` to include slower sources (DNS, TCP, GPU, BLE).
 
 ### Python
 
@@ -91,8 +91,8 @@ Raw mode enables:
 Most random number generators are **pseudorandom** — deterministic algorithms seeded once. OpenEntropy continuously harvests **real physical noise** from your hardware:
 
 - **Thermal noise** — three independent oscillator beats (CPU crystal vs audio PLL, display PLL, PCIe PHY PLLs)
-- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, speculative execution variance, TLB shootdowns, DVFS races, ICC bus contention, prefetcher state, APRR JIT timing
-- **I/O and IPC** — disk and NVMe latency, USB enumeration, Mach port IPC, pipe buffer allocation, kqueue events, fsync journal
+- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, speculative execution variance, TLB shootdowns, DVFS races, ICC bus contention, prefetcher state, APRR JIT timing, ANE clock domain crossing
+- **I/O and IPC** — disk and NVMe latency (including IOKit sensor polling, raw device, and Linux passthrough), USB enumeration, Mach port IPC, pipe buffer allocation, kqueue events, fsync journal
 - **GPU and compute** — GPU warp divergence, IOSurface cross-domain timing, Neural Engine inference timing
 - **Scheduling and system** — nanosleep drift, GCD dispatch queues, thread lifecycle, P/E-core migration, timer coalescing, kernel counters, process table snapshots
 - **Network and sensors** — DNS resolution timing, TCP handshake variance, WiFi RSSI, BLE ambient RF, audio ADC noise
@@ -118,7 +118,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 55 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 58 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
@@ -133,7 +133,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-55 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+58 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
 ### Thermal (3)
 
@@ -145,7 +145,7 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `display_pll` | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
 | `pcie_pll` | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
-### Timing (4)
+### Timing (5)
 
 | Source | Description |
 |--------|-------------|
@@ -153,6 +153,7 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `dram_row_buffer` | DRAM row buffer hit/miss timing from random memory accesses |
 | `page_fault_timing` | Minor page fault timing via mmap/munmap cycles |
 | `mach_continuous_timing` | mach_continuous_time() kernel sleep-offset path |
+| `ane_timing` | Apple Neural Engine clock domain crossing jitter via IOKit |
 
 ### Scheduling (5)
 
@@ -164,14 +165,16 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `dispatch_queue_timing` | GCD libdispatch global queue timing — system-wide thread pool entropy |
 | `timer_coalescing` | OS timer coalescing wakeup jitter from system-wide timer queue state |
 
-### IO (4)
+### IO (6)
 
 | Source | Description |
 |--------|-------------|
 | `disk_io` | Block device I/O timing jitter |
-| `nvme_latency` | NVMe command submission/completion timing |
 | `fsync_journal` | APFS journal commit timing from full storage stack traversal |
 | `usb_enumeration` | IOKit USB device enumeration timing |
+| `nvme_iokit_sensors` | NVMe controller sensor polling via IOKit with clock domain crossing |
+| `nvme_raw_device` | Direct raw block device reads bypassing filesystem *(requires root)* |
+| `nvme_passthrough_linux` | Raw NVMe admin commands via ioctl passthrough *(Linux only)* |
 
 ### IPC (4)
 
@@ -296,15 +299,23 @@ openentropy monitor --telemetry
 
 | Key | Action |
 |-----|--------|
-| ↑/↓ | Navigate source list |
-| Space | Select source (starts collecting) |
-| r | Force refresh |
-| q | Quit |
+| ↑/↓ or j/k | Navigate source list |
+| Space/Enter | Select source (starts collecting) |
+| g | Cycle chart mode (time series, histogram, random walk, etc.) |
+| c | Cycle conditioning mode (SHA-256 → Von Neumann → Raw) |
+| n | Cycle sample size |
+| +/- | Adjust refresh rate |
+| Tab | Compare two sources (select one, move cursor to another, Tab) |
+| p | Pause/resume collection |
+| r | Start/stop recording |
+| s | Export snapshot |
+| q/Esc | Quit |
 
-### `bench --source` — Test a single source
+### `bench --sources` — Test specific sources
 
 ```bash
-openentropy bench --source mach_timing
+openentropy bench --sources mach_timing
+openentropy bench --sources mach_timing,clock_jitter
 ```
 
 ### `bench` pool quality section
@@ -401,7 +412,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (55) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (58) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -416,10 +427,10 @@ Sources (55) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **55/55** | Full suite — WiFi, BLE, camera, mic |
-| **Mac Mini / Studio / Pro** | 47–49 | No built-in camera, mic on some models |
-| **Intel Mac** | ~18 | Some silicon/microarch sources are ARM-specific |
-| **Linux** | 10–13 | Timing, network, disk, process sources |
+| **MacBook (M-series)** | **58/58** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 50–52 | No built-in camera, mic on some models |
+| **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
+| **Linux** | 12–15 | Timing, network, disk, process sources + NVMe passthrough |
 
 The library detects available hardware at runtime and only activates working sources.
 

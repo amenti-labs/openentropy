@@ -24,16 +24,21 @@ enum Commands {
     },
 
     /// Benchmark sources: Shannon entropy, min-entropy, grade, speed.
-    /// Use --source to probe a single source in detail.
+    /// Pass a single source name to probe it in detail.
     /// Includes a conditioned pool quality section by default.
     Bench {
-        /// Probe a single source by name (partial match). Shows detailed quality stats.
-        #[arg(long)]
-        source: Option<String>,
+        /// Source name(s) — positional, optional.
+        /// One name: detailed single-source probe. Multiple: filter bench run.
+        #[arg(value_name = "SOURCE")]
+        source: Vec<String>,
 
-        /// Comma-separated source name filter, or "all" for every source
-        #[arg(long)]
+        /// Comma-separated source name filter (hidden, use positional args instead)
+        #[arg(long, hide = true)]
         sources: Option<String>,
+
+        /// Include all sources (including slow ones)
+        #[arg(long)]
+        all: bool,
 
         /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
         #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
@@ -80,9 +85,17 @@ enum Commands {
     /// Min-entropy breakdown (MCV + diagnostics) is included by default.
     /// Use --report to also run the NIST-inspired test battery with pass/fail and p-values.
     Analyze {
-        /// Comma-separated source name filter, or "all"
-        #[arg(long)]
+        /// Source name(s) — positional, optional
+        #[arg(value_name = "SOURCE")]
+        source: Vec<String>,
+
+        /// Comma-separated source name filter (hidden, use positional args instead)
+        #[arg(long, hide = true)]
         sources: Option<String>,
+
+        /// Include all sources (including slow ones)
+        #[arg(long)]
+        all: bool,
 
         /// Number of samples to collect per source
         #[arg(long, default_value = "50000")]
@@ -120,9 +133,13 @@ enum Commands {
 
     /// Record entropy samples to disk for offline analysis
     Record {
-        /// Comma-separated source names to record from
-        #[arg(long)]
-        sources: String,
+        /// Source name(s) to record from (required: at least one)
+        #[arg(value_name = "SOURCE", required = true)]
+        source: Vec<String>,
+
+        /// Comma-separated source names (hidden, use positional args instead)
+        #[arg(long, hide = true)]
+        sources: Option<String>,
 
         /// Maximum recording duration (e.g. "5m", "30s", "1h")
         #[arg(long)]
@@ -159,12 +176,16 @@ enum Commands {
 
     /// Live interactive entropy dashboard (TUI)
     Monitor {
+        /// Source name to pre-select in TUI
+        #[arg(value_name = "SOURCE")]
+        source: Vec<String>,
+
         /// Refresh rate in seconds
         #[arg(long, default_value = "1.0")]
         refresh: f64,
 
-        /// Comma-separated source name filter
-        #[arg(long)]
+        /// Comma-separated source name filter (hidden, use positional args instead)
+        #[arg(long, hide = true)]
         sources: Option<String>,
 
         /// Print a telemetry_v1 snapshot before launching the dashboard.
@@ -175,6 +196,11 @@ enum Commands {
     /// Stream raw entropy bytes to stdout (pipe-friendly).
     /// Use --fifo to create a named pipe that acts as an entropy device.
     Stream {
+        /// Source name(s) — positional, optional.
+        /// One source: direct stream (no pool). Multiple: pooled.
+        #[arg(value_name = "SOURCE")]
+        source: Vec<String>,
+
         /// Output format (stdout mode only)
         #[arg(long, default_value = "raw", value_parser = ["raw", "hex", "base64"])]
         format: String,
@@ -183,8 +209,8 @@ enum Commands {
         #[arg(long, default_value = "0")]
         rate: usize,
 
-        /// Comma-separated source name filter
-        #[arg(long)]
+        /// Comma-separated source name filter (hidden, use positional args instead)
+        #[arg(long, hide = true)]
         sources: Option<String>,
 
         /// Total bytes (0 = infinite, stdout mode only)
@@ -194,6 +220,14 @@ enum Commands {
         /// Conditioning mode: raw (none), vonneumann (debias only), sha256 (full, default)
         #[arg(long, default_value = "sha256", value_parser = ["raw", "vonneumann", "sha256"])]
         conditioning: String,
+
+        /// Force pool mode even with a single source
+        #[arg(long)]
+        pool: bool,
+
+        /// Include all sources (including slow ones)
+        #[arg(long)]
+        all: bool,
 
         /// Create a FIFO (named pipe) at this path and feed entropy to readers
         #[arg(long)]
@@ -269,6 +303,7 @@ fn main() {
         Commands::Bench {
             source,
             sources,
+            all,
             conditioning,
             profile,
             samples_per_round,
@@ -279,22 +314,27 @@ fn main() {
             telemetry,
             output,
             no_pool,
-        } => commands::bench::run(commands::bench::BenchCommandConfig {
-            source_filter: sources.as_deref(),
-            conditioning: &conditioning,
-            source: source.as_deref(),
-            profile: &profile,
-            samples_per_round,
-            rounds,
-            warmup_rounds,
-            timeout_sec,
-            rank_by: &rank_by,
-            output_path: output.as_deref(),
-            include_pool_quality: !no_pool,
-            include_telemetry: telemetry,
-        }),
+        } => {
+            let positional = merge_positional_and_legacy(&source, sources.as_deref());
+            commands::bench::run(commands::bench::BenchArgs {
+                positional,
+                all,
+                conditioning,
+                profile,
+                samples_per_round,
+                rounds,
+                warmup_rounds,
+                timeout_sec,
+                rank_by,
+                output,
+                no_pool,
+                include_telemetry: telemetry,
+            })
+        }
         Commands::Analyze {
+            source,
             sources,
+            all,
             samples,
             output,
             cross_correlation,
@@ -303,18 +343,23 @@ fn main() {
             view,
             telemetry,
             report,
-        } => commands::analyze::run(commands::analyze::AnalyzeCommandConfig {
-            source_filter: sources.as_deref(),
-            output_path: output.as_deref(),
-            samples,
-            cross_correlation,
-            entropy: !no_entropy,
-            conditioning: &conditioning,
-            view: &view,
-            include_telemetry: telemetry,
-            report,
-        }),
+        } => {
+            let positional = merge_positional_and_legacy(&source, sources.as_deref());
+            commands::analyze::run(commands::analyze::AnalyzeArgs {
+                positional,
+                all,
+                samples,
+                output,
+                cross_correlation,
+                entropy: !no_entropy,
+                conditioning,
+                view,
+                include_telemetry: telemetry,
+                report,
+            })
+        }
         Commands::Record {
+            source,
             sources,
             duration,
             tags,
@@ -324,37 +369,62 @@ fn main() {
             analyze,
             conditioning,
             telemetry,
-        } => commands::record::run(
-            &sources,
-            duration.as_deref(),
-            &tags,
-            note.as_deref(),
-            output.as_deref(),
-            interval.as_deref(),
-            analyze,
-            &conditioning,
-            telemetry,
-        ),
+        } => {
+            let positional = merge_positional_and_legacy(&source, sources.as_deref());
+            if positional.is_empty() {
+                eprintln!("Error: at least one source name is required for recording.");
+                eprintln!("Run 'openentropy scan' to list available sources.");
+                std::process::exit(1);
+            }
+            commands::record::run(commands::record::RecordArgs {
+                positional,
+                duration,
+                tags,
+                note,
+                output,
+                interval,
+                analyze,
+                conditioning,
+                include_telemetry: telemetry,
+            })
+        }
         Commands::Monitor {
+            source,
             refresh,
             sources,
             telemetry,
-        } => commands::monitor::run(refresh, sources.as_deref(), telemetry),
+        } => {
+            let positional = merge_positional_and_legacy(&source, sources.as_deref());
+            let source_filter = if !positional.is_empty() {
+                Some(positional.join(","))
+            } else {
+                None
+            };
+            commands::monitor::run(refresh, source_filter.as_deref(), telemetry)
+        }
         Commands::Stream {
+            source,
             format,
             rate,
             sources,
             bytes,
             conditioning,
+            pool,
+            all,
             fifo,
-        } => commands::stream::run(
-            &format,
-            rate,
-            sources.as_deref(),
-            bytes,
-            &conditioning,
-            fifo.as_deref(),
-        ),
+        } => {
+            let positional = merge_positional_and_legacy(&source, sources.as_deref());
+            commands::stream::run(commands::stream::StreamArgs {
+                positional,
+                format,
+                rate,
+                bytes,
+                conditioning,
+                pool,
+                all,
+                fifo,
+            })
+        }
         Commands::Sessions {
             session,
             dir,
@@ -381,4 +451,20 @@ fn main() {
             commands::telemetry::run(window_sec, output.as_deref())
         }
     }
+}
+
+/// Merge positional source args with legacy `--sources` flag.
+/// Positional args take priority; the flag is a hidden backward-compat fallback.
+fn merge_positional_and_legacy(positional: &[String], legacy: Option<&str>) -> Vec<String> {
+    if !positional.is_empty() {
+        return positional.to_vec();
+    }
+    if let Some(filter) = legacy {
+        return filter
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+    vec![]
 }

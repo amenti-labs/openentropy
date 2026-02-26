@@ -4,25 +4,6 @@
 //! macOS/BSD kernel internals. These sources exploit entropy domains that no
 //! prior work has tapped.
 //!
-//! ## Architecture
-//!
-//! ```text
-//! frontier/
-//! ├── mod.rs                  ← you are here (re-exports + shared helpers)
-//! ├── amx_timing.rs           ← AMX coprocessor matrix multiply jitter
-//! ├── thread_lifecycle.rs     ← pthread create/join scheduling jitter
-//! ├── mach_ipc.rs             ← Mach port OOL message + VM remapping jitter
-//! ├── tlb_shootdown.rs        ← mprotect-induced TLB invalidation IPI jitter
-//! ├── pipe_buffer.rs          ← multi-pipe kernel zone allocator contention
-//! ├── kqueue_events.rs        ← kqueue event multiplexing (timers + files + sockets)
-//! ├── dvfs_race.rs            ← cross-core DVFS frequency race
-//! ├── keychain_timing.rs      ← Keychain/securityd round-trip timing
-//! ├── display_pll.rs          ← Display PLL phase noise from pixel clock domain crossing
-//! ├── pcie_pll.rs             ← PCIe PHY PLL jitter from IOKit clock domain crossings
-//! ├── pe_core_arithmetic.rs   ← P-core/E-core migration arithmetic timing (6.35 bits/byte)
-//! └── memory_bus_crypto.rs    ← AES-XTS context switch timing from cache flush cycles
-//! ```
-//!
 //! Each source measures a single, independent physical entropy domain.
 //! They work in isolation and can be benchmarked independently. Source
 //! combination is handled by the [`EntropyPool`](crate::pool::EntropyPool),
@@ -41,79 +22,85 @@ mod coreaudio_ffi;
 
 // Standalone sources — one independent entropy domain each.
 mod amx_timing;
+mod ane_timing;
+mod aprr_jit_timing;
 mod audio_pll_timing;
+mod cntfrq_cache_timing;
+mod commoncrypto_aes_timing;
+mod commpage_clock_timing;
+mod dispatch_queue_timing;
 mod display_pll;
+mod dual_clock_domain;
 mod dvfs_race;
 mod fsync_journal;
 mod getentropy_timing;
 mod gpu_divergence;
-mod iosurface_crossing;
-mod aprr_jit_timing;
-mod commpage_clock_timing;
-mod dispatch_queue_timing;
+mod gxf_register_timing;
 mod icc_atomic_contention;
-mod preemption_boundary;
-mod prefetcher_state;
-mod usb_enumeration;
-mod sev_event_timing;
+mod iosurface_crossing;
 mod keychain_timing;
-mod nl_inference_timing;
 mod kqueue_events;
 mod mach_continuous_timing;
 mod mach_ipc;
-mod timer_coalescing;
 mod memory_bus_crypto;
-mod nvme_latency;
-mod cntfrq_cache_timing;
-mod gxf_register_timing;
-mod commoncrypto_aes_timing;
-mod dual_clock_domain;
-mod sitva;
+mod nl_inference_timing;
+mod nvme_iokit_sensors;
+mod nvme_passthrough_linux;
+mod nvme_raw_device;
 mod pcie_pll;
 mod pe_core_arithmetic;
 mod pipe_buffer;
+mod preemption_boundary;
+mod prefetcher_state;
 mod proc_info_timing;
+mod sev_event_timing;
+mod sitva;
 mod smc_highvar_timing;
 mod thread_lifecycle;
+mod timer_coalescing;
 mod tlb_shootdown;
+mod usb_enumeration;
 
 // Re-export all source structs and their configs.
 pub use amx_timing::{AMXTimingConfig, AMXTimingSource};
+pub use ane_timing::AneTimingSource;
+pub use aprr_jit_timing::APRRJitTimingSource;
 pub use audio_pll_timing::AudioPLLTimingSource;
+pub use cntfrq_cache_timing::CntfrqCacheTimingSource;
+pub use commoncrypto_aes_timing::CommonCryptoAesTimingSource;
+pub use commpage_clock_timing::CommPageClockTimingSource;
+pub use dispatch_queue_timing::DispatchQueueTimingSource;
 pub use display_pll::DisplayPllSource;
+pub use dual_clock_domain::DualClockDomainSource;
 pub use dvfs_race::DVFSRaceSource;
 pub use fsync_journal::FsyncJournalSource;
 pub use getentropy_timing::GetentropyTimingSource;
 pub use gpu_divergence::GPUDivergenceSource;
+pub use gxf_register_timing::GxfRegisterTimingSource;
+pub use icc_atomic_contention::ICCAtomicContentionSource;
 pub use iosurface_crossing::IOSurfaceCrossingSource;
 pub use keychain_timing::{KeychainTimingConfig, KeychainTimingSource};
 pub use kqueue_events::{KqueueEventsConfig, KqueueEventsSource};
 pub use mach_continuous_timing::MachContinuousTimingSource;
 pub use mach_ipc::{MachIPCConfig, MachIPCSource};
-pub use aprr_jit_timing::APRRJitTimingSource;
-pub use commpage_clock_timing::CommPageClockTimingSource;
-pub use dispatch_queue_timing::DispatchQueueTimingSource;
-pub use icc_atomic_contention::ICCAtomicContentionSource;
-pub use preemption_boundary::PreemptionBoundarySource;
-pub use prefetcher_state::PrefetcherStateSource;
-pub use usb_enumeration::USBEnumerationSource;
-pub use sev_event_timing::SEVEventTimingSource;
-pub use nl_inference_timing::NLInferenceTimingSource;
-pub use timer_coalescing::TimerCoalescingSource;
 pub use memory_bus_crypto::MemoryBusCryptoSource;
-pub use nvme_latency::NVMeLatencySource;
-pub use cntfrq_cache_timing::CntfrqCacheTimingSource;
-pub use gxf_register_timing::GxfRegisterTimingSource;
-pub use commoncrypto_aes_timing::CommonCryptoAesTimingSource;
-pub use dual_clock_domain::DualClockDomainSource;
-pub use sitva::SITVASource;
+pub use nl_inference_timing::NLInferenceTimingSource;
+pub use nvme_iokit_sensors::NvmeIokitSensorsSource;
+pub use nvme_passthrough_linux::NvmePassthroughLinuxSource;
+pub use nvme_raw_device::NvmeRawDeviceSource;
 pub use pcie_pll::PciePllSource;
 pub use pe_core_arithmetic::PECoreArithmeticSource;
 pub use pipe_buffer::{PipeBufferConfig, PipeBufferSource};
+pub use preemption_boundary::PreemptionBoundarySource;
+pub use prefetcher_state::PrefetcherStateSource;
 pub use proc_info_timing::ProcInfoTimingSource;
+pub use sev_event_timing::SEVEventTimingSource;
+pub use sitva::SITVASource;
 pub use smc_highvar_timing::SMCHighVarTimingSource;
 pub use thread_lifecycle::ThreadLifecycleSource;
+pub use timer_coalescing::TimerCoalescingSource;
 pub use tlb_shootdown::{TLBShootdownConfig, TLBShootdownSource};
+pub use usb_enumeration::USBEnumerationSource;
 
 // ---------------------------------------------------------------------------
 // Shared extraction helpers (used by multiple frontier sources)
@@ -251,7 +238,6 @@ mod tests {
             Box::new(DVFSRaceSource),
             Box::new(KeychainTimingSource::default()),
             Box::new(AudioPLLTimingSource),
-            Box::new(NVMeLatencySource),
             Box::new(MachContinuousTimingSource),
             Box::new(GPUDivergenceSource),
             Box::new(IOSurfaceCrossingSource),
@@ -276,6 +262,12 @@ mod tests {
             Box::new(CntfrqCacheTimingSource),
             Box::new(GxfRegisterTimingSource),
             Box::new(CommonCryptoAesTimingSource),
+            Box::new(DualClockDomainSource),
+            Box::new(SITVASource),
+            Box::new(AneTimingSource),
+            Box::new(NvmeIokitSensorsSource),
+            Box::new(NvmeRawDeviceSource),
+            Box::new(NvmePassthroughLinuxSource),
         ];
         for src in &sources {
             assert!(!src.name().is_empty());
