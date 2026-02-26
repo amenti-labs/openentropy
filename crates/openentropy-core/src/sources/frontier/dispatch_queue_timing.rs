@@ -78,6 +78,7 @@ mod libdispatch {
     pub const DISPATCH_TIME_FOREVER: u64 = u64::MAX;
 
     // GCD priority levels.
+    #[allow(dead_code)]
     pub const DISPATCH_QUEUE_PRIORITY_HIGH: i64 = 2;
     pub const DISPATCH_QUEUE_PRIORITY_LOW: i64 = -2;
     pub const DISPATCH_QUEUE_PRIORITY_BACKGROUND: i64 = i16::MIN as i64;
@@ -114,7 +115,6 @@ mod libdispatch {
 mod imp {
     use super::libdispatch::*;
     use super::*;
-    use std::ffi::c_void;
 
     impl EntropySource for DispatchQueueTimingSource {
         fn info(&self) -> &SourceInfo {
@@ -141,23 +141,21 @@ mod imp {
 
             // Warm up: let the GCD thread pool reach its normal distribution.
             for i in 0..32_usize {
-                let queue = unsafe {
-                    dispatch_get_global_queue(priorities[i % priorities.len()], 0)
-                };
+                let queue =
+                    unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
                 // SAFETY: signal_semaphore is a valid function; sem is valid
                 // until dispatch_semaphore_wait returns.
                 let sem = unsafe { dispatch_semaphore_create(0) };
                 unsafe {
-                    dispatch_async_f(queue, sem as *mut c_void, signal_semaphore);
+                    dispatch_async_f(queue, sem, signal_semaphore);
                     dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
-                    dispatch_release(sem as *mut c_void);
+                    dispatch_release(sem);
                 }
             }
 
             for i in 0..raw_count {
-                let queue = unsafe {
-                    dispatch_get_global_queue(priorities[i % priorities.len()], 0)
-                };
+                let queue =
+                    unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
 
                 // SAFETY: sem is valid from create to release, and dispatch_async_f
                 // captures it only for the duration of the block execution. We wait
@@ -166,12 +164,12 @@ mod imp {
 
                 let t0 = mach_time();
                 unsafe {
-                    dispatch_async_f(queue, sem as *mut c_void, signal_semaphore);
+                    dispatch_async_f(queue, sem, signal_semaphore);
                     dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
                 }
                 let elapsed = mach_time().wrapping_sub(t0);
 
-                unsafe { dispatch_release(sem as *mut c_void) };
+                unsafe { dispatch_release(sem) };
 
                 // Sanity filter: reject suspend/resume artifacts (>10ms).
                 if elapsed < 240_000 {

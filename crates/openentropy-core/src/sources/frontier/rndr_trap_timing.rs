@@ -11,7 +11,7 @@
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use crate::sources::helpers::{extract_timing_entropy, mach_time};
+use crate::sources::helpers::extract_timing_entropy;
 
 static RNDR_TRAP_TIMING_INFO: SourceInfo = SourceInfo {
     name: "rndr_trap_timing",
@@ -26,7 +26,7 @@ static RNDR_TRAP_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 1200.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
 };
 
@@ -35,7 +35,7 @@ pub struct RNDRTrapTimingSource;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod imp {
-    use std::sync::atomic::{AtomicU64, AtomicI32, Ordering};
+    use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
     pub static T0: AtomicU64 = AtomicU64::new(0);
     pub static T1: AtomicU64 = AtomicU64::new(0);
     pub static FIRED: AtomicI32 = AtomicI32::new(0);
@@ -49,7 +49,9 @@ mod imp {
 
     /// # Safety: called from signal handler — only uses atomics
     pub unsafe extern "C" fn handler(
-        _: libc::c_int, _: *mut libc::siginfo_t, _: *mut libc::c_void
+        _: libc::c_int,
+        _: *mut libc::siginfo_t,
+        _: *mut libc::c_void,
     ) {
         T1.store(now(), Ordering::SeqCst);
         FIRED.store(1, Ordering::SeqCst);
@@ -62,12 +64,19 @@ mod imp {
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 impl EntropySource for RNDRTrapTimingSource {
-    fn info(&self) -> &SourceInfo { &RNDR_TRAP_TIMING_INFO }
+    fn info(&self) -> &SourceInfo {
+        &RNDR_TRAP_TIMING_INFO
+    }
 
-    fn is_available(&self) -> bool { true }
+    fn is_available(&self) -> bool {
+        // Disabled: the SIGILL handler uses SA_RESETHAND but doesn't advance PC
+        // past the trapped instruction. After the handler returns, the same
+        // instruction re-executes with the default handler, killing the process.
+        false
+    }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        use imp::{T0, T1, FIRED, now, handler};
+        use imp::{FIRED, T0, T1, handler, now};
         use std::sync::atomic::Ordering;
 
         // Use C setjmp/longjmp for safe recovery from SIGILL
@@ -77,7 +86,7 @@ impl EntropySource for RNDRTrapTimingSource {
         // Install SIGILL handler with SA_SIGINFO
         unsafe {
             let mut sa: libc::sigaction = std::mem::zeroed();
-            sa.sa_sigaction = handler as libc::sighandler_t;
+            sa.sa_sigaction = handler as *const () as libc::sighandler_t;
             sa.sa_flags = libc::SA_SIGINFO | libc::SA_RESETHAND;
             libc::sigaction(libc::SIGILL, &sa, std::ptr::null_mut());
         }
@@ -89,7 +98,7 @@ impl EntropySource for RNDRTrapTimingSource {
             // Re-arm the handler
             unsafe {
                 let mut sa: libc::sigaction = std::mem::zeroed();
-                sa.sa_sigaction = imp::handler as libc::sighandler_t;
+                sa.sa_sigaction = imp::handler as *const () as libc::sighandler_t;
                 sa.sa_flags = libc::SA_SIGINFO | libc::SA_RESETHAND;
                 libc::sigaction(libc::SIGILL, &sa, std::ptr::null_mut());
             }
@@ -109,14 +118,18 @@ impl EntropySource for RNDRTrapTimingSource {
             } else if ret < u64::MAX {
                 // RNDR succeeded (M2+ with accessible TRNG)
                 let elapsed = now().wrapping_sub(T0.load(Ordering::SeqCst));
-                if elapsed < 240_000 { timings.push(elapsed); }
+                if elapsed < 240_000 {
+                    timings.push(elapsed);
+                }
             }
         }
 
         // Restore default SIGILL handler
         unsafe { libc::signal(libc::SIGILL, libc::SIG_DFL) };
 
-        if timings.is_empty() { return Vec::new(); }
+        if timings.is_empty() {
+            return Vec::new();
+        }
         extract_timing_entropy(&timings, n_samples)
     }
 }
@@ -127,19 +140,27 @@ unsafe fn rndr_attempt() -> u64 {
     // RNDR: mrs x0, rndr = .inst 0xD53B2400
     // If trapped, CPU takes exception, handler fires, and we get
     // an undefined value here (SA_RESETHAND means the signal was reset)
-    std::arch::asm!(
-        ".inst 0xD53B2400",
-        out("x0") val,
-        options(nostack),
-    );
+    unsafe {
+        std::arch::asm!(
+            ".inst 0xD53B2400",
+            out("x0") val,
+            options(nostack),
+        );
+    }
     val
 }
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 impl EntropySource for RNDRTrapTimingSource {
-    fn info(&self) -> &SourceInfo { &RNDR_TRAP_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &RNDR_TRAP_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

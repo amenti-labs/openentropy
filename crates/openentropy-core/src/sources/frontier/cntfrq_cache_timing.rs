@@ -84,19 +84,20 @@ pub struct CntfrqCacheTimingSource;
 mod imp {
     use super::*;
     use crate::sources::helpers::{extract_timing_entropy, mach_time};
-    use libc::{mmap, munmap, MAP_ANONYMOUS, MAP_FAILED, MAP_JIT, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
-    use std::sync::atomic::{fence, Ordering};
+    use libc::{
+        MAP_ANONYMOUS, MAP_FAILED, MAP_JIT, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE, mmap,
+        munmap,
+    };
+    use std::sync::atomic::{Ordering, fence};
 
     // CNTFRQ_EL0 encoding: op0=3,op1=3,CRn=c14,CRm=c0,op2=0
     // 0xD5380000 | (3<<16)|(14<<12)|(0<<8)|(0<<5)|0 = 0xD53BE000
     // BUT: standard `mrs x0, cntfrq_el0` is optimised; we want S3_3_c14_c0_0
     // which is the unoptimised path. Same encoding, different JIT path.
+    // op1=3, CRn=c14, CRm=c0, op2=0, Rt=X0
     const CNTFRQ_MRS_X0: u32 = 0xD5380000u32
         | (3u32 << 16)   // op1=3
-        | (14u32 << 12)  // CRn=c14
-        | (0u32 << 8)    // CRm=c0
-        | (0u32 << 5)    // op2=0
-        | 0;             // Rt=X0
+        | (14u32 << 12); // CRn=c14 (CRm=c0, op2=0, Rt=X0 are zero)
     const RET: u32 = 0xD65F03C0u32;
 
     type FnPtr = unsafe extern "C" fn() -> u64;

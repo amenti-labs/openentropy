@@ -113,7 +113,7 @@ impl EntropySource for PECoreArithmeticSource {
             // Yield to the scheduler periodically.
             // This increases the probability of P→E or E→P migration events,
             // which are the dominant entropy source.
-            if timings.len() % 64 == 0 {
+            if timings.len().is_multiple_of(64) {
                 std::thread::yield_now();
             }
         }
@@ -150,6 +150,9 @@ mod tests {
         assert!(!data.is_empty());
         assert!(data.len() <= 64);
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 4, "expected high byte diversity from PE core timing");
+        assert!(
+            unique.len() > 4,
+            "expected high byte diversity from PE core timing"
+        );
     }
 }

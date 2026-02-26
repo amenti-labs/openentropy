@@ -1,4 +1,5 @@
 //! > **Quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
+//!
 //! Two-oscillator beat frequency — CPU counter vs audio PLL crystal.
 //!
 //! Measures the phase difference between two physically independent oscillators:

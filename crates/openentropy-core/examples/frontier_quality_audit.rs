@@ -7,8 +7,8 @@
 //!
 //! Run: cargo run --example frontier_quality_audit --release -p openentropy-core
 
-use openentropy_core::sources::frontier::*;
 use openentropy_core::EntropySource;
+use openentropy_core::sources::frontier::*;
 
 struct Stats {
     h_inf: f64,
@@ -21,44 +21,78 @@ struct Stats {
 fn compute_stats(data: &[u8]) -> Stats {
     let n = data.len();
     if n == 0 {
-        return Stats { h_inf: 0.0, h_shannon: 0.0, autocorr_1: 0.0, cv: 0.0, n: 0 };
+        return Stats {
+            h_inf: 0.0,
+            h_shannon: 0.0,
+            autocorr_1: 0.0,
+            cv: 0.0,
+            n: 0,
+        };
     }
 
     // Frequency counts
     let mut freq = [0u32; 256];
-    for &b in data { freq[b as usize] += 1; }
+    for &b in data {
+        freq[b as usize] += 1;
+    }
 
     // Max probability → H∞
     let max_p = *freq.iter().max().unwrap() as f64 / n as f64;
     let h_inf = -max_p.log2();
 
     // Shannon entropy
-    let h_shannon: f64 = freq.iter()
+    let h_shannon: f64 = freq
+        .iter()
         .filter(|&&c| c > 0)
-        .map(|&c| { let p = c as f64 / n as f64; -p * p.log2() })
+        .map(|&c| {
+            let p = c as f64 / n as f64;
+            -p * p.log2()
+        })
         .sum();
 
     // Autocorrelation lag-1 (on raw byte values)
     let mean: f64 = data.iter().map(|&b| b as f64).sum::<f64>() / n as f64;
     let var: f64 = data.iter().map(|&b| (b as f64 - mean).powi(2)).sum::<f64>() / n as f64;
     let autocorr_1 = if var > 0.0 && n > 1 {
-        let cov: f64 = data.windows(2)
+        let cov: f64 = data
+            .windows(2)
             .map(|w| (w[0] as f64 - mean) * (w[1] as f64 - mean))
-            .sum::<f64>() / (n - 1) as f64;
+            .sum::<f64>()
+            / (n - 1) as f64;
         cov / var
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     // CV
-    let cv = if mean > 0.0 { 100.0 * var.sqrt() / mean } else { 0.0 };
+    let cv = if mean > 0.0 {
+        100.0 * var.sqrt() / mean
+    } else {
+        0.0
+    };
 
-    Stats { h_inf, h_shannon, autocorr_1, cv, n }
+    Stats {
+        h_inf,
+        h_shannon,
+        autocorr_1,
+        cv,
+        n,
+    }
 }
 
 fn verdict(s: &Stats, available: bool) -> &'static str {
-    if !available { return "SKIP (unavailable)"; }
-    if s.n < 100 { return "SKIP (no data)"; }
-    if s.h_inf < 0.5 { return "CUT  ✗"; }
-    if s.h_inf < 1.5 || s.autocorr_1.abs() > 0.5 { return "DEMOTE ⚠"; }
+    if !available {
+        return "SKIP (unavailable)";
+    }
+    if s.n < 100 {
+        return "SKIP (no data)";
+    }
+    if s.h_inf < 0.5 {
+        return "CUT  ✗";
+    }
+    if s.h_inf < 1.5 || s.autocorr_1.abs() > 0.5 {
+        return "DEMOTE ⚠";
+    }
     "KEEP ✓"
 }
 
@@ -98,7 +132,7 @@ fn main() {
 
     // ── Reference (previously validated) ──────────────────────────────────
     println!("\n── Reference baselines ──");
-    audit(&DVFSRaceSource,            2_000);
-    audit(&APRRJitTimingSource,       2_000);
+    audit(&DVFSRaceSource, 2_000);
+    audit(&APRRJitTimingSource, 2_000);
     // DualClockDomain and SITVA require JIT/threads — skip from automated audit
 }

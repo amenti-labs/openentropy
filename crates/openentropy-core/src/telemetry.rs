@@ -660,7 +660,7 @@ fn collect_macos_network_metrics(out: &mut Vec<TelemetryMetric>) {
 
         // Most macOS netstat formats place these counters near the end.
         let ibytes = cols.iter().rev().nth(1).and_then(|s| s.parse::<f64>().ok());
-        let obytes = cols.iter().rev().next().and_then(|s| s.parse::<f64>().ok());
+        let obytes = cols.iter().next_back().and_then(|s| s.parse::<f64>().ok());
         let ipkts = cols.get(4).and_then(|s| s.parse::<f64>().ok());
         let opkts = cols.get(6).and_then(|s| s.parse::<f64>().ok());
         let ierrs = cols.get(5).and_then(|s| s.parse::<f64>().ok());

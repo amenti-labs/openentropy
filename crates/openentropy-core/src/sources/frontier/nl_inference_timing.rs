@@ -93,8 +93,8 @@ mod objc_nl {
     /// Returns an autoreleased NSString. Caller must retain if needed beyond
     /// the current autorelease pool scope.
     pub unsafe fn ns_string(s: &CStr) -> Id {
-        let class = unsafe { objc_getClass(b"NSString\0".as_ptr() as *const i8) };
-        let sel = unsafe { sel_registerName(b"stringWithUTF8String:\0".as_ptr() as *const i8) };
+        let class = unsafe { objc_getClass(c"NSString".as_ptr()) };
+        let sel = unsafe { sel_registerName(c"stringWithUTF8String:".as_ptr()) };
         unsafe { objc_msgSend(class, sel, s.as_ptr()) }
     }
 }
@@ -132,7 +132,7 @@ mod imp {
         fn is_available(&self) -> bool {
             // NLLanguageRecognizer is available on macOS 10.14+.
             // Check by looking up the class at runtime.
-            let class = unsafe { objc_getClass(b"NLLanguageRecognizer\0".as_ptr() as *const i8) };
+            let class = unsafe { objc_getClass(c"NLLanguageRecognizer".as_ptr()) };
             !class.is_null()
         }
 
@@ -143,16 +143,13 @@ mod imp {
             let mut timings = Vec::with_capacity(raw_count);
 
             // Create NLLanguageRecognizer instance.
-            let alloc_sel = unsafe { sel_registerName(b"alloc\0".as_ptr() as *const i8) };
-            let init_sel = unsafe { sel_registerName(b"init\0".as_ptr() as *const i8) };
-            let process_sel =
-                unsafe { sel_registerName(b"processString:\0".as_ptr() as *const i8) };
-            let dominant_sel =
-                unsafe { sel_registerName(b"dominantLanguage\0".as_ptr() as *const i8) };
-            let reset_sel = unsafe { sel_registerName(b"reset\0".as_ptr() as *const i8) };
+            let alloc_sel = unsafe { sel_registerName(c"alloc".as_ptr()) };
+            let init_sel = unsafe { sel_registerName(c"init".as_ptr()) };
+            let process_sel = unsafe { sel_registerName(c"processString:".as_ptr()) };
+            let dominant_sel = unsafe { sel_registerName(c"dominantLanguage".as_ptr()) };
+            let reset_sel = unsafe { sel_registerName(c"reset".as_ptr()) };
 
-            let class =
-                unsafe { objc_getClass(b"NLLanguageRecognizer\0".as_ptr() as *const i8) };
+            let class = unsafe { objc_getClass(c"NLLanguageRecognizer".as_ptr()) };
             if class.is_null() {
                 return Vec::new();
             }
@@ -253,6 +250,9 @@ mod tests {
         let data = src.collect(32);
         assert!(!data.is_empty());
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 4, "expected high variation from NL inference timing");
+        assert!(
+            unique.len() > 4,
+            "expected high variation from NL inference timing"
+        );
     }
 }

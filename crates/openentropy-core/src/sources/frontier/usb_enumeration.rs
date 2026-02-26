@@ -72,12 +72,17 @@ mod usb_imp {
 
     #[link(name = "IOKit", kind = "framework")]
     unsafe extern "C" {
+        #[allow(dead_code)]
         pub fn IOServiceGetMatchingService(main_port: MachPort, matching: *const c_void) -> u32;
         pub fn IOServiceMatching(name: *const i8) -> *mut c_void;
         pub fn IOServiceGetMatchingServices(
-            main_port: MachPort, matching: *const c_void, iter: *mut u32) -> IOReturn;
+            main_port: MachPort,
+            matching: *const c_void,
+            iter: *mut u32,
+        ) -> IOReturn;
         pub fn IOIteratorNext(iterator: u32) -> u32;
         pub fn IOObjectRelease(obj: u32) -> IOReturn;
+        #[allow(dead_code)]
         pub fn IOObjectConformsTo(obj: u32, name: *const i8) -> bool;
     }
 
@@ -102,16 +107,16 @@ impl EntropySource for USBEnumerationSource {
 
         // Warm up
         for _ in 0..4 {
-            let matching = unsafe { IOServiceMatching(b"IOUSBDevice\0".as_ptr() as *const i8) };
+            let matching = unsafe { IOServiceMatching(c"IOUSBDevice".as_ptr()) };
             if !matching.is_null() {
                 let mut iter: u32 = 0;
                 unsafe {
                     IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching, &mut iter);
                     if iter != 0 {
-                        let mut obj = unsafe { IOIteratorNext(iter) };
+                        let mut obj = IOIteratorNext(iter);
                         while obj != 0 {
                             IOObjectRelease(obj);
-                            obj = unsafe { IOIteratorNext(iter) };
+                            obj = IOIteratorNext(iter);
                         }
                         IOObjectRelease(iter);
                     }
@@ -120,8 +125,10 @@ impl EntropySource for USBEnumerationSource {
         }
 
         for _ in 0..raw {
-            let matching = unsafe { IOServiceMatching(b"IOUSBDevice\0".as_ptr() as *const i8) };
-            if matching.is_null() { continue; }
+            let matching = unsafe { IOServiceMatching(c"IOUSBDevice".as_ptr()) };
+            if matching.is_null() {
+                continue;
+            }
 
             let t0 = mach_time();
             let mut iter: u32 = 0;
@@ -154,9 +161,15 @@ impl EntropySource for USBEnumerationSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for USBEnumerationSource {
-    fn info(&self) -> &SourceInfo { &USB_ENUMERATION_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &USB_ENUMERATION_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

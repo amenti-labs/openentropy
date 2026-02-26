@@ -65,8 +65,7 @@ mod imp {
         /// # Safety
         /// `bytes` must point to at least `count` bytes of writable memory.
         /// `rnd` must be NULL (kSecRandomDefault) or a valid `SecRandomRef`.
-        fn SecRandomCopyBytes(rnd: *const std::ffi::c_void, count: usize, bytes: *mut u8)
-            -> i32;
+        fn SecRandomCopyBytes(rnd: *const std::ffi::c_void, count: usize, bytes: *mut u8) -> i32;
     }
 
     impl EntropySource for SEPTimingSource {

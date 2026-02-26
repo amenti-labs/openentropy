@@ -1,4 +1,5 @@
 //! > **Extractor fix needed + quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
+//!
 //! getentropy() system call timing — SEP TRNG reseed detection.
 //!
 //! macOS's `getentropy()` reads from the kernel's entropy pool, which is seeded
@@ -125,9 +126,15 @@ impl EntropySource for GetentropyTimingSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for GetentropyTimingSource {
-    fn info(&self) -> &SourceInfo { &GETENTROPY_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &GETENTROPY_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

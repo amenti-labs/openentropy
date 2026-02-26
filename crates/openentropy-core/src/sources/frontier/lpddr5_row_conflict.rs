@@ -1,4 +1,5 @@
 //! > **Quantum proximity:** see `research/findings/apple_silicon_2026/QUANTUM_PROXIMITY.md`
+//!
 //! LPDDR5 unified memory row-conflict timing entropy.
 //!
 //! Apple Silicon uses LPDDR5 in a unified memory architecture (UMA) shared
@@ -117,11 +118,13 @@ mod imp {
             // LCG for pseudo-random access pattern across DRAM rows.
             // A purely sequential or power-of-two stride would alias to the
             // same DRAM rows repeatedly. The LCG ensures we hit different banks.
-            let mut lcg: u64 = 0xC0FFEE_DEAD_BEEF_42;
+            let mut lcg: u64 = 0xC0FF_EEDE_ADBE_EF42;
 
             unsafe {
                 for i in 0..raw_count {
-                    lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    lcg = lcg
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
 
                     // Target address: stride-aligned within buffer.
                     // Alternating the stride target every access maximises
