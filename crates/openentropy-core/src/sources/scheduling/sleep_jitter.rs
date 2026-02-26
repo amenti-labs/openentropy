@@ -88,7 +88,10 @@ mod tests {
 
     #[test]
     fn source_info_category() {
-        assert_eq!(SleepJitterSource.info().category, SourceCategory::Scheduling);
+        assert_eq!(
+            SleepJitterSource.info().category,
+            SourceCategory::Scheduling
+        );
         assert!(!SleepJitterSource.info().composite);
     }
 }

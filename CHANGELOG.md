@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.8.0 — 2026-02-25
+
+### Added
+
+- **TUI category grouping** — Sources are now organized into 11 collapsible category groups (timing, scheduling, system, network, io, sensor, microarch, ipc, thermal, gpu, signal) with `{`/`}` jump navigation, `Space`/`Enter` to collapse/expand, and `C` to fold all. Category headers show source count and active indicator.
+- **14 new entropy sources** across new hardware domains: `speculative_execution`, `sleep_jitter`, `clock_jitter`, `mach_timing`, `page_fault_timing`, `dram_row_buffer` (timing); `spotlight_timing` (signal); plus sources in network, scheduling, and microarch categories.
+- 🍎 emoji indicator for macOS-only sources in the TUI source list.
+
+### Changed
+
+- **Source directory reorganization** — All 59 sources moved from flat `sources/` and `sources/frontier/` into 11 category-based subdirectories (`gpu/`, `io/`, `ipc/`, `microarch/`, `network/`, `scheduling/`, `sensor/`, `signal/`, `system/`, `thermal/`, `timing/`), each with its own `mod.rs`.
+- **Pool batched parallel collection** — Sources are now collected in parallel batches for improved throughput.
+- Source count increased from 45 to 59.
+
+### Fixed
+
+- **Comprehensive source audit** — Fixed extraction pipelines in 10+ sources that were using incorrect entropy extraction methods:
+  - `dual_clock_domain`: Switched from `mach_time()` to `read_cntvct()` (24 MHz crystal counter) and from `extract_timing_entropy` to direct `xor_fold_u64` on beat values (phase data, not timing deltas). Grade improved from D to A.
+  - `mach_timing`: Replaced raw `delta as u8` truncation with proper `extract_timing_entropy` pipeline.
+  - `preemption_boundary`: Switched from `extract_timing_entropy` to `xor_fold_u64` on preemption event pairs (sparse events, not continuous timing stream).
+  - `amx_timing`: Randomized matrix sizes and transpose via LCG to prevent branch predictor settling. Removed unused `von_neumann_debias` config field.
+  - `speculative_execution`: Randomized batch sizes via LCG with independent branch advancement.
+  - `clock_jitter`: Rewrote fundamentally flawed extraction (was XOR'ing timing delta with UNIX epoch nanoseconds and truncating to u8).
+  - `dns_timing` / `tcp_connect`: Replaced weak manual LSB extraction with `extract_timing_entropy`. Fixed broken DNS transaction ID generation.
+  - `smc_highvar_timing` / `getentropy_timing`: Fixed unconditional import of `extract_timing_entropy_debiased` (only available on aarch64) — now uses `extract_timing_entropy` for cross-platform compatibility.
+- **Invalid entropy rate estimates** — `ane_timing` (1800.0 → 3.0) and `nvme_iokit_sensors` (1500.0 → 3.0) had nonsensical `entropy_rate_estimate` values far exceeding the [0.0, 8.0] valid range.
+- **Slow source timeouts** — `nl_inference_timing` and `spotlight_timing` now reliably complete within the pool's per-source time budget (reduced deadlines, warmup iterations, and subprocess caps).
+- **ARM64 objc_msgSend ABI** — Fixed clashing extern declaration warning between `gpu_divergence` (variadic) and `nl_inference_timing` (raw symbol + transmute cast).
+- **cargo fmt** — All source files now pass `cargo fmt --check`.
+
 ## 0.7.0 — 2026-02-23
 
 ### Changed

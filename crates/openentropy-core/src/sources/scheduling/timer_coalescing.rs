@@ -155,6 +155,9 @@ mod tests {
         let data = src.collect(32);
         assert!(!data.is_empty(), "expected non-empty output");
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 2, "expected byte variation from coalescing jitter");
+        assert!(
+            unique.len() > 2,
+            "expected byte variation from coalescing jitter"
+        );
     }
 }

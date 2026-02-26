@@ -90,10 +90,10 @@ pub struct GxfRegisterTimingSource;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod imp {
     use super::*;
-    use crate::sources::helpers::mach_time;
     use crate::sources::helpers::extract_timing_entropy_debiased;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use crate::sources::helpers::mach_time;
     use std::sync::Once;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     // S3_6_c15_c1_5: op0=3, op1=6, CRn=c15, CRm=c1, op2=5
     // 0xD5380000 | (6<<16)|(15<<12)|(1<<8)|(5<<5)|0
@@ -101,7 +101,7 @@ mod imp {
         | (6u32 << 16)   // op1=6
         | (15u32 << 12)  // CRn=c15
         | (1u32 << 8)    // CRm=c1
-        | (5u32 << 5);   // op2=5, Rt=X0
+        | (5u32 << 5); // op2=5, Rt=X0
     const RET: u32 = 0xD65F03C0u32;
 
     type FnPtr = unsafe extern "C" fn() -> u64;

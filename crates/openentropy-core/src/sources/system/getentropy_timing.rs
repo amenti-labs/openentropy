@@ -61,9 +61,9 @@
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 #[cfg(target_os = "macos")]
-use crate::sources::helpers::mach_time;
-#[cfg(target_os = "macos")]
 use crate::sources::helpers::extract_timing_entropy;
+#[cfg(target_os = "macos")]
+use crate::sources::helpers::mach_time;
 
 static GETENTROPY_TIMING_INFO: SourceInfo = SourceInfo {
     name: "getentropy_timing",
@@ -125,9 +125,15 @@ impl EntropySource for GetentropyTimingSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for GetentropyTimingSource {
-    fn info(&self) -> &SourceInfo { &GETENTROPY_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &GETENTROPY_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

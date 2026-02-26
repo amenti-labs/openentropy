@@ -40,7 +40,6 @@ pub struct AMXTimingConfig {
     ///
     /// **Default:** `true`
     pub interleave_memory_ops: bool,
-
 }
 
 impl Default for AMXTimingConfig {
@@ -273,5 +272,4 @@ mod tests {
             assert!(data.len() <= 128);
         }
     }
-
 }

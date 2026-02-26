@@ -101,14 +101,14 @@ mod imp {
         | (1u32 << 16)   // op1=1
         | (15u32 << 12)  // CRn=c15
         | (0u32 << 8)    // CRm=c0
-        | (6u32 << 5);   // op2=6, Rt=X0
+        | (6u32 << 5); // op2=6, Rt=X0
 
     // S3_4_c15_c10_5: second 41 MHz domain — for triple-beat verification
     const APPLE_41MHZ_B_MRS_X0: u32 = 0xD5380000u32
         | (4u32 << 16)   // op1=4
         | (15u32 << 12)  // CRn=c15
         | (10u32 << 8)   // CRm=c10
-        | (5u32 << 5);   // op2=5, Rt=X0
+        | (5u32 << 5); // op2=5, Rt=X0
 
     const RET: u32 = 0xD65F03C0u32;
 
@@ -124,7 +124,9 @@ mod imp {
 
     impl Drop for JitTimer {
         fn drop(&mut self) {
-            unsafe { libc::munmap(self.page, 4096); }
+            unsafe {
+                libc::munmap(self.page, 4096);
+            }
         }
     }
 
@@ -169,9 +171,7 @@ mod imp {
         fn is_available(&self) -> bool {
             // Verified accessible on M4 Mac mini; may vary by chip/OS version.
             // MAP_JIT availability is the primary constraint.
-            unsafe {
-                build_timer(APPLE_41MHZ_MRS_X0).is_some()
-            }
+            unsafe { build_timer(APPLE_41MHZ_MRS_X0).is_some() }
         }
 
         fn collect(&self, n_samples: usize) -> Vec<u8> {
@@ -265,6 +265,10 @@ mod tests {
         assert!(!data.is_empty());
         // With CV=704%, we expect many distinct values
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 8, "expected high-entropy beat distribution (got {} unique bytes)", unique.len());
+        assert!(
+            unique.len() > 8,
+            "expected high-entropy beat distribution (got {} unique bytes)",
+            unique.len()
+        );
     }
 }

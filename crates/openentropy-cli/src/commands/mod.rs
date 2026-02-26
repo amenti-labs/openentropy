@@ -288,7 +288,14 @@ mod tests {
         let sources = openentropy_core::detect_available_sources();
         for s in &sources {
             let name = s.name();
-            if ["audio_noise", "camera_noise", "bluetooth_noise", "wifi_rssi"].contains(&name) {
+            if [
+                "audio_noise",
+                "camera_noise",
+                "bluetooth_noise",
+                "wifi_rssi",
+            ]
+            .contains(&name)
+            {
                 assert!(!s.info().is_fast, "{name} should not be fast");
             }
         }

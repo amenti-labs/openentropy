@@ -78,9 +78,9 @@
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
+use crate::sources::helpers::extract_timing_entropy_debiased;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::sources::helpers::mach_time;
-use crate::sources::helpers::extract_timing_entropy_debiased;
 
 static APRR_JIT_TIMING_INFO: SourceInfo = SourceInfo {
     name: "aprr_jit_timing",
@@ -177,15 +177,20 @@ impl EntropySource for APRRJitTimingSource {
             let t_exec = mach_time().wrapping_sub(t1);
 
             // Both under 1ms (reject suspend/resume)
-            if t_write < 24_000 { timings.push(t_write); }
-            if t_exec  < 24_000 { timings.push(t_exec);  }
+            if t_write < 24_000 {
+                timings.push(t_write);
+            }
+            if t_exec < 24_000 {
+                timings.push(t_exec);
+            }
         }
 
         unsafe { libc::munmap(jit_page, 4096) };
 
         // Trimodal 0/42/83 — full range captures mode identity
         // XOR the write and exec timings to mix both APRR paths
-        let mixed: Vec<u64> = timings.chunks(2)
+        let mixed: Vec<u64> = timings
+            .chunks(2)
             .filter(|c| c.len() == 2)
             .map(|c| c[0].wrapping_add(c[1].wrapping_shl(3)))
             .collect();
@@ -196,9 +201,15 @@ impl EntropySource for APRRJitTimingSource {
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 impl EntropySource for APRRJitTimingSource {
-    fn info(&self) -> &SourceInfo { &APRR_JIT_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &APRR_JIT_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

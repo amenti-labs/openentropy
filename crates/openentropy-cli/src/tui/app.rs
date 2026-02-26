@@ -470,8 +470,7 @@ impl App {
         }
 
         let collapsed: HashSet<String> = category_order.iter().cloned().collect();
-        let virtual_rows =
-            build_virtual_rows(&category_order, &category_sources, &collapsed);
+        let virtual_rows = build_virtual_rows(&category_order, &category_sources, &collapsed);
 
         let mut app = Self {
             pool: Arc::new(pool),
@@ -609,34 +608,32 @@ impl App {
                     self.table_state.select(Some(self.cursor));
                 }
             }
-            KeyCode::Char(' ') | KeyCode::Enter => {
-                match &self.virtual_rows[self.cursor] {
-                    VirtualRow::Header { cat_key } => {
-                        let cat_key = cat_key.clone();
-                        if self.collapsed.contains(&cat_key) {
-                            self.collapsed.remove(&cat_key);
-                        } else {
-                            self.collapsed.insert(cat_key);
-                        }
-                        self.rebuild_virtual_rows();
+            KeyCode::Char(' ') | KeyCode::Enter => match &self.virtual_rows[self.cursor] {
+                VirtualRow::Header { cat_key } => {
+                    let cat_key = cat_key.clone();
+                    if self.collapsed.contains(&cat_key) {
+                        self.collapsed.remove(&cat_key);
+                    } else {
+                        self.collapsed.insert(cat_key);
                     }
-                    VirtualRow::Source { source_idx } => {
-                        let source_idx = *source_idx;
-                        if self.active == Some(source_idx) {
-                            self.active = None;
-                        } else {
-                            let name = &self.source_names[source_idx];
-                            let mut s = self.shared.lock().unwrap();
-                            s.source_history.remove(name);
-                            s.byte_freq = [0u64; 256];
-                            drop(s);
-                            self.active = Some(source_idx);
-                            self.chart_mode = preferred_chart_mode_for_source(name);
-                            self.kick_collect();
-                        }
+                    self.rebuild_virtual_rows();
+                }
+                VirtualRow::Source { source_idx } => {
+                    let source_idx = *source_idx;
+                    if self.active == Some(source_idx) {
+                        self.active = None;
+                    } else {
+                        let name = &self.source_names[source_idx];
+                        let mut s = self.shared.lock().unwrap();
+                        s.source_history.remove(name);
+                        s.byte_freq = [0u64; 256];
+                        drop(s);
+                        self.active = Some(source_idx);
+                        self.chart_mode = preferred_chart_mode_for_source(name);
+                        self.kick_collect();
                     }
                 }
-            }
+            },
             KeyCode::Char('{') => {
                 // Jump to previous category header
                 for i in (0..self.cursor).rev() {
@@ -935,10 +932,12 @@ impl App {
     }
     /// Returns the source index if the cursor is on a source row, None if on a header.
     pub fn cursor_source_idx(&self) -> Option<usize> {
-        self.virtual_rows.get(self.cursor).and_then(|row| match row {
-            VirtualRow::Source { source_idx } => Some(*source_idx),
-            VirtualRow::Header { .. } => None,
-        })
+        self.virtual_rows
+            .get(self.cursor)
+            .and_then(|row| match row {
+                VirtualRow::Source { source_idx } => Some(*source_idx),
+                VirtualRow::Header { .. } => None,
+            })
     }
     pub fn virtual_rows(&self) -> &[VirtualRow] {
         &self.virtual_rows

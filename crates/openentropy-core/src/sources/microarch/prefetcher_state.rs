@@ -77,7 +77,9 @@ impl EntropySource for PrefetcherStateSource {
         let buf_size = 8 * 1024 * 1024 + 4096;
         let layout = std::alloc::Layout::from_size_align(buf_size, 4096).unwrap();
         let buf = unsafe { std::alloc::alloc(layout) };
-        if buf.is_null() { return Vec::new(); }
+        if buf.is_null() {
+            return Vec::new();
+        }
 
         // Touch all pages
         for i in (0..buf_size).step_by(4096) {
@@ -127,7 +129,8 @@ impl EntropySource for PrefetcherStateSource {
         unsafe { std::alloc::dealloc(buf, layout) };
 
         // XOR learned and random timings to capture prefetcher state
-        let combined: Vec<u64> = timings.chunks(2)
+        let combined: Vec<u64> = timings
+            .chunks(2)
             .map(|c| c[0] ^ c[1].wrapping_shl(5))
             .collect();
 
@@ -137,9 +140,15 @@ impl EntropySource for PrefetcherStateSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for PrefetcherStateSource {
-    fn info(&self) -> &SourceInfo { &PREFETCHER_STATE_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &PREFETCHER_STATE_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

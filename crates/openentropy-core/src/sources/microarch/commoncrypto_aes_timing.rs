@@ -83,8 +83,8 @@ pub struct CommonCryptoAesTimingSource;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod imp {
     use super::*;
-    use crate::sources::helpers::mach_time;
     use crate::sources::helpers::extract_timing_entropy_debiased;
+    use crate::sources::helpers::mach_time;
 
     // CCCrypt constants
     const CC_ENCRYPT: u32 = 0;
@@ -112,7 +112,11 @@ mod imp {
     }
 
     /// Time one CCCrypt(AES-128-CBC) call in 24 MHz ticks.
-    unsafe fn time_cccrypt(key: &[u8; AES_KEY_SIZE], iv: &[u8; AES_BLOCK_SIZE], plaintext: &[u8; AES_BLOCK_SIZE]) -> Option<u64> {
+    unsafe fn time_cccrypt(
+        key: &[u8; AES_KEY_SIZE],
+        iv: &[u8; AES_BLOCK_SIZE],
+        plaintext: &[u8; AES_BLOCK_SIZE],
+    ) -> Option<u64> {
         let mut ciphertext = [0u8; AES_BLOCK_SIZE];
         let mut out_moved: usize = 0;
 
@@ -158,24 +162,26 @@ mod imp {
 
             // Base key material (AES-128)
             let base_key: [u8; AES_KEY_SIZE] = [
-                0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
-                0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c,
+                0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+                0x4f, 0x3c,
             ];
             // Base IV
             let base_iv: [u8; AES_BLOCK_SIZE] = [
-                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x0f,
             ];
             // Fixed plaintext
             let plaintext: [u8; AES_BLOCK_SIZE] = [
-                0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
-                0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a,
+                0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93,
+                0x17, 0x2a,
             ];
 
             // Warmup: 32 calls to stabilise the framework dispatch layer
             for i in 0..32_usize {
                 let mut key = base_key;
-                for j in 0..16 { key[j] = base_key[j].wrapping_add(i as u8); }
+                for j in 0..16 {
+                    key[j] = base_key[j].wrapping_add(i as u8);
+                }
                 let _ = unsafe { time_cccrypt(&key, &base_iv, &plaintext) };
             }
 
@@ -244,6 +250,9 @@ mod tests {
         let data = src.collect(32);
         assert!(!data.is_empty());
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 2, "expected bimodal variation from CCCrypt warm/cold paths");
+        assert!(
+            unique.len() > 2,
+            "expected bimodal variation from CCCrypt warm/cold paths"
+        );
     }
 }

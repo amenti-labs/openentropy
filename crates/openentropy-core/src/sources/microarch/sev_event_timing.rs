@@ -85,18 +85,22 @@ impl EntropySource for SEVEventTimingSource {
         // Warm up
         for _ in 0..16 {
             unsafe {
-                core::arch::asm!("sev",  options(nostack, nomem));
+                core::arch::asm!("sev", options(nostack, nomem));
                 core::arch::asm!("sevl", options(nostack, nomem));
             }
         }
 
         for _ in 0..raw {
             let t0 = mach_time();
-            unsafe { core::arch::asm!("sev", options(nostack, nomem)); }
+            unsafe {
+                core::arch::asm!("sev", options(nostack, nomem));
+            }
             let sev_t = mach_time().wrapping_sub(t0);
 
             let t1 = mach_time();
-            unsafe { core::arch::asm!("sevl", options(nostack, nomem)); }
+            unsafe {
+                core::arch::asm!("sevl", options(nostack, nomem));
+            }
             let sevl_t = mach_time().wrapping_sub(t1);
 
             // Reject suspend/resume spikes (>2ms).
@@ -126,8 +130,12 @@ impl EntropySource for SEVEventTimingSource {
     fn info(&self) -> &SourceInfo {
         &SEV_EVENT_TIMING_INFO
     }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _n_samples: usize) -> Vec<u8> { Vec::new() }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _n_samples: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

@@ -138,9 +138,8 @@ impl EntropySource for ICCAtomicContentionSource {
         // by XOR-interleaving. The combination captures the full
         // arbitration state from both sides of each conflict.
         let contender_timings = thread_timings.lock().unwrap();
-        let mut combined: Vec<u64> = Vec::with_capacity(
-            main_timings.len() + contender_timings.len(),
-        );
+        let mut combined: Vec<u64> =
+            Vec::with_capacity(main_timings.len() + contender_timings.len());
         let min_len = main_timings.len().min(contender_timings.len());
         for i in 0..min_len {
             // XOR pair captures both winner and loser of each arbitration.

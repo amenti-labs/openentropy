@@ -75,7 +75,10 @@ mod usb_imp {
     unsafe extern "C" {
         pub fn IOServiceMatching(name: *const i8) -> *mut c_void;
         pub fn IOServiceGetMatchingServices(
-            main_port: MachPort, matching: *const c_void, iter: *mut u32) -> IOReturn;
+            main_port: MachPort,
+            matching: *const c_void,
+            iter: *mut u32,
+        ) -> IOReturn;
         pub fn IOIteratorNext(iterator: u32) -> u32;
         pub fn IOObjectRelease(obj: u32) -> IOReturn;
     }
@@ -120,7 +123,9 @@ impl EntropySource for USBEnumerationSource {
 
         for _ in 0..raw {
             let matching = unsafe { IOServiceMatching(c"IOUSBDevice".as_ptr()) };
-            if matching.is_null() { continue; }
+            if matching.is_null() {
+                continue;
+            }
 
             let t0 = mach_time();
             let mut iter: u32 = 0;
@@ -153,9 +158,15 @@ impl EntropySource for USBEnumerationSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for USBEnumerationSource {
-    fn info(&self) -> &SourceInfo { &USB_ENUMERATION_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &USB_ENUMERATION_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

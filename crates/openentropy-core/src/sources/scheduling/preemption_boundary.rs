@@ -173,8 +173,12 @@ impl EntropySource for PreemptionBoundarySource {
     fn info(&self) -> &SourceInfo {
         &PREEMPTION_BOUNDARY_INFO
     }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _n_samples: usize) -> Vec<u8> { Vec::new() }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _n_samples: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

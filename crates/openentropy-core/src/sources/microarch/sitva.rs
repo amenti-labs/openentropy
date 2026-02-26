@@ -80,10 +80,10 @@ pub struct SITVASource;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod imp {
     use super::*;
-    use crate::sources::helpers::mach_time;
     use crate::sources::helpers::extract_timing_entropy_debiased;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use crate::sources::helpers::mach_time;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     // Companion thread: runs NEON FMLA in 32-instruction bursts, yields between.
     // The yield prevents starvation while keeping scheduler pressure high.
@@ -210,9 +210,15 @@ mod imp {
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 impl EntropySource for SITVASource {
-    fn info(&self) -> &SourceInfo { &SITVA_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &SITVA_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
@@ -268,7 +274,8 @@ mod tests {
         assert!(
             unique.len() > 16,
             "expected high-entropy SITVA output (got {} unique bytes, baseline CV={:.1}%)",
-            unique.len(), baseline_cv
+            unique.len(),
+            baseline_cv
         );
     }
 }

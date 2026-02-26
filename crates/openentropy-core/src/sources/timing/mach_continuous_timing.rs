@@ -112,9 +112,15 @@ impl EntropySource for MachContinuousTimingSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for MachContinuousTimingSource {
-    fn info(&self) -> &SourceInfo { &MACH_CONTINUOUS_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &MACH_CONTINUOUS_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

@@ -188,13 +188,10 @@ mod imp {
             // Create NLLanguageRecognizer instance.
             let alloc_sel = unsafe { sel_registerName(c"alloc".as_ptr()) };
             let init_sel = unsafe { sel_registerName(c"init".as_ptr()) };
-            let process_sel =
-                unsafe { sel_registerName(c"processString:".as_ptr()) };
-            let dominant_sel =
-                unsafe { sel_registerName(c"dominantLanguage".as_ptr()) };
+            let process_sel = unsafe { sel_registerName(c"processString:".as_ptr()) };
+            let dominant_sel = unsafe { sel_registerName(c"dominantLanguage".as_ptr()) };
             let reset_sel = unsafe { sel_registerName(c"reset".as_ptr()) };
-            let class =
-                unsafe { objc_getClass(c"NLLanguageRecognizer".as_ptr()) };
+            let class = unsafe { objc_getClass(c"NLLanguageRecognizer".as_ptr()) };
             if class.is_null() {
                 return Vec::new();
             }
@@ -310,6 +307,9 @@ mod tests {
         let data = src.collect(32);
         assert!(!data.is_empty());
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 4, "expected high variation from NL inference timing");
+        assert!(
+            unique.len() > 4,
+            "expected high variation from NL inference timing"
+        );
     }
 }

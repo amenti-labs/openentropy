@@ -141,9 +141,8 @@ mod imp {
 
             // Warm up: let the GCD thread pool reach its normal distribution.
             for i in 0..32_usize {
-                let queue = unsafe {
-                    dispatch_get_global_queue(priorities[i % priorities.len()], 0)
-                };
+                let queue =
+                    unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
                 // SAFETY: signal_semaphore is a valid function; sem is valid
                 // until dispatch_semaphore_wait returns.
                 let sem = unsafe { dispatch_semaphore_create(0) };
@@ -155,9 +154,8 @@ mod imp {
             }
 
             for i in 0..raw_count {
-                let queue = unsafe {
-                    dispatch_get_global_queue(priorities[i % priorities.len()], 0)
-                };
+                let queue =
+                    unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
 
                 // SAFETY: sem is valid from create to release, and dispatch_async_f
                 // captures it only for the duration of the block execution. We wait

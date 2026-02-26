@@ -102,7 +102,8 @@ fn dns_query_rtt(server: &str, hostname: &str, timeout: Duration) -> Option<u128
     let tx_id = (std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_nanos() & 0xFFFF) as u16;
+        .as_nanos()
+        & 0xFFFF) as u16;
     let query = build_dns_query(tx_id, hostname);
 
     let start = Instant::now();

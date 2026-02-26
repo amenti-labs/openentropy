@@ -180,8 +180,8 @@ impl EntropySource for IORegistryEntropySource {
 
 #[cfg(test)]
 mod tests {
-    use crate::sources::helpers::extract_lsbs_i64 as extract_lsbs;
     use super::*;
+    use crate::sources::helpers::extract_lsbs_i64 as extract_lsbs;
 
     #[test]
     fn ioregistry_info() {

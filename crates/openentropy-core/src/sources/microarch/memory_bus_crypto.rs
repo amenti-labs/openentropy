@@ -132,11 +132,14 @@ mod imp {
 
             unsafe {
                 for _ in 0..raw_count {
-                    lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    lcg = lcg
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
 
                     // Pick two different regions (source and destination).
                     let src_idx = (lcg >> 32) as usize % NUM_REGIONS;
-                    let dst_idx = (src_idx + 1 + ((lcg & 0xFFFF) as usize % (NUM_REGIONS - 1))) % NUM_REGIONS;
+                    let dst_idx =
+                        (src_idx + 1 + ((lcg & 0xFFFF) as usize % (NUM_REGIONS - 1))) % NUM_REGIONS;
 
                     // Pick offsets within each region (cache-line aligned).
                     let src_off = ((lcg >> 16) as usize % (REGION_SIZE / 64)) * 64;

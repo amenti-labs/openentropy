@@ -133,9 +133,13 @@ impl EntropySource for ProcInfoTimingSource {
         // Warm up — first call has extra kernel setup cost
         for _ in 0..4 {
             unsafe {
-                proc_pidinfo(pid, PROC_PIDTBSDINFO, 0,
+                proc_pidinfo(
+                    pid,
+                    PROC_PIDTBSDINFO,
+                    0,
                     bsd_info._pad.as_mut_ptr() as *mut core::ffi::c_void,
-                    bsd_info._pad.len() as i32);
+                    bsd_info._pad.len() as i32,
+                );
             }
         }
 
@@ -143,23 +147,34 @@ impl EntropySource for ProcInfoTimingSource {
             // proc_pidinfo: process table + BSD info lock
             let t0 = mach_time();
             unsafe {
-                proc_pidinfo(pid, PROC_PIDTBSDINFO, 0,
+                proc_pidinfo(
+                    pid,
+                    PROC_PIDTBSDINFO,
+                    0,
                     bsd_info._pad.as_mut_ptr() as *mut core::ffi::c_void,
-                    bsd_info._pad.len() as i32);
+                    bsd_info._pad.len() as i32,
+                );
             }
             let t_pid = mach_time().wrapping_sub(t0);
 
             // proc_pid_rusage V4: performance counter cross-core read
             let t1 = mach_time();
             unsafe {
-                proc_pid_rusage(pid, RUSAGE_INFO_V4,
-                    ru_info._pad.as_mut_ptr() as *mut core::ffi::c_void);
+                proc_pid_rusage(
+                    pid,
+                    RUSAGE_INFO_V4,
+                    ru_info._pad.as_mut_ptr() as *mut core::ffi::c_void,
+                );
             }
             let t_ru = mach_time().wrapping_sub(t1);
 
             // Cap at 5ms (abnormal; suspend/resume artefact)
-            if t_pid < 120_000 { timings.push(t_pid); }
-            if t_ru  < 120_000 { timings.push(t_ru);  }
+            if t_pid < 120_000 {
+                timings.push(t_pid);
+            }
+            if t_ru < 120_000 {
+                timings.push(t_ru);
+            }
         }
 
         extract_timing_entropy(&timings, n_samples)
@@ -168,9 +183,15 @@ impl EntropySource for ProcInfoTimingSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for ProcInfoTimingSource {
-    fn info(&self) -> &SourceInfo { &PROC_INFO_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &PROC_INFO_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

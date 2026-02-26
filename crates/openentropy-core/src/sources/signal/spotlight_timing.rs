@@ -107,8 +107,8 @@ impl EntropySource for SpotlightTimingSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::sources::helpers::extract_lsbs_u64;
     use super::*;
+    use crate::sources::helpers::extract_lsbs_u64;
 
     #[test]
     fn spotlight_timing_info() {

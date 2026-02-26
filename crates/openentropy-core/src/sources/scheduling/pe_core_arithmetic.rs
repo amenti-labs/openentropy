@@ -151,6 +151,9 @@ mod tests {
         assert!(!data.is_empty());
         assert!(data.len() <= 64);
         let unique: std::collections::HashSet<u8> = data.iter().copied().collect();
-        assert!(unique.len() > 4, "expected high byte diversity from PE core timing");
+        assert!(
+            unique.len() > 4,
+            "expected high byte diversity from PE core timing"
+        );
     }
 }

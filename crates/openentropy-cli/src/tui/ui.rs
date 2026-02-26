@@ -263,9 +263,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
                 let is_collapsed = app.is_collapsed(cat_key);
                 let arrow = if is_collapsed { "▸" } else { "▾" };
                 let label = display_cat(cat_key);
-                let count = category_sources
-                    .get(cat_key)
-                    .map_or(0, |v| v.len());
+                let count = category_sources.get(cat_key).map_or(0, |v| v.len());
 
                 // Show ● if any active source is in this collapsed category
                 let has_active = is_collapsed
@@ -277,10 +275,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
                 let header_text = format!("{arrow} {label} ({count}){active_dot}");
 
                 let style = if is_cursor {
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::Cyan)
-                        .bold()
+                    Style::default().bg(Color::DarkGray).fg(Color::Cyan).bold()
                 } else {
                     Style::default().fg(Color::Cyan).bold()
                 };

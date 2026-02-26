@@ -65,9 +65,9 @@
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
 #[cfg(target_os = "macos")]
-use crate::sources::helpers::mach_time;
-#[cfg(target_os = "macos")]
 use crate::sources::helpers::extract_timing_entropy;
+#[cfg(target_os = "macos")]
+use crate::sources::helpers::mach_time;
 
 static SMC_HIGHVAR_TIMING_INFO: SourceInfo = SourceInfo {
     name: "smc_highvar_timing",
@@ -105,9 +105,12 @@ mod smc_hv {
         pub fn IOServiceMatching(name: *const i8) -> *mut c_void;
         pub fn IOServiceOpen(service: u32, task: u32, kind: u32, connect: *mut u32) -> IOReturn;
         pub fn IOConnectCallStructMethod(
-            connection: u32, selector: u32,
-            input: *const c_void, input_size: usize,
-            output: *mut c_void, output_size: *mut usize,
+            connection: u32,
+            selector: u32,
+            input: *const c_void,
+            input_size: usize,
+            output: *mut c_void,
+            output_size: *mut usize,
         ) -> IOReturn;
         pub fn IOServiceClose(connect: u32) -> IOReturn;
         pub fn IOObjectRelease(obj: u32) -> IOReturn;
@@ -169,7 +172,12 @@ impl EntropySource for SMCHighVarTimingSource {
                 IOServiceMatching(c"AppleSMC".as_ptr()),
             )
         };
-        if svc != 0 { unsafe { IOObjectRelease(svc) }; true } else { false }
+        if svc != 0 {
+            unsafe { IOObjectRelease(svc) };
+            true
+        } else {
+            false
+        }
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
@@ -182,12 +190,16 @@ impl EntropySource for SMCHighVarTimingSource {
                 IOServiceMatching(c"AppleSMC".as_ptr()),
             )
         };
-        if svc == 0 { return Vec::new(); }
+        if svc == 0 {
+            return Vec::new();
+        }
 
         let mut conn: u32 = 0;
         let kr = unsafe { IOServiceOpen(svc, mach_task_self(), 0, &mut conn) };
         unsafe { IOObjectRelease(svc) };
-        if kr != 0 { return Vec::new(); }
+        if kr != 0 {
+            return Vec::new();
+        }
 
         let tc0p = encode_key(b"TC0P");
         let b0rm = encode_key(b"B0RM");
@@ -200,9 +212,14 @@ impl EntropySource for SMCHighVarTimingSource {
             let mut out = SMCParam::new(tc0p);
             let mut out_sz = std::mem::size_of::<SMCParam>();
             unsafe {
-                IOConnectCallStructMethod(conn, 5,
-                    &inp as *const _ as *const c_void, std::mem::size_of::<SMCParam>(),
-                    &mut out as *mut _ as *mut c_void, &mut out_sz);
+                IOConnectCallStructMethod(
+                    conn,
+                    5,
+                    &inp as *const _ as *const c_void,
+                    std::mem::size_of::<SMCParam>(),
+                    &mut out as *mut _ as *mut c_void,
+                    &mut out_sz,
+                );
             }
             let _ = inp.result;
         }
@@ -214,9 +231,14 @@ impl EntropySource for SMCHighVarTimingSource {
             let mut out_sz = std::mem::size_of::<SMCParam>();
             let t0 = mach_time();
             unsafe {
-                IOConnectCallStructMethod(conn, 5,
-                    &inp as *const _ as *const c_void, std::mem::size_of::<SMCParam>(),
-                    &mut out_tc as *mut _ as *mut c_void, &mut out_sz);
+                IOConnectCallStructMethod(
+                    conn,
+                    5,
+                    &inp as *const _ as *const c_void,
+                    std::mem::size_of::<SMCParam>(),
+                    &mut out_tc as *mut _ as *mut c_void,
+                    &mut out_sz,
+                );
             }
             let t_tc = mach_time().wrapping_sub(t0);
 
@@ -226,15 +248,24 @@ impl EntropySource for SMCHighVarTimingSource {
             out_sz = std::mem::size_of::<SMCParam>();
             let t1 = mach_time();
             unsafe {
-                IOConnectCallStructMethod(conn, 5,
-                    &inp as *const _ as *const c_void, std::mem::size_of::<SMCParam>(),
-                    &mut out_b0 as *mut _ as *mut c_void, &mut out_sz);
+                IOConnectCallStructMethod(
+                    conn,
+                    5,
+                    &inp as *const _ as *const c_void,
+                    std::mem::size_of::<SMCParam>(),
+                    &mut out_b0 as *mut _ as *mut c_void,
+                    &mut out_sz,
+                );
             }
             let t_b0 = mach_time().wrapping_sub(t1);
 
             // Reject extreme outliers (>50ms = suspend/resume)
-            if t_tc < 1_200_000 { timings.push(t_tc); }
-            if t_b0 < 1_200_000 { timings.push(t_b0); }
+            if t_tc < 1_200_000 {
+                timings.push(t_tc);
+            }
+            if t_b0 < 1_200_000 {
+                timings.push(t_b0);
+            }
         }
 
         unsafe { IOServiceClose(conn) };
@@ -244,9 +275,15 @@ impl EntropySource for SMCHighVarTimingSource {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for SMCHighVarTimingSource {
-    fn info(&self) -> &SourceInfo { &SMC_HIGHVAR_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &SMC_HIGHVAR_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

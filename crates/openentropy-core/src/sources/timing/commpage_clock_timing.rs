@@ -55,9 +55,9 @@
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
+use crate::sources::helpers::extract_timing_entropy_debiased;
 #[cfg(target_os = "macos")]
 use crate::sources::helpers::mach_time;
-use crate::sources::helpers::extract_timing_entropy_debiased;
 
 static COMMPAGE_CLOCK_TIMING_INFO: SourceInfo = SourceInfo {
     name: "commpage_clock_timing",
@@ -96,7 +96,10 @@ impl EntropySource for CommPageClockTimingSource {
         let mut timings = Vec::with_capacity(raw);
 
         // Warm up: ensure COMMPAGE is mapped and TLB entry is hot.
-        let mut tv = libc_timeval { tv_sec: 0, tv_usec: 0 };
+        let mut tv = libc_timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
         for _ in 0..8 {
             unsafe { gettimeofday_sys(&mut tv, core::ptr::null_mut()) };
         }
@@ -133,9 +136,15 @@ unsafe extern "C" {
 
 #[cfg(not(target_os = "macos"))]
 impl EntropySource for CommPageClockTimingSource {
-    fn info(&self) -> &SourceInfo { &COMMPAGE_CLOCK_TIMING_INFO }
-    fn is_available(&self) -> bool { false }
-    fn collect(&self, _: usize) -> Vec<u8> { Vec::new() }
+    fn info(&self) -> &SourceInfo {
+        &COMMPAGE_CLOCK_TIMING_INFO
+    }
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn collect(&self, _: usize) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

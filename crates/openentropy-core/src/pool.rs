@@ -745,9 +745,7 @@ mod tests {
     #[test]
     fn test_collect_all_returns_bytes() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("mock1", vec![0xAA, 0xBB, 0xCC])),
-        );
+        pool.add_source(Box::new(MockSource::new("mock1", vec![0xAA, 0xBB, 0xCC])));
         let n = pool.collect_all();
         assert!(n > 0, "Should have collected some bytes");
     }
@@ -856,9 +854,10 @@ mod tests {
     #[test]
     fn test_health_report_after_collection() {
         let mut pool = EntropyPool::new(Some(b"test"));
-        pool.add_source(
-            Box::new(MockSource::new("good_source", (0..=255).collect())),
-        );
+        pool.add_source(Box::new(MockSource::new(
+            "good_source",
+            (0..=255).collect(),
+        )));
         pool.collect_all();
         let report = pool.health_report();
         assert_eq!(report.total, 1);
