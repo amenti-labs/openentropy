@@ -546,9 +546,21 @@ impl EntropyPool {
                     requirements: info.requirements.iter().map(|r| r.to_string()).collect(),
                     entropy_rate_estimate: info.entropy_rate_estimate,
                     composite: info.composite,
+                    config: ss.source.config_options(),
                 }
             })
             .collect()
+    }
+
+    /// Call a function on a named source, returning `None` if no match.
+    pub fn with_source<F, R>(&self, name: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&dyn EntropySource) -> R,
+    {
+        self.sources
+            .iter()
+            .find(|ss| ss.lock().unwrap().source.info().name == name)
+            .map(|ss| f(&*ss.lock().unwrap().source))
     }
 }
 
@@ -623,6 +635,8 @@ pub struct SourceInfoSnapshot {
     pub entropy_rate_estimate: f64,
     /// Whether this is a composite source.
     pub composite: bool,
+    /// Runtime configuration keys and current values.
+    pub config: Vec<(&'static str, String)>,
 }
 
 #[cfg(test)]

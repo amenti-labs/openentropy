@@ -12,6 +12,7 @@ use ratatui::{prelude::*, widgets::*};
 // ---------------------------------------------------------------------------
 
 const CATEGORIES: &[(&str, &str, &str)] = &[
+    ("quantum", "QTM", "Quantum"),
     ("thermal", "THM", "Thermal"),
     ("timing", "TMG", "Timing"),
     ("scheduling", "SCH", "Scheduling"),
@@ -42,9 +43,25 @@ fn display_cat(cat: &str) -> &str {
         .unwrap_or(cat)
 }
 
+/// Returns the best hardware icon for a list of requirement display names.
+///
+/// Delegates to [`openentropy_core::source::best_icon_from_names`] — the icon
+/// mapping lives in the core crate so it stays in sync with `Requirement::icon`.
+fn requirement_icon(reqs: &[String]) -> &'static str {
+    openentropy_core::source::best_icon_from_names(reqs)
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
 
 fn entropy_color(val: f64) -> Style {
     if val >= 7.5 {
@@ -251,6 +268,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     let names = app.source_names();
     let cats = app.source_categories();
     let plats = app.source_platforms();
+    let reqs = app.source_requirements();
     let virtual_rows = app.virtual_rows();
     let category_sources = app.category_sources();
 
@@ -300,7 +318,14 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
 
                 let pointer = if is_cursor { " ▸" } else { "  " };
                 let marker = if is_active { "●" } else { " " };
-                let plat_icon = if plats[i] == "macos" { "🍎" } else { "  " };
+                let hw_icon = requirement_icon(&reqs[i]);
+                let plat_icon = if !hw_icon.is_empty() {
+                    hw_icon
+                } else if plats[i] == "macos" {
+                    "🍎"
+                } else {
+                    "  "
+                };
                 let cat = short_cat(&cats[i]);
 
                 let stat = snap.source_stats.get(name.as_str());
@@ -392,6 +417,38 @@ fn draw_info(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
                 Style::default().fg(Color::DarkGray),
             )),
         ];
+
+        if !info.requirements.is_empty() {
+            let icon = requirement_icon(&info.requirements);
+            let labels: Vec<&str> = info
+                .requirements
+                .iter()
+                .map(|r| openentropy_core::Requirement::label_for_display_name(r))
+                .collect();
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{icon} Requires: "),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled(labels.join(", "), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        for (key, value) in &info.config {
+            let hint = if *key == "mode" {
+                "  (m to cycle)"
+            } else {
+                ""
+            };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{}: ", capitalize(key)),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(value.clone(), Style::default().fg(Color::Cyan).bold()),
+                Span::styled(hint, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
 
         if let Some(s) = stat {
             lines.push(Line::from(""));
@@ -967,7 +1024,7 @@ fn draw_output(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // ---------------------------------------------------------------------------
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(" ↑↓ nav  {/} jump  space: select  C: fold all  r: rec  g: graph  c: cond  n: size  Tab: cmp  p: pause  q: quit")
+    let bar = Paragraph::new(" ↑↓ nav  {/} jump  space: select  C: fold all  r: rec  g: graph  c: cond  m: mode  n: size  Tab: cmp  p: pause  q: quit")
         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
 }
@@ -982,6 +1039,7 @@ mod tests {
 
     #[test]
     fn short_cat_maps_all_known_categories() {
+        assert_eq!(short_cat("quantum"), "QTM");
         assert_eq!(short_cat("thermal"), "THM");
         assert_eq!(short_cat("timing"), "TMG");
         assert_eq!(short_cat("scheduling"), "SCH");
@@ -1005,6 +1063,7 @@ mod tests {
 
     #[test]
     fn display_cat_maps_all_known_categories() {
+        assert_eq!(display_cat("quantum"), "Quantum");
         assert_eq!(display_cat("thermal"), "Thermal");
         assert_eq!(display_cat("timing"), "Timing");
         assert_eq!(display_cat("scheduling"), "Scheduling");

@@ -79,6 +79,10 @@ enum Commands {
         /// Skip conditioned pool output quality section
         #[arg(long)]
         no_pool: bool,
+
+        /// QCicada QRNG post-processing mode
+        #[arg(long, value_parser = ["raw", "sha256", "samples"])]
+        qcicada_mode: Option<String>,
     },
 
     /// Statistical analysis: autocorrelation, spectral, bias, stationarity, runs.
@@ -129,6 +133,10 @@ enum Commands {
         /// When combined with --output, writes a Markdown report.
         #[arg(long)]
         report: bool,
+
+        /// QCicada QRNG post-processing mode
+        #[arg(long, value_parser = ["raw", "sha256", "samples"])]
+        qcicada_mode: Option<String>,
     },
 
     /// Record entropy samples to disk for offline analysis
@@ -172,6 +180,10 @@ enum Commands {
         /// Store telemetry_v1 start/end snapshots in session.json.
         #[arg(long)]
         telemetry: bool,
+
+        /// QCicada QRNG post-processing mode
+        #[arg(long, value_parser = ["raw", "sha256", "samples"])]
+        qcicada_mode: Option<String>,
     },
 
     /// Live interactive entropy dashboard (TUI)
@@ -232,6 +244,10 @@ enum Commands {
         /// Create a FIFO (named pipe) at this path and feed entropy to readers
         #[arg(long)]
         fifo: Option<String>,
+
+        /// QCicada QRNG post-processing mode
+        #[arg(long, value_parser = ["raw", "sha256", "samples"])]
+        qcicada_mode: Option<String>,
     },
 
     /// List and analyze recorded entropy sessions
@@ -319,7 +335,9 @@ fn main() {
             telemetry,
             output,
             no_pool,
+            qcicada_mode,
         } => {
+            commands::apply_qcicada_mode(qcicada_mode.as_deref());
             let positional = merge_positional_and_legacy(&source, sources.as_deref());
             commands::bench::run(commands::bench::BenchArgs {
                 positional,
@@ -348,7 +366,9 @@ fn main() {
             view,
             telemetry,
             report,
+            qcicada_mode,
         } => {
+            commands::apply_qcicada_mode(qcicada_mode.as_deref());
             let positional = merge_positional_and_legacy(&source, sources.as_deref());
             commands::analyze::run(commands::analyze::AnalyzeArgs {
                 positional,
@@ -374,7 +394,9 @@ fn main() {
             analyze,
             conditioning,
             telemetry,
+            qcicada_mode,
         } => {
+            commands::apply_qcicada_mode(qcicada_mode.as_deref());
             let positional = merge_positional_and_legacy(&source, sources.as_deref());
             if positional.is_empty() {
                 eprintln!("Error: at least one source name is required for recording.");
@@ -417,7 +439,9 @@ fn main() {
             pool,
             all,
             fifo,
+            qcicada_mode,
         } => {
+            commands::apply_qcicada_mode(qcicada_mode.as_deref());
             let positional = merge_positional_and_legacy(&source, sources.as_deref());
             commands::stream::run(commands::stream::StreamArgs {
                 positional,

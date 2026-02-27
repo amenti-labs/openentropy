@@ -16,6 +16,16 @@ use openentropy_core::analysis::CrossCorrMatrix;
 use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::platform::detect_available_sources;
 
+/// Set `QCICADA_MODE` env var before source discovery so that
+/// `QCicadaConfig::default()` picks it up at construction time.
+#[allow(unused)]
+pub fn apply_qcicada_mode(mode: Option<&str>) {
+    if let Some(m) = mode {
+        // SAFETY: only called from main thread before spawning pool threads.
+        unsafe { std::env::set_var("QCICADA_MODE", m) };
+    }
+}
+
 /// Build an EntropyPool, optionally filtering sources by name.
 /// If no filter is given, only fast sources (is_fast=true) are included to avoid hangs.
 /// Use `--sources all` to include every available source.

@@ -214,6 +214,7 @@ const MAX_HISTORY: usize = 120;
 
 /// Canonical category display order for the TUI source list.
 const CATEGORY_ORDER: &[&str] = &[
+    "quantum",
     "timing",
     "scheduling",
     "system",
@@ -417,6 +418,7 @@ pub struct App {
     source_names: Vec<String>,
     source_categories: Vec<String>,
     source_platforms: Vec<String>,
+    source_requirements: Vec<Vec<String>>,
     shared: Arc<Mutex<SharedState>>,
     collector_flag: Arc<AtomicBool>,
     conditioning_mode: ConditioningMode,
@@ -449,6 +451,7 @@ impl App {
         let names: Vec<String> = infos.iter().map(|i| i.name.clone()).collect();
         let cats: Vec<String> = infos.iter().map(|i| i.category.clone()).collect();
         let plats: Vec<String> = infos.iter().map(|i| i.platform.clone()).collect();
+        let reqs: Vec<Vec<String>> = infos.iter().map(|i| i.requirements.clone()).collect();
 
         // Build category_sources map: category key -> [source indices]
         let mut category_sources: HashMap<String, Vec<usize>> = HashMap::new();
@@ -481,6 +484,7 @@ impl App {
             source_names: names,
             source_categories: cats,
             source_platforms: plats,
+            source_requirements: reqs,
             shared: Arc::new(Mutex::new(SharedState {
                 raw_hex: String::new(),
                 rng_hex: String::new(),
@@ -718,6 +722,29 @@ impl App {
                 self.sample_size_idx = (self.sample_size_idx + 1) % SAMPLE_SIZES.len();
                 self.shared.lock().unwrap().byte_freq = [0u64; 256];
                 self.kick_collect();
+            }
+            KeyCode::Char('m') => {
+                // Cycle mode on configurable sources (e.g. qcicada raw/sha256/samples)
+                if let Some(name) = self.active_name().map(|s| s.to_string()) {
+                    let modes = ["raw", "sha256", "samples"];
+                    let current = self
+                        .pool
+                        .with_source(&name, |s| {
+                            s.config_options()
+                                .into_iter()
+                                .find(|(k, _)| *k == "mode")
+                                .map(|(_, v)| v)
+                        })
+                        .flatten();
+                    if let Some(cur) = current {
+                        let idx = modes.iter().position(|&m| m == cur).unwrap_or(0);
+                        let next = modes[(idx + 1) % modes.len()];
+                        let _ = self
+                            .pool
+                            .with_source(&name, |s| s.set_config("mode", next));
+                        self.kick_collect();
+                    }
+                }
             }
             _ => {}
         }
@@ -960,6 +987,9 @@ impl App {
     }
     pub fn source_platforms(&self) -> &[String] {
         &self.source_platforms
+    }
+    pub fn source_requirements(&self) -> &[Vec<String>] {
+        &self.source_requirements
     }
     pub fn chart_mode(&self) -> ChartMode {
         self.chart_mode

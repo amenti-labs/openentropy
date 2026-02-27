@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-59 sources across 11 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+60 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -65,6 +65,7 @@
 | 57 | `nvme_raw_device` | IO | Direct raw block device reads bypassing filesystem with page-aligned I/O | 2.0 | Any |
 | 58 | `nvme_passthrough_linux` | IO | Raw NVMe admin commands via ioctl passthrough on Linux (closest to NAND hardware) | 2.0 | Linux |
 | 59 | `mach_timing` | Timing | mach_absolute_time() nanosecond timing jitter | 0.3 | macOS |
+| 60 | `qcicada` | Quantum | Crypta Labs QCicada USB QRNG — photonic shot noise | 8.0 | Any (USB) |
 
 ---
 
@@ -463,6 +464,35 @@ BLE ambient RF environment scanning. RSSI fluctuates with multipath fading, move
 **Category:** Sensor | **Platform:** macOS | **Est. Rate:** 2.5
 
 SMC thermistor ADC + fuel gauge I2C bus — CV=64-66%, 8x outliers. Targets two SMC keys (TC0P: CPU proximity NTC thermistor via analog ADC, B0RM: battery fuel gauge IC over I2C) that show 8x higher variance than all other SMC keys. On MacBook reads live Li-ion electrochemical noise; on Mac mini captures I2C bus timeout randomness.
+
+---
+
+## Quantum Sources (1)
+
+### `qcicada`
+
+**Category:** Quantum | **Platform:** Any (USB) | **Est. Rate:** 8.0 | **Feature:** `qcicada`
+
+Crypta Labs QCicada USB QRNG — photonic shot noise from an LED/photodiode pair. Photon emission and detection are inherently quantum processes governed by Poisson statistics. The device digitises photodiode current fluctuations to produce true quantum random numbers at full entropy (8 bits/byte) per NIST SP 800-90B.
+
+**Requires:** QCicada USB hardware + `--features qcicada` build flag.
+
+**CLI mode flag:**
+```bash
+openentropy bench qcicada --qcicada-mode sha256     # NIST conditioned
+openentropy stream qcicada --qcicada-mode raw        # Raw noise (default)
+openentropy stream qcicada --qcicada-mode samples    # Direct QOM samples
+```
+
+**TUI:** Press `m` while qcicada is selected to cycle modes live (raw → sha256 → samples).
+
+**Environment variables:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QCICADA_MODE` | `raw` | Post-processing mode: `raw`, `sha256`, or `samples` |
+| `QCICADA_POST_PROCESS` | `raw` | Legacy alias for `QCICADA_MODE` |
+| `QCICADA_PORT` | auto-detect | Serial port path (e.g. `/dev/tty.usbmodem*`) |
+| `QCICADA_TIMEOUT` | `5000` | Connection timeout in ms |
 
 ---
 

@@ -8,6 +8,7 @@
 //! - **Network**: DNS timing, TCP handshake, WiFi RSSI
 //! - **IO**: Disk latency, NVMe sensors, fsync journaling
 //! - **Sensor**: Camera noise, audio ADC noise, Bluetooth RSSI
+//! - **Quantum**: True quantum RNG hardware (QCicada)
 //! - **Microarch**: Branch prediction, TLB shootdown, AMX timing
 //! - **IPC**: Mach ports, pipes, kqueue, keychain
 //! - **Thermal**: PLL clock domain crossings (audio, display, PCIe)
@@ -21,6 +22,7 @@ pub mod io;
 pub mod ipc;
 pub mod microarch;
 pub mod network;
+pub mod quantum;
 pub mod scheduling;
 pub mod sensor;
 pub mod signal;
@@ -44,5 +46,6 @@ pub fn all_sources() -> Vec<Box<dyn EntropySource>> {
     v.extend(thermal::sources());
     v.extend(gpu::sources());
     v.extend(signal::sources());
+    v.extend(quantum::sources());
     v
 }

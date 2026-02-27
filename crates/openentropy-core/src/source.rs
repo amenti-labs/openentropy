@@ -30,6 +30,8 @@ pub enum SourceCategory {
     Signal,
     /// Hardware sensor readings.
     Sensor,
+    /// True quantum random number generators.
+    Quantum,
 }
 
 impl std::fmt::Display for SourceCategory {
@@ -46,6 +48,7 @@ impl std::fmt::Display for SourceCategory {
             Self::System => write!(f, "system"),
             Self::Signal => write!(f, "signal"),
             Self::Sensor => write!(f, "sensor"),
+            Self::Quantum => write!(f, "quantum"),
         }
     }
 }
@@ -96,6 +99,8 @@ pub enum Requirement {
     SecurityFramework,
     /// Raw block device access (/dev/rdiskN, /dev/nvmeXnY).
     RawBlockDevice,
+    /// QCicada QRNG hardware (USB serial).
+    QCicada,
 }
 
 impl std::fmt::Display for Requirement {
@@ -112,8 +117,97 @@ impl std::fmt::Display for Requirement {
             Self::IOSurface => write!(f, "iosurface"),
             Self::SecurityFramework => write!(f, "security_framework"),
             Self::RawBlockDevice => write!(f, "raw_block_device"),
+            Self::QCicada => write!(f, "qcicada"),
         }
     }
+}
+
+impl Requirement {
+    /// Emoji icon for hardware requirements.
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::QCicada => "🔮",
+            Self::Camera => "📷",
+            Self::AudioUnit => "🎤",
+            Self::Metal => "🎮",
+            Self::Wifi => "📶",
+            Self::Bluetooth => "📡",
+            Self::Usb => "🔌",
+            Self::RawBlockDevice => "💾",
+            _ => "", // IOKit, IOSurface, SecurityFramework, AppleSilicon — no icon
+        }
+    }
+
+    /// Human-readable hardware label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::QCicada => "QCicada QRNG (USB)",
+            Self::Camera => "Camera",
+            Self::AudioUnit => "Microphone (CoreAudio)",
+            Self::Metal => "GPU (Metal)",
+            Self::Wifi => "WiFi adapter",
+            Self::Bluetooth => "Bluetooth",
+            Self::Usb => "USB subsystem",
+            Self::RawBlockDevice => "Raw block device",
+            Self::AppleSilicon => "Apple Silicon",
+            Self::IOKit => "IOKit",
+            Self::IOSurface => "IOSurface",
+            Self::SecurityFramework => "Security Framework",
+        }
+    }
+
+    /// Parse a requirement from its `Display` name (inverse of `to_string()`).
+    pub fn from_display_name(name: &str) -> Option<Self> {
+        match name {
+            "metal" => Some(Self::Metal),
+            "audio_unit" => Some(Self::AudioUnit),
+            "wifi" => Some(Self::Wifi),
+            "usb" => Some(Self::Usb),
+            "camera" => Some(Self::Camera),
+            "apple_silicon" => Some(Self::AppleSilicon),
+            "bluetooth" => Some(Self::Bluetooth),
+            "iokit" => Some(Self::IOKit),
+            "iosurface" => Some(Self::IOSurface),
+            "security_framework" => Some(Self::SecurityFramework),
+            "raw_block_device" => Some(Self::RawBlockDevice),
+            "qcicada" => Some(Self::QCicada),
+            _ => None,
+        }
+    }
+
+    /// Look up the icon for a requirement by its `Display` name.
+    ///
+    /// This is the canonical mapping used by CLI/TUI code that only has the
+    /// serialised string form (e.g. from [`SourceInfoSnapshot`]).
+    pub fn icon_for_display_name(name: &str) -> &'static str {
+        Self::from_display_name(name).map_or("", |r| r.icon())
+    }
+
+    /// Look up the label for a requirement by its `Display` name.
+    ///
+    /// Returns the human-readable label if the name is recognised, or a
+    /// generic `"Unknown"` for unrecognised names.
+    pub fn label_for_display_name(name: &str) -> &'static str {
+        Self::from_display_name(name).map_or("Unknown", |r| r.label())
+    }
+}
+
+/// Returns the first non-empty icon from a requirements list.
+pub fn best_icon(requirements: &[Requirement]) -> &'static str {
+    requirements
+        .iter()
+        .map(Requirement::icon)
+        .find(|icon| !icon.is_empty())
+        .unwrap_or("")
+}
+
+/// Returns the first non-empty icon from a list of requirement display names.
+pub fn best_icon_from_names(names: &[String]) -> &'static str {
+    names
+        .iter()
+        .map(|n| Requirement::icon_for_display_name(n))
+        .find(|icon| !icon.is_empty())
+        .unwrap_or("")
 }
 
 /// Metadata about an entropy source.
@@ -161,6 +255,16 @@ pub trait EntropySource: Send + Sync {
     /// Convenience: name from info.
     fn name(&self) -> &'static str {
         self.info().name
+    }
+
+    /// Optional runtime configuration. Returns Err if unsupported.
+    fn set_config(&self, _key: &str, _value: &str) -> Result<(), String> {
+        Err("source does not support runtime configuration".into())
+    }
+
+    /// List configurable keys and their current values.
+    fn config_options(&self) -> Vec<(&'static str, String)> {
+        vec![]
     }
 }
 
