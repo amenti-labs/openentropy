@@ -106,12 +106,24 @@ mod imp {
 
     type FnPtr = unsafe extern "C" fn() -> u64;
 
+    /// RAII guard for a JIT mmap page — ensures munmap on drop (including panic unwind).
+    struct JitPage(*mut libc::c_void);
+
+    impl Drop for JitPage {
+        fn drop(&mut self) {
+            unsafe {
+                libc::munmap(self.0, 4096);
+            }
+        }
+    }
+
     static CHECKED: Once = Once::new();
     static AVAILABLE: AtomicBool = AtomicBool::new(false);
 
     /// Build a JIT page with MRS S3_6_c15_c1_5 + RET.
-    /// Returns (fn_ptr, page_addr) or None on failure.
-    unsafe fn build_jit() -> Option<(FnPtr, *mut libc::c_void)> {
+    /// Returns (fn_ptr, page_guard) or None on failure.
+    /// The JitPage guard ensures munmap on drop.
+    unsafe fn build_jit() -> Option<(FnPtr, JitPage)> {
         let page = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -135,7 +147,7 @@ mod imp {
             core::arch::asm!("dsb ish", "isb", options(nostack));
         }
         let fn_ptr: FnPtr = unsafe { std::mem::transmute(page) };
-        Some((fn_ptr, page))
+        Some((fn_ptr, JitPage(page)))
     }
 
     #[inline]
@@ -166,7 +178,7 @@ mod imp {
 
         fn collect(&self, n_samples: usize) -> Vec<u8> {
             unsafe {
-                let Some((fn_ptr, page)) = build_jit() else {
+                let Some((fn_ptr, _page_guard)) = build_jit() else {
                     return Vec::new();
                 };
 
@@ -186,7 +198,7 @@ mod imp {
                     }
                 }
 
-                libc::munmap(page, 4096);
+                // _page_guard drops here, calling munmap automatically
                 extract_timing_entropy_debiased(&timings, n_samples)
             }
         }

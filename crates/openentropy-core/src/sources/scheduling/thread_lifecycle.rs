@@ -44,7 +44,7 @@ static THREAD_LIFECYCLE_INFO: SourceInfo = SourceInfo {
     requirements: &[],
     entropy_rate_estimate: 2.0,
     composite: false,
-    is_fast: true,
+    is_fast: false,
 };
 
 impl EntropySource for ThreadLifecycleSource {

@@ -23,6 +23,8 @@
 //! There is also no guarantee that reads are served from NAND rather than the
 //! controller's DRAM cache.
 
+use std::sync::OnceLock;
+
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
 
@@ -41,9 +43,9 @@ static NVME_RAW_DEVICE_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[Requirement::RawBlockDevice],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
-    is_fast: true,
+    is_fast: false,
 };
 
 /// Number of widely-spaced offsets to cycle through (hit different NAND dies).
@@ -162,7 +164,8 @@ impl EntropySource for NvmeRawDeviceSource {
     }
 
     fn is_available(&self) -> bool {
-        can_open_raw_device()
+        static RAW_DEVICE_AVAILABLE: OnceLock<bool> = OnceLock::new();
+        *RAW_DEVICE_AVAILABLE.get_or_init(can_open_raw_device)
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

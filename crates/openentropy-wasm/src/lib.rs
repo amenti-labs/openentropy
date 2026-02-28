@@ -180,8 +180,14 @@ pub fn get_random_bytes(n_bytes: usize) -> Vec<u8> {
         h.update(performance_now().to_le_bytes());
 
         let digest: [u8; 32] = h.finalize().into();
-        state = digest;
         output.extend_from_slice(&digest);
+
+        // Derive next state separately from output for forward secrecy.
+        // An adversary who observes output cannot reconstruct the state.
+        let mut h2 = Sha256::new();
+        h2.update(digest);
+        h2.update(b"openentropy_state");
+        state = h2.finalize().into();
     }
 
     output.truncate(n_bytes);

@@ -119,26 +119,39 @@ impl EntropySource for APRRJitTimingSource {
     }
 
     fn is_available(&self) -> bool {
-        // MAP_JIT + APRR available on all Apple Silicon
-        // Verify by attempting a MAP_JIT allocation
-        let page = unsafe {
-            libc::mmap(
-                core::ptr::null_mut(),
-                4096,
-                libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | 0x0800, // MAP_JIT = 0x0800
-                -1,
-                0,
-            )
-        };
-        if page == libc::MAP_FAILED {
-            return false;
-        }
-        unsafe { libc::munmap(page, 4096) };
-        true
+        static APRR_AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *APRR_AVAILABLE.get_or_init(|| {
+            // MAP_JIT + APRR available on all Apple Silicon
+            // Verify by attempting a MAP_JIT allocation
+            let page = unsafe {
+                libc::mmap(
+                    core::ptr::null_mut(),
+                    4096,
+                    libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | 0x0800, // MAP_JIT = 0x0800
+                    -1,
+                    0,
+                )
+            };
+            if page == libc::MAP_FAILED {
+                return false;
+            }
+            unsafe { libc::munmap(page, 4096) };
+            true
+        })
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
+        /// RAII guard for a JIT mmap page — ensures munmap on drop (including panic unwind).
+        struct JitPage(*mut libc::c_void);
+        impl Drop for JitPage {
+            fn drop(&mut self) {
+                unsafe {
+                    libc::munmap(self.0, 4096);
+                }
+            }
+        }
+
         // MAP_JIT is required to make APRR meaningful
         let jit_page = unsafe {
             libc::mmap(
@@ -153,6 +166,7 @@ impl EntropySource for APRRJitTimingSource {
         if jit_page == libc::MAP_FAILED {
             return Vec::new();
         }
+        let _jit_guard = JitPage(jit_page);
 
         let raw = n_samples * 3 + 64;
         let mut timings = Vec::with_capacity(raw * 2);
@@ -185,7 +199,7 @@ impl EntropySource for APRRJitTimingSource {
             }
         }
 
-        unsafe { libc::munmap(jit_page, 4096) };
+        // _jit_guard drops here, calling munmap automatically
 
         // Trimodal 0/42/83 — full range captures mode identity
         // XOR the write and exec timings to mix both APRR paths

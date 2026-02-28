@@ -169,11 +169,14 @@ mod imp {
         }
 
         fn is_available(&self) -> bool {
-            // These undocumented registers may not be accessible on all Apple
-            // Silicon chips/OS versions. Use a fork-based probe to safely test
-            // without risking SIGILL in the main process.
-            crate::sources::helpers::probe_jit_instruction_safe(APPLE_41MHZ_MRS_X0)
-                && crate::sources::helpers::probe_jit_instruction_safe(APPLE_41MHZ_B_MRS_X0)
+            static DUAL_CLOCK_AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+            *DUAL_CLOCK_AVAILABLE.get_or_init(|| {
+                // These undocumented registers may not be accessible on all Apple
+                // Silicon chips/OS versions. Use a fork-based probe to safely test
+                // without risking SIGILL in the main process.
+                crate::sources::helpers::probe_jit_instruction_safe(APPLE_41MHZ_MRS_X0)
+                    && crate::sources::helpers::probe_jit_instruction_safe(APPLE_41MHZ_B_MRS_X0)
+            })
         }
 
         fn collect(&self, n_samples: usize) -> Vec<u8> {

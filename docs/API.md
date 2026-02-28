@@ -16,7 +16,7 @@ Path: `crates/openentropy-core/`
 ```rust
 pub use conditioning::{
     ConditioningMode, MinEntropyReport, QualityReport, condition, grade_min_entropy,
-    min_entropy_estimate, quick_min_entropy, quick_quality, quick_shannon,
+    min_entropy_estimate, quick_autocorrelation_lag1, quick_min_entropy, quick_quality, quick_shannon,
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
@@ -114,6 +114,7 @@ pub struct SourceInfo {
     pub requirements: &'static [Requirement],
     pub entropy_rate_estimate: f64,
     pub composite: bool,
+    pub is_fast: bool,
 }
 ```
 
@@ -148,7 +149,7 @@ pub enum SourceCategory {
     GPU,
     Network,
     System,
-    Composite,
+    Quantum,
     Signal,
     Sensor,
 }
@@ -162,7 +163,7 @@ pub fn platform_info() -> PlatformInfo
 ```
 
 ```rust
-pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 49 sources
+pub fn all_sources() -> Vec<Box<dyn EntropySource>> // currently 63 sources
 ```
 
 ## openentropy-tests

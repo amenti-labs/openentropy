@@ -3,7 +3,7 @@
 //! All draw functions receive an `&App` (non-shared fields) and `&Snapshot`
 //! (shared state captured in a single mutex lock per frame).
 
-use super::app::{App, ChartMode, Sample, SensorFlowState, Snapshot, VirtualRow, rolling_autocorr};
+use super::app::{App, ChartMode, Sample, Snapshot, VirtualRow, rolling_autocorr};
 use openentropy_core::ConditioningMode;
 use ratatui::{prelude::*, widgets::*};
 
@@ -95,7 +95,9 @@ fn entropy_spans(label: &str, label_style: Style, h: f64, h_min: f64) -> Vec<Spa
 /// Extract chart values from history, handling autocorrelation specially.
 fn extract_chart_values(history: &[Sample], mode: ChartMode) -> Vec<f64> {
     if mode == ChartMode::Autocorrelation {
-        let raw: Vec<f64> = history.iter().map(|s| s.output_value).collect();
+        // Use min-entropy per cycle to detect temporal non-stationarity
+        // (whether the source's quality changes predictably over time).
+        let raw: Vec<f64> = history.iter().map(|s| s.min_entropy).collect();
         rolling_autocorr(&raw, 60)
     } else {
         history.iter().map(|s| mode.value_from(s)).collect()
@@ -131,6 +133,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_main(f, rows[1], app, &snap);
     draw_output(f, rows[2], app, &snap);
     draw_keys(f, rows[3]);
+
+    if app.show_help() {
+        draw_help_modal(f);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -164,13 +170,6 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         Span::styled(active_label, Style::default().bold().fg(Color::Yellow)),
     ];
 
-    if let Some(cmp_name) = app.compare_name() {
-        title_spans.push(Span::styled(
-            format!(" vs {cmp_name}"),
-            Style::default().bold().fg(Color::Magenta),
-        ));
-    }
-
     title_spans.extend([
         Span::styled(
             format!(
@@ -194,8 +193,17 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             .recording_elapsed()
             .map(|d| format!("{:.0}s", d.as_secs_f64()))
             .unwrap_or_default();
+        let sel_count = app.selected_count();
+        let src_hint = if sel_count > 1 {
+            format!(" ({sel_count} sources)")
+        } else {
+            String::new()
+        };
         title_spans.push(Span::styled(
-            format!(" REC {} {}smp ", rec_elapsed, snap.recording_samples),
+            format!(
+                " REC {} {}smp{src_hint} ",
+                rec_elapsed, snap.recording_samples
+            ),
             Style::default().bold().fg(Color::White).bg(Color::Red),
         ));
         if let Some(path) = app.recording_path() {
@@ -314,6 +322,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
                 let i = *source_idx;
                 let is_cursor = vi == app.cursor();
                 let is_active = app.active() == Some(i);
+                let is_selected = app.is_selected(i);
                 let name = &names[i];
 
                 let pointer = if is_cursor { " ▸" } else { "  " };
@@ -339,9 +348,16 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
                 };
 
                 let style = if is_cursor {
-                    Style::default().bg(Color::DarkGray).fg(Color::White)
+                    let fg = if is_selected {
+                        Color::Yellow
+                    } else {
+                        Color::White
+                    };
+                    Style::default().bg(Color::DarkGray).fg(fg)
                 } else if is_active {
                     Style::default().fg(Color::Yellow).bold()
+                } else if is_selected {
+                    Style::default().fg(Color::Yellow)
                 } else {
                     match stat {
                         Some(s) if s.entropy >= 7.5 => Style::default().fg(Color::Green),
@@ -366,6 +382,13 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
         .collect();
 
     let total_sources = names.len();
+    let selected_count = app.selected_count();
+    let title = if selected_count > 0 {
+        format!(" Sources ({total_sources}) [{selected_count} selected] ")
+    } else {
+        format!(" Sources ({total_sources}) ")
+    };
+
     let header = Row::new(vec!["", "", "Source", "Cat", "H", "Time", ""])
         .style(Style::default().bold().fg(Color::DarkGray))
         .bottom_margin(0);
@@ -384,11 +407,7 @@ fn draw_source_list(f: &mut Frame, area: Rect, app: &mut App, snap: &Snapshot) {
     )
     .header(header)
     .row_highlight_style(Style::default()) // cursor styling is manual (per-row)
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" Sources ({total_sources}) ")),
-    );
+    .block(Block::default().borders(Borders::ALL).title(title));
 
     f.render_stateful_widget(table, area, app.table_state_mut());
 }
@@ -435,11 +454,7 @@ fn draw_info(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         }
 
         for (key, value) in &info.config {
-            let hint = if *key == "mode" {
-                "  (m to cycle)"
-            } else {
-                ""
-            };
+            let hint = if *key == "mode" { "  (m to cycle)" } else { "" };
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("{}: ", capitalize(key)),
@@ -529,22 +544,6 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         return;
     }
 
-    // Source-specific visualizations
-    if mode == ChartMode::CameraShotNoise {
-        if name == "camera_noise" {
-            draw_camera_shot_noise(f, chart_area, &snap.camera_noise, name);
-        } else {
-            draw_placeholder(
-                f,
-                chart_area,
-                format!(" {name} — [g] Camera Shot Noise "),
-                "Select 'camera_noise' source to view this visualization",
-            );
-        }
-        draw_description(f, desc_area, mode);
-        return;
-    }
-
     if snap.active_history.is_empty() {
         draw_placeholder(
             f,
@@ -557,7 +556,6 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
     }
 
     let values = extract_chart_values(&snap.active_history, mode);
-    let compare_values = extract_chart_values(&snap.compare_history, mode);
 
     if values.is_empty() {
         draw_placeholder(
@@ -570,24 +568,18 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
         return;
     }
 
-    let to_points = |vals: &[f64]| -> Vec<(f64, f64)> {
-        vals.iter()
-            .enumerate()
-            .map(|(i, &v)| (i as f64, v))
-            .collect()
-    };
-    let data = to_points(&values);
-    let compare_data = to_points(&compare_values);
+    let data: Vec<(f64, f64)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (i as f64, v))
+        .collect();
 
-    let cmp_name = app.compare_name().unwrap_or("?");
     let latest = *values.last().unwrap_or(&0.0);
 
-    // Compute bounds across both traces
-    let all_vals = values.iter().chain(compare_values.iter()).copied();
-    let min_val = all_vals.clone().fold(f64::MAX, f64::min);
-    let max_val = all_vals.fold(f64::MIN, f64::max);
+    let min_val = values.iter().copied().fold(f64::MAX, f64::min);
+    let max_val = values.iter().copied().fold(f64::MIN, f64::max);
 
-    let mut datasets = vec![
+    let datasets = vec![
         Dataset::default()
             .name(format!("{name} {latest:.2}"))
             .marker(symbols::Marker::Braille)
@@ -595,30 +587,11 @@ fn draw_chart(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
             .data(&data),
     ];
 
-    if !compare_data.is_empty() {
-        let cmp_latest = *compare_values.last().unwrap_or(&0.0);
-        datasets.push(
-            Dataset::default()
-                .name(format!("{cmp_name} {cmp_latest:.2}"))
-                .marker(symbols::Marker::Braille)
-                .style(Style::default().fg(Color::Magenta))
-                .data(&compare_data),
-        );
-    }
-
-    let x_max = (data.len().max(compare_data.len()) as f64).max(10.0);
+    let x_max = (data.len() as f64).max(10.0);
     let y_label = mode.y_label();
     let (y_min, y_max) = mode.y_bounds(min_val, max_val);
 
-    let compare_hint = if app.compare_source().is_some() {
-        format!(" vs {cmp_name}")
-    } else {
-        String::new()
-    };
-    let title = format!(
-        " {name}{compare_hint}  [g] {}  {latest:.2} {y_label} ",
-        mode.label()
-    );
+    let title = format!(" {name}  [g] {}  {latest:.2} {y_label} ", mode.label());
 
     let chart = Chart::new(datasets)
         .block(
@@ -800,190 +773,6 @@ fn draw_random_walk(f: &mut Frame, area: Rect, snap: &Snapshot, name: &str) {
     f.render_widget(chart, area);
 }
 
-fn spinner(frame: u64) -> char {
-    match frame % 4 {
-        0 => '|',
-        1 => '/',
-        2 => '-',
-        _ => '\\',
-    }
-}
-
-fn pulse_color(frame: u64) -> Color {
-    match frame % 4 {
-        0 => Color::Cyan,
-        1 => Color::LightCyan,
-        2 => Color::LightBlue,
-        _ => Color::Blue,
-    }
-}
-
-fn animated_cursor(line: &str, frame: u64, glyph: char) -> String {
-    let mut chars: Vec<char> = line.chars().collect();
-    if chars.is_empty() {
-        return String::new();
-    }
-    let idx = (frame as usize) % chars.len();
-    chars[idx] = glyph;
-    chars.into_iter().collect()
-}
-
-fn flow_status_line(state: &SensorFlowState) -> Line<'static> {
-    let live = state.repeat_streak == 0;
-    Line::from(vec![
-        Span::styled("stream ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            if live { "LIVE" } else { "REPEATING" },
-            Style::default()
-                .fg(if live { Color::Green } else { Color::Red })
-                .bold(),
-        ),
-        Span::raw("  "),
-        Span::styled("changed ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{}", state.changed_bits_last)),
-        Span::raw("  "),
-        Span::styled("repeat ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{}", state.repeat_streak)),
-        Span::raw("  "),
-        Span::styled("fp ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!(
-            "{:08x}",
-            (state.stream_fingerprint & 0xffff_ffff) as u32
-        )),
-    ])
-}
-
-fn draw_camera_shot_noise(f: &mut Frame, area: Rect, state: &SensorFlowState, name: &str) {
-    if state.recent_bytes.is_empty() {
-        draw_placeholder(
-            f,
-            area,
-            format!(" {name} — [g] Camera Shot Noise "),
-            "Waiting for stream data...",
-        );
-        return;
-    }
-
-    let mut nibbles = Vec::with_capacity(state.recent_bytes.len() * 2);
-    for &b in &state.recent_bytes {
-        nibbles.push((b >> 4) & 0x0f);
-        nibbles.push(b & 0x0f);
-    }
-
-    let cols = area.width.saturating_sub(6).clamp(20, 64) as usize;
-    let rows = area.height.saturating_sub(12).clamp(6, 18) as usize;
-
-    // Use a rolling window over recent nibble stream so the panel is always full
-    // and movement reflects actual incoming data phase.
-    let window_len = nibbles.len().max(1);
-    let phase = (state.frame as usize) % window_len;
-    let start = nibbles.len().saturating_sub(window_len);
-
-    let nibble_to_glyph = |n: u8| -> char {
-        match n {
-            0 => ' ',
-            1 => '.',
-            2..=3 => ':',
-            4..=5 => '-',
-            6..=7 => '=',
-            8..=9 => '+',
-            10..=11 => '*',
-            12..=13 => '#',
-            14 => '%',
-            _ => '@',
-        }
-    };
-
-    let mut bins = [0usize; 16];
-    for &n in &nibbles {
-        bins[n as usize] += 1;
-    }
-    let max_bin = bins.iter().copied().max().unwrap_or(1).max(1);
-    let hist_half = |lo: usize, hi: usize| -> String {
-        (lo..=hi)
-            .map(|i| {
-                let h = ((bins[i] as f64 / max_bin as f64) * 6.0).round() as usize;
-                match h {
-                    0..=1 => '.',
-                    2..=3 => ':',
-                    4..=5 => '*',
-                    _ => '#',
-                }
-            })
-            .collect()
-    };
-
-    let nib_tail: String = nibbles
-        .iter()
-        .rev()
-        .take(24)
-        .rev()
-        .map(|n| format!("{n:x}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("model ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!(
-                    "rolling sensor-grain map from camera LSB nibbles {}",
-                    spinner(state.frame)
-                ),
-                Style::default().fg(pulse_color(state.frame)),
-            ),
-        ]),
-        flow_status_line(state),
-        Line::from(vec![
-            Span::styled("map ", Style::default().fg(Color::DarkGray)),
-            Span::raw("pixel nibble 0..f -> "),
-            Span::styled(" .:-=+*#%@", Style::default().fg(Color::Yellow)),
-            Span::raw("  "),
-            Span::styled("phase ", Style::default().fg(Color::DarkGray)),
-            Span::raw(format!("{phase}")),
-        ]),
-        Line::from(vec![
-            Span::styled("hist 0-7 ", Style::default().fg(Color::DarkGray)),
-            Span::styled(hist_half(0, 7), Style::default().fg(Color::Yellow)),
-            Span::raw("  "),
-            Span::styled("8-f ", Style::default().fg(Color::DarkGray)),
-            Span::styled(hist_half(8, 15), Style::default().fg(Color::Yellow)),
-        ]),
-        Line::from(vec![
-            Span::styled("nibbles ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                animated_cursor(&nib_tail, state.frame, 'X'),
-                Style::default().fg(Color::Yellow),
-            ),
-        ]),
-        Line::from(""),
-    ];
-
-    for r in 0..rows {
-        let mut row = String::with_capacity(cols);
-        for c in 0..cols {
-            let idx = (phase + (r * cols) + c) % window_len;
-            let n = nibbles.get(start + idx).copied().unwrap_or(0);
-            let mut ch = nibble_to_glyph(n);
-            if c == (state.frame as usize + r) % cols && ch == ' ' {
-                ch = '.';
-            }
-            row.push(ch);
-        }
-        lines.push(Line::from(row));
-    }
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {name}  [g] Camera Shot Noise "));
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: false }),
-        area,
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Output panel
 // ---------------------------------------------------------------------------
@@ -1024,9 +813,86 @@ fn draw_output(f: &mut Frame, area: Rect, app: &App, snap: &Snapshot) {
 // ---------------------------------------------------------------------------
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(" ↑↓ nav  {/} jump  space: select  C: fold all  r: rec  g: graph  c: cond  m: mode  n: size  Tab: cmp  p: pause  q: quit")
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    let bar = Paragraph::new(
+        " ↑↓ nav  space: select  r: rec  g: graph  c: cond  n: size  +/-: speed  p: pause  ?: help  q: quit",
+    )
+    .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(bar, area);
+}
+
+// ---------------------------------------------------------------------------
+// Help modal
+// ---------------------------------------------------------------------------
+
+fn draw_help_modal(f: &mut Frame) {
+    let area = f.area();
+
+    // Center a box ~60 wide, ~24 tall
+    let w = 60u16.min(area.width.saturating_sub(4));
+    let h = 26u16.min(area.height.saturating_sub(2));
+    let x = (area.width.saturating_sub(w)) / 2;
+    let y = (area.height.saturating_sub(h)) / 2;
+    let modal = Rect::new(x, y, w, h);
+
+    // Clear the area behind the modal
+    f.render_widget(Clear, modal);
+
+    let lines = vec![
+        Line::from(Span::styled(
+            "Keyboard Controls",
+            Style::default().bold().fg(Color::Cyan),
+        )),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Navigation",
+            Style::default().bold().fg(Color::Yellow),
+        )]),
+        Line::from("  ↑/k ↓/j    Move cursor up/down"),
+        Line::from("  { / }      Jump to prev/next category"),
+        Line::from("  C          Collapse/expand all categories"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Sources",
+            Style::default().bold().fg(Color::Yellow),
+        )]),
+        Line::from("  space/⏎    Toggle source on/off"),
+        Line::from("             Selected sources show in yellow."),
+        Line::from("             The last selected becomes the active"),
+        Line::from("             source, driving the live chart (● marker)."),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Recording",
+            Style::default().bold().fg(Color::Yellow),
+        )]),
+        Line::from("  r          Start/stop recording to disk"),
+        Line::from("             Records from all selected (yellow) sources."),
+        Line::from("             Sessions are saved to ./sessions/"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Display",
+            Style::default().bold().fg(Color::Yellow),
+        )]),
+        Line::from("  g          Cycle chart mode (entropy, timing, walk...)"),
+        Line::from("  c          Cycle conditioning (SHA-256/raw/VonNeumann)"),
+        Line::from("  n          Cycle sample size (16/32/64/128 bytes)"),
+        Line::from("  m          Cycle source mode (QCicada only)"),
+        Line::from("  +/- or ]/[ Speed up / slow down refresh rate"),
+        Line::from("  p          Pause/resume collection"),
+        Line::from("  s          Export snapshot as JSON"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press any key to close",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Help ");
+
+    let p = Paragraph::new(lines).block(block);
+    f.render_widget(p, modal);
 }
 
 // ---------------------------------------------------------------------------

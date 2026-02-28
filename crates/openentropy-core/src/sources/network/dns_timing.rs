@@ -5,6 +5,7 @@
 //! interrupt coalescing, and electromagnetic propagation variations.
 
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -106,12 +107,21 @@ fn dns_query_rtt(server: &str, hostname: &str, timeout: Duration) -> Option<u128
         & 0xFFFF) as u16;
     let query = build_dns_query(tx_id, hostname);
 
+    let tx_id_bytes = tx_id.to_be_bytes();
     let start = Instant::now();
     socket.send_to(&query, addr).ok()?;
 
     let mut buf = [0u8; 512];
-    let _n = socket.recv_from(&mut buf).ok()?;
-    Some(start.elapsed().as_nanos())
+    // Read responses until we get one matching our transaction ID or timeout.
+    // Cap attempts to avoid spinning on a flood of stale responses.
+    for _ in 0..8 {
+        let (n, _src) = socket.recv_from(&mut buf).ok()?;
+        if n >= 2 && buf[0] == tx_id_bytes[0] && buf[1] == tx_id_bytes[1] {
+            return Some(start.elapsed().as_nanos());
+        }
+        // Wrong txid — stale response from a prior query. Try again.
+    }
+    None
 }
 
 impl EntropySource for DNSTimingSource {
@@ -120,9 +130,9 @@ impl EntropySource for DNSTimingSource {
     }
 
     fn is_available(&self) -> bool {
-        // Try one query; if we get a response within the timeout the source is
-        // usable.
-        dns_query_rtt(DNS_SERVERS[0], DNS_HOSTNAMES[0], DNS_TIMEOUT).is_some()
+        static DNS_AVAILABLE: OnceLock<bool> = OnceLock::new();
+        *DNS_AVAILABLE
+            .get_or_init(|| dns_query_rtt(DNS_SERVERS[0], DNS_HOSTNAMES[0], DNS_TIMEOUT).is_some())
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

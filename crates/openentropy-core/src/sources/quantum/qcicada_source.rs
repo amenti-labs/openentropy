@@ -5,15 +5,27 @@
 //! photodiode), providing full 8 bits/byte of quantum randomness per NIST
 //! SP 800-90B.
 //!
+//! **On-device conditioning**: The QCicada handles its own conditioning internally.
+//! No additional conditioning should be applied by the pool when using this source
+//! alone. The device supports three modes:
+//! - `raw` — health-tested noise after on-device filtering (default)
+//! - `sha256` — NIST SP 800-90B SHA-256 conditioning on-device
+//! - `samples` — raw ADC readings from the photodiode, no processing
+//!
 //! Configuration is via environment variables:
 //! - `QCICADA_MODE` — post-processing mode: `raw`, `sha256`, or `samples` (default: `raw`)
 //! - `QCICADA_POST_PROCESS` — legacy alias for `QCICADA_MODE`
 //! - `QCICADA_PORT` — serial port path (auto-detected if unset)
 //! - `QCICADA_TIMEOUT` — connection timeout in ms (default: 5000)
 
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
+
+/// Thread-safe override for QCicada mode, set by the CLI before source discovery.
+/// Checked by `QCicadaConfig::default()` before falling back to env vars.
+/// This avoids the need for `unsafe { std::env::set_var(...) }`.
+pub static QCICADA_CLI_MODE: OnceLock<String> = OnceLock::new();
 
 static QCICADA_INFO: SourceInfo = SourceInfo {
     name: "qcicada",
@@ -27,7 +39,7 @@ static QCICADA_INFO: SourceInfo = SourceInfo {
     requirements: &[Requirement::QCicada],
     entropy_rate_estimate: 8.0,
     composite: false,
-    is_fast: true,
+    is_fast: false, // USB serial init can take up to timeout_ms (default 5s)
 };
 
 /// Configuration for the QCicada QRNG device.
@@ -47,9 +59,11 @@ impl Default for QCicadaConfig {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(5000);
-        let post_process = std::env::var("QCICADA_MODE")
-            .or_else(|_| std::env::var("QCICADA_POST_PROCESS"))
-            .ok()
+        let post_process = QCICADA_CLI_MODE
+            .get()
+            .cloned()
+            .or_else(|| std::env::var("QCICADA_MODE").ok())
+            .or_else(|| std::env::var("QCICADA_POST_PROCESS").ok())
             .unwrap_or_else(|| "raw".into());
         Self {
             port,
@@ -84,7 +98,7 @@ impl Default for QCicadaSource {
 impl QCicadaSource {
     /// Parse the current runtime mode into the crate enum.
     fn post_process_mode(&self) -> qcicada::PostProcess {
-        let mode = self.mode.lock().unwrap();
+        let mode = self.mode.lock().unwrap_or_else(|e| e.into_inner());
         match mode.as_str() {
             "sha256" => qcicada::PostProcess::Sha256,
             "samples" => qcicada::PostProcess::RawSamples,
@@ -115,18 +129,21 @@ impl EntropySource for QCicadaSource {
     }
 
     fn is_available(&self) -> bool {
-        let mut cached = self.available.lock().unwrap();
-        if let Some(avail) = *cached {
-            return avail;
+        let mut cached = self.available.lock().unwrap_or_else(|e| e.into_inner());
+        // Positive result is stable (device was found, assume it stays).
+        // Negative result is re-checked each call (device may be hot-plugged).
+        if *cached == Some(true) {
+            return true;
         }
-        // Use discover_devices() for a lightweight check before opening.
         let avail = !qcicada::discover_devices().is_empty();
-        *cached = Some(avail);
+        if avail {
+            *cached = Some(true);
+        }
         avail
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        let mut guard = self.device.lock().unwrap();
+        let mut guard = self.device.lock().unwrap_or_else(|e| e.into_inner());
 
         // Lazy-init: open device on first call.
         if guard.is_none() {
@@ -156,24 +173,26 @@ impl EntropySource for QCicadaSource {
         }
         match value {
             "raw" | "sha256" | "samples" => {}
-            _ => return Err(format!("invalid mode: {value} (expected raw|sha256|samples)")),
+            _ => {
+                return Err(format!(
+                    "invalid mode: {value} (expected raw|sha256|samples)"
+                ));
+            }
         }
-        *self.mode.lock().unwrap() = value.to_string();
+        *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = value.to_string();
 
-        // If the device is already open, update its post-processing mode live.
-        let pp = match value {
-            "sha256" => qcicada::PostProcess::Sha256,
-            "samples" => qcicada::PostProcess::RawSamples,
-            _ => qcicada::PostProcess::RawNoise,
-        };
-        if let Some(ref mut qrng) = *self.device.lock().unwrap() {
-            let _ = qrng.set_postprocess(pp);
-        }
+        // Drop the current device handle so the next collect() reopens with the
+        // new mode. USB serial devices are more reliable when reconnected after
+        // a mode switch than when the mode is changed on a live connection.
+        *self.device.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 
     fn config_options(&self) -> Vec<(&'static str, String)> {
-        vec![("mode", self.mode.lock().unwrap().clone())]
+        vec![(
+            "mode",
+            self.mode.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        )]
     }
 }
 
@@ -189,7 +208,7 @@ mod tests {
         assert_eq!(src.info().platform, Platform::Any);
         assert_eq!(src.info().entropy_rate_estimate, 8.0);
         assert!(!src.info().composite);
-        assert!(src.info().is_fast);
+        assert!(!src.info().is_fast);
         assert_eq!(src.info().requirements, &[Requirement::QCicada]);
     }
 

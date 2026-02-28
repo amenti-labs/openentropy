@@ -6,7 +6,7 @@
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with multiple crates, each with a focused responsibility.
 
-**Version:** 0.7.0
+**Version:** 0.8.0
 **Edition:** Rust 2024
 **License:** MIT
 
@@ -23,7 +23,7 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       └── sources/            # 58 source implementations, organized by category
+│   │       └── sources/            # 63 source implementations, organized by category
 │   │           ├── mod.rs          # all_sources() composed from category modules
 │   │           ├── helpers.rs      # Shared: mach_time, extract_lsbs, xor_fold, etc.
 │   │           ├── timing/         # Clock jitter, DRAM row buffer, page fault (7 sources)
@@ -32,15 +32,16 @@ openentropy/
 │   │           ├── network/        # DNS timing, TCP connect, WiFi RSSI (3 sources)
 │   │           ├── io/             # Disk I/O, NVMe sensors, fsync (6 sources)
 │   │           ├── sensor/         # Audio noise, camera noise, Bluetooth (4 sources)
-│   │           ├── microarch/      # Branch prediction, TLB, AMX timing (14 sources)
+│   │           ├── microarch/      # Branch prediction, TLB, AMX timing (16 sources)
 │   │           ├── ipc/            # Mach ports, pipes, kqueue, keychain (4 sources)
-│   │           ├── thermal/        # Audio/display/PCIe PLL crossings (3 sources)
+│   │           ├── thermal/        # Audio/display/PCIe PLL crossings (4 sources)
 │   │           ├── gpu/            # Metal divergence, IOSurface, NL inference (3 sources)
-│   │           └── signal/         # Compression, hash, Spotlight timing (3 sources)
+│   │           ├── signal/         # Compression, hash, Spotlight timing (3 sources)
+│   │           └── quantum/        # QCicada USB QRNG (1 source)
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
-│   │       ├── main.rs             # clap argument parsing, 9 subcommands
+│   │       ├── main.rs             # clap argument parsing, 8 subcommands
 │   │       ├── commands/           # One module per subcommand
 │   │       │   ├── mod.rs          # make_pool() helper with source filtering
 │   │       │   ├── scan.rs         # Discover available sources
@@ -51,7 +52,7 @@ openentropy/
 │   │       │   ├── monitor.rs      # Launch TUI dashboard
 │   │       │   ├── record.rs       # Record session data to disk
 │   │       │   ├── sessions.rs     # Inspect/analyze recorded sessions
-│   │       │   └── telemetry.rs    # Standalone telemetry capture
+│   │       │   └── telemetry.rs    # Shared telemetry helpers
 │   │       └── tui/                # Interactive dashboard
 │   │           ├── mod.rs
 │   │           ├── app.rs          # Application state, event loop
@@ -78,7 +79,7 @@ openentropy/
 
 ### 1. openentropy-core
 
-The foundational library. Contains all 58 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
+The foundational library. Contains all 63 entropy source implementations, the mixing pool, conditioning pipeline, quality metrics, and platform detection.
 
 **Key dependencies:** `sha2`, `flate2`, `libc`, `rand`, `tempfile`, `log`, `getrandom`
 
@@ -95,7 +96,7 @@ The command-line binary (`openentropy`). Provides nine subcommands for interacti
 
 **Key dependencies:** `openentropy-core`, `openentropy-server`, `openentropy-tests`, `clap`, `ratatui`, `crossterm`, `tokio`
 
-**Subcommands:** `scan`, `bench`, `analyze`, `record`, `sessions`, `monitor`, `stream`, `server`, `telemetry`
+**Subcommands:** `scan`, `bench`, `analyze`, `record`, `sessions`, `monitor`, `stream`, `server`
 
 ### 3. openentropy-server
 
@@ -121,7 +122,7 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
 
 ```
                          ┌─────────────────────────────────────────────┐
-                         │          58 ENTROPY SOURCES                 │
+                         │          63 ENTROPY SOURCES                 │
                          │                                             │
                          │  Timing      System      Network   Hardware │
                          │  Silicon     Frontier     Novel             │
@@ -145,7 +146,7 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
                                          ▼
                          ┌───────────────────────────────┐
                          │    SHA-256 FINAL CONDITIONING  │
-                         │    (NIST SP 800-90B)           │
+                         │                                │
                          │                                │
                          │  Inputs mixed per 32-byte      │
                          │  output block:                 │
@@ -205,13 +206,14 @@ pub struct SourceInfo {
     pub platform: Platform,                       // e.g. Platform::MacOS
     pub requirements: &'static [Requirement],     // e.g. &[Requirement::Wifi]
     pub composite: bool,                          // Whether source combines domains
-    pub entropy_rate_estimate: f64,                // Estimated bits/second
+    pub entropy_rate_estimate: f64,                // Estimated bits/byte (max 8.0)
+    pub is_fast: bool,                            // true if collection < 2s
 }
 ```
 
 ### `SourceCategory` enum
 
-Twelve categories classify entropy sources by physical mechanism.
+Thirteen categories classify entropy sources by physical mechanism.
 
 ```rust
 pub enum SourceCategory {
@@ -224,7 +226,7 @@ pub enum SourceCategory {
     GPU,
     Network,
     System,
-    Composite,
+    Quantum,
     Signal,
     Sensor,
 }
@@ -252,7 +254,7 @@ output_block = SHA-256(
 )
 ```
 
-The output digest becomes the new internal state (chaining), and is appended to the output buffer. This counter-mode construction can produce arbitrary output lengths.
+The output digest is appended to the output buffer. The new internal state is derived separately: `SHA-256(output || "openentropy_state")`, ensuring that knowing the output does not reveal the internal state (forward secrecy). This counter-mode construction can produce arbitrary output lengths.
 
 ## Parallel Collection
 
@@ -298,7 +300,7 @@ Sources that panic during collection are caught via `catch_unwind` and marked un
 - SHA-256 conditioning ensures output is computationally indistinguishable from random, even if individual sources are weak or compromised.
 - Every output block mixes 8 bytes from OS CSPRNG as a safety net. Even if hardware sources fail, output remains at least as strong as the OS entropy source.
 - Health monitoring detects degraded sources and flags them, but never stops producing output.
-- The internal state is chained (each output updates the state), providing forward secrecy: compromising a past state does not reveal future output.
+- The internal state is derived separately from the output (`SHA-256(output || domain_separator)`), providing forward secrecy: observing output does not reveal the internal state.
 
 ## Build and Toolchain
 

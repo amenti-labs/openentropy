@@ -7,6 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
+use crate::sources::helpers::extract_timing_entropy;
 
 /// Requests zero-duration sleeps and measures the actual elapsed time.
 /// The jitter captures OS scheduler non-determinism: timer interrupt
@@ -48,22 +49,7 @@ impl EntropySource for SleepJitterSource {
             raw_timings.push(elapsed_ns);
         }
 
-        // Compute deltas and XOR adjacent pairs
-        let deltas: Vec<u64> = raw_timings
-            .windows(2)
-            .map(|w| w[1].wrapping_sub(w[0]))
-            .collect();
-
-        let mut raw = Vec::with_capacity(n_samples);
-        for pair in deltas.windows(2) {
-            let xored = pair[0] ^ pair[1];
-            raw.push(xored as u8);
-            if raw.len() >= n_samples {
-                break;
-            }
-        }
-
-        raw
+        extract_timing_entropy(&raw_timings, n_samples)
     }
 }
 

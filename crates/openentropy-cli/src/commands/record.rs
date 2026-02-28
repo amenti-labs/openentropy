@@ -11,6 +11,7 @@ use openentropy_core::session::{SessionConfig, SessionMeta, SessionWriter};
 
 pub struct RecordArgs {
     pub positional: Vec<String>,
+    pub all: bool,
     pub duration: Option<String>,
     pub tags: Vec<String>,
     pub note: Option<String>,
@@ -27,31 +28,14 @@ pub fn run(args: RecordArgs) {
     // Parse conditioning mode
     let mode = super::parse_conditioning(&args.conditioning);
 
-    // Resolve sources from positional args (required)
-    let sources = super::find_sources(&args.positional);
-    if sources.is_empty() {
-        eprintln!(
-            "Error: no matching sources found. Run 'openentropy scan' to list available sources."
-        );
-        std::process::exit(1);
-    }
+    // Resolve sources: positional names, --all, or default fast sources
+    let sources = super::resolve_sources(&args.positional, args.all);
 
     // Build pool from the resolved sources for per-source raw byte collection
-    let pool = super::make_pool(Some(
-        &sources
-            .iter()
-            .map(|s| s.name().to_string())
-            .collect::<Vec<_>>()
-            .join(","),
-    ));
-
-    let available: Vec<String> = pool.source_infos().iter().map(|i| i.name.clone()).collect();
-    if available.is_empty() {
-        eprintln!(
-            "Error: no matching sources found for '{}'",
-            args.positional.join(", ")
-        );
-        std::process::exit(1);
+    let mut pool = openentropy_core::EntropyPool::new(None);
+    let available: Vec<String> = sources.iter().map(|s| s.name().to_string()).collect();
+    for source in sources {
+        pool.add_source(source);
     }
 
     // Parse duration
@@ -103,10 +87,11 @@ pub fn run(args: RecordArgs) {
     // Set up Ctrl+C handler
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
-    ctrlc::set_handler(move || {
+    if let Err(e) = ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
-    })
-    .expect("Error setting Ctrl+C handler");
+    }) {
+        eprintln!("Warning: could not set Ctrl+C handler: {e}");
+    }
 
     // Print session start info
     let session_dir = writer.session_dir().to_path_buf();
@@ -252,5 +237,9 @@ fn parse_duration(s: &str) -> Duration {
         std::process::exit(1);
     });
 
-    Duration::from_millis(value * multiplier)
+    let millis = value.checked_mul(multiplier).unwrap_or_else(|| {
+        eprintln!("Duration too large: {s}");
+        std::process::exit(1);
+    });
+    Duration::from_millis(millis)
 }

@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
-use crate::conditioning::{quick_min_entropy, quick_shannon};
+use crate::conditioning::{quick_autocorrelation_lag1, quick_min_entropy, quick_shannon};
 use crate::source::{EntropySource, SourceState};
 
 /// Thread-safe multi-source entropy pool.
@@ -148,6 +148,7 @@ impl EntropyPool {
 
         for chunk in to_launch.chunks(max_concurrent) {
             let batch_start = Instant::now();
+            let chunk_indices: HashSet<usize> = chunk.iter().map(|&(idx, _)| idx).collect();
 
             for &(idx, ref src) in chunk {
                 let tx = tx.clone();
@@ -169,6 +170,8 @@ impl EntropyPool {
 
             // Wait for this batch to finish. Each batch gets its own full timeout
             // window so that slow sources in early batches don't starve later ones.
+            // Only count messages belonging to this chunk's indices — late messages
+            // from prior chunks are still collected but don't advance batch_done.
             let mut batch_done = 0;
             while batch_done < chunk.len() {
                 let remaining = timeout.saturating_sub(batch_start.elapsed());
@@ -181,7 +184,9 @@ impl EntropyPool {
                         if !data.is_empty() {
                             results.extend_from_slice(&data);
                         }
-                        batch_done += 1;
+                        if chunk_indices.contains(&idx) {
+                            batch_done += 1;
+                        }
                     }
                     Err(_) => break,
                 }
@@ -190,8 +195,15 @@ impl EntropyPool {
         drop(tx);
 
         // Drain any remaining results from threads that finished after batch loops.
+        // Use a brief recv_timeout to catch threads completing just after the
+        // batch loops ended, rather than breaking on the first empty try_recv.
+        let drain_deadline = Instant::now() + Duration::from_millis(50);
         while received.len() < scheduled.len() {
-            match rx.try_recv() {
+            let remaining = drain_deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(remaining) {
                 Ok((idx, data)) => {
                     received.insert(idx);
                     if !data.is_empty() {
@@ -234,34 +246,86 @@ impl EntropyPool {
 
     /// Collect `n_samples` of entropy from sources whose names are in the list.
     /// Smaller `n_samples` values are faster — use this for interactive/TUI contexts.
+    ///
+    /// Uses detached threads with a 10-second timeout to avoid blocking
+    /// indefinitely on slow or hung sources.
     pub fn collect_enabled_n(&self, enabled_names: &[String], n_samples: usize) -> usize {
-        let results: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let timeout = Duration::from_secs(10);
+        let (tx, rx) = std::sync::mpsc::channel::<(usize, Vec<u8>)>();
 
-        std::thread::scope(|s| {
-            let handles: Vec<_> = self
-                .sources
-                .iter()
-                .filter(|ss_mutex| {
-                    let ss = ss_mutex.lock().unwrap();
-                    enabled_names.iter().any(|n| n == ss.source.info().name)
-                })
-                .map(|ss_mutex| {
-                    let results = Arc::clone(&results);
-                    s.spawn(move || {
-                        let data = Self::collect_one_n(ss_mutex, n_samples);
-                        if !data.is_empty() {
-                            results.lock().unwrap().extend_from_slice(&data);
-                        }
-                    })
-                })
-                .collect();
-
-            for handle in handles {
-                let _ = handle.join();
+        let mut to_launch: Vec<(usize, Arc<Mutex<SourceState>>)> = Vec::new();
+        for (idx, ss_mutex) in self.sources.iter().enumerate() {
+            let matches = {
+                let ss = ss_mutex.lock().unwrap();
+                enabled_names.iter().any(|n| n == ss.source.info().name)
+            };
+            if matches {
+                to_launch.push((idx, Arc::clone(ss_mutex)));
             }
-        });
+        }
 
-        let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+        if to_launch.is_empty() {
+            return 0;
+        }
+
+        let total = to_launch.len();
+        let max_concurrent = num_cpus().min(16);
+        let mut results = Vec::new();
+        let mut received = HashSet::new();
+
+        for chunk in to_launch.chunks(max_concurrent) {
+            let batch_start = Instant::now();
+            let chunk_indices: HashSet<usize> = chunk.iter().map(|&(idx, _)| idx).collect();
+
+            for &(idx, ref ss_mutex) in chunk {
+                let tx = tx.clone();
+                let ss_mutex = Arc::clone(ss_mutex);
+                std::thread::spawn(move || {
+                    let data = Self::collect_one_n(&ss_mutex, n_samples);
+                    let _ = tx.send((idx, data));
+                });
+            }
+
+            let mut batch_done = 0;
+            while batch_done < chunk.len() {
+                let remaining = timeout.saturating_sub(batch_start.elapsed());
+                if remaining.is_zero() {
+                    break;
+                }
+                match rx.recv_timeout(remaining) {
+                    Ok((idx, data)) => {
+                        received.insert(idx);
+                        if !data.is_empty() {
+                            results.extend_from_slice(&data);
+                        }
+                        if chunk_indices.contains(&idx) {
+                            batch_done += 1;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+        drop(tx);
+
+        // Brief drain for threads finishing just after batch loops.
+        let drain_deadline = Instant::now() + Duration::from_millis(50);
+        while received.len() < total {
+            let remaining = drain_deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(remaining) {
+                Ok((idx, data)) => {
+                    received.insert(idx);
+                    if !data.is_empty() {
+                        results.extend_from_slice(&data);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
         let n = results.len();
         self.buffer.lock().unwrap().extend_from_slice(&results);
         n
@@ -284,6 +348,7 @@ impl EntropyPool {
                 ss.total_bytes += data.len() as u64;
                 ss.last_entropy = quick_shannon(&data);
                 ss.last_min_entropy = quick_min_entropy(&data);
+                ss.last_autocorrelation = quick_autocorrelation_lag1(&data);
                 ss.healthy = ss.last_entropy > 1.0;
                 data
             }
@@ -384,8 +449,14 @@ impl EntropyPool {
             h.update(os_random);
 
             let digest: [u8; 32] = h.finalize().into();
-            *self.state.lock().unwrap() = digest;
             output.extend_from_slice(&digest);
+
+            // Derive state separately from output for forward secrecy.
+            let mut sh = Sha256::new();
+            sh.update(digest);
+            sh.update(b"openentropy_state");
+            let new_state: [u8; 32] = sh.finalize().into();
+            *self.state.lock().unwrap() = new_state;
         }
 
         *self.total_output.lock().unwrap() += n_bytes as u64;
@@ -433,6 +504,7 @@ impl EntropyPool {
                 bytes: ss.total_bytes,
                 entropy: ss.last_entropy,
                 min_entropy: ss.last_min_entropy,
+                autocorrelation: ss.last_autocorrelation,
                 time: ss.last_collect_time.as_secs_f64(),
                 failures: ss.failures,
             });
@@ -502,6 +574,9 @@ impl EntropyPool {
             crate::conditioning::ConditioningMode::Sha256 => n_bytes * 4 + 64,
         };
         let raw = Self::collect_one_n(&ss_mutex, n_samples);
+        if raw.is_empty() {
+            return None; // Source failed to produce output
+        }
         let output = crate::conditioning::condition(&raw, n_bytes, mode);
         Some(output)
     }
@@ -516,6 +591,9 @@ impl EntropyPool {
         })?;
 
         let raw = Self::collect_one_n(ss_mutex, n_samples);
+        if raw.is_empty() {
+            return None; // Source failed to produce output
+        }
         Some(raw)
     }
 
@@ -610,6 +688,8 @@ pub struct SourceHealth {
     pub entropy: f64,
     /// Min-entropy of the last collection (bits per byte, max 8.0). More conservative than Shannon.
     pub min_entropy: f64,
+    /// Lag-1 autocorrelation of the last collection ([-1, 1], 0 = ideal).
+    pub autocorrelation: f64,
     /// Time taken for the last collection in seconds.
     pub time: f64,
     /// Number of collection failures.

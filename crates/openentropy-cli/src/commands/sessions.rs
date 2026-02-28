@@ -420,9 +420,12 @@ fn format_duration_ms(ms: u64) -> String {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max - 3])
+    if s.len() <= max || max < 4 {
+        return s.to_string();
     }
+    // Find a valid UTF-8 boundary at or before `max - 3` to avoid
+    // panicking on multi-byte characters.
+    let target = max - 3;
+    let boundary = s.floor_char_boundary(target);
+    format!("{}...", &s[..boundary])
 }

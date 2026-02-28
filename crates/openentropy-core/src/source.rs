@@ -275,6 +275,7 @@ pub struct SourceState {
     pub failures: u64,
     pub last_entropy: f64,
     pub last_min_entropy: f64,
+    pub last_autocorrelation: f64,
     pub last_collect_time: Duration,
     pub healthy: bool,
 }
@@ -287,6 +288,7 @@ impl SourceState {
             failures: 0,
             last_entropy: 0.0,
             last_min_entropy: 0.0,
+            last_autocorrelation: 0.0,
             last_collect_time: Duration::ZERO,
             healthy: true,
         }

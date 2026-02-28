@@ -174,14 +174,33 @@ impl EntropySource for MachIPCSource {
                 let recv_ports = ports.clone();
                 let receiver = thread::spawn(move || {
                     let mut recv_buf = vec![0u8; 1024 + ool_size * 2];
-                    while !stop2.load(Ordering::Relaxed) {
+                    // Safety net: receiver exits after 30s even if stop is never set
+                    // (e.g. if the main thread panics between spawn and stop.store).
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                    while !stop2.load(Ordering::Relaxed) && std::time::Instant::now() < deadline {
                         for &port in &recv_ports {
                             // SAFETY: recv_buf is large enough. Non-blocking receive.
                             unsafe {
                                 let hdr = recv_buf.as_mut_ptr() as *mut MachMsgHeader;
                                 (*hdr).msgh_local_port = port;
                                 (*hdr).msgh_size = recv_buf.len() as u32;
-                                mach_msg(hdr, 2 | 0x100, 0, recv_buf.len() as u32, port, 0, 0);
+                                let kr =
+                                    mach_msg(hdr, 2 | 0x100, 0, recv_buf.len() as u32, port, 0, 0);
+                                // If we received a complex message, the kernel mapped OOL
+                                // data into our address space. Deallocate it to prevent
+                                // VM memory leaks proportional to message count.
+                                if kr == 0 && ((*hdr).msgh_bits & 0x80000000) != 0 {
+                                    let recv_ool = recv_buf.as_ptr().add(
+                                        std::mem::size_of::<MachMsgHeader>()
+                                            + std::mem::size_of::<MachMsgBody>(),
+                                    )
+                                        as *const MachMsgOOLDescriptor;
+                                    let addr = (*recv_ool).address as usize;
+                                    let size = (*recv_ool).size as usize;
+                                    if addr != 0 && size > 0 {
+                                        vm_deallocate(mach_task_self(), addr, size);
+                                    }
+                                }
                             }
                         }
                         std::thread::yield_now();
@@ -318,10 +337,8 @@ struct MachMsgOOL {
     ool: MachMsgOOLDescriptor,
 }
 
-// SAFETY: MachMsgOOL contains a raw pointer (ool.address), but we only use it
-// within a single thread's send operation where the pointed-to buffer is alive.
-#[cfg(target_os = "macos")]
-unsafe impl Send for MachMsgOOL {}
+// MachMsgOOL contains a raw pointer (ool.address) and is intentionally !Send.
+// It is only used on the same thread that owns the pointed-to buffer.
 
 #[cfg(target_os = "macos")]
 impl MachMsgOOL {
@@ -347,6 +364,7 @@ unsafe extern "C" {
         timeout: u32,
         notify: u32,
     ) -> i32;
+    fn vm_deallocate(target: u32, addr: usize, size: usize) -> i32;
 }
 
 #[cfg(test)]

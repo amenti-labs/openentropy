@@ -39,8 +39,8 @@ pub fn mach_time() -> u64 {
 ///
 /// For every 8 input bits, one output byte is produced.
 fn pack_bits_into_bytes(bits: &[u8]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(bits.len() / 8 + 1);
-    for chunk in bits.chunks(8) {
+    let mut bytes = Vec::with_capacity(bits.len() / 8);
+    for chunk in bits.chunks_exact(8) {
         let mut byte = 0u8;
         for (i, &bit) in chunk.iter().enumerate() {
             byte |= bit << (7 - i);
@@ -82,17 +82,11 @@ pub fn command_exists(name: &str) -> bool {
 }
 
 /// Execute a command and return its `Output` if it succeeds.
+///
+/// Uses a 30-second timeout to prevent indefinite hangs from system utilities
+/// that might block (e.g. `ioreg -l -w0` on complex IOKit trees).
 fn run_command_output(program: &str, args: &[&str]) -> Option<std::process::Output> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    Some(output)
+    run_command_output_timeout(program, args, 30_000)
 }
 
 /// Run a subprocess command with a timeout and return full `Output`.
@@ -580,12 +574,10 @@ mod tests {
 
     #[test]
     fn extract_lsbs_partial_byte() {
-        // 5 values -> only 5 bits, still produces 1 byte (padded)
+        // 5 values -> only 5 bits, not enough for a full byte -> empty
         let deltas = vec![1u64, 0, 1, 0, 1];
         let bytes = extract_lsbs_u64(&deltas);
-        assert_eq!(bytes.len(), 1);
-        // Bits: 1,0,1,0,1,0,0,0 = 0b10101000 = 0xA8
-        assert_eq!(bytes[0], 0b10101000);
+        assert!(bytes.is_empty());
     }
 
     #[test]

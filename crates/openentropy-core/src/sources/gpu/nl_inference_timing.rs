@@ -258,6 +258,10 @@ mod imp {
                 }
             }
 
+            // Release the NLLanguageRecognizer instance (alloc+init = +1 retain).
+            let release_sel = unsafe { sel_registerName(c"release".as_ptr()) };
+            unsafe { send(rec, release_sel) };
+
             extract_timing_entropy(&timings, n_samples)
         }
     }

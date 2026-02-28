@@ -26,7 +26,7 @@ static DRAM_ROW_BUFFER_INFO: SourceInfo = SourceInfo {
     requirements: &[],
     entropy_rate_estimate: 3.0,
     composite: false,
-    is_fast: true,
+    is_fast: false,
 };
 
 impl EntropySource for DRAMRowBufferSource {

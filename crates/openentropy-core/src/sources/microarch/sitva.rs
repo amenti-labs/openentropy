@@ -106,7 +106,12 @@ mod imp {
         }
 
         while !stop.load(Ordering::Relaxed) {
-            // 32× FMLA — fills the FP execution unit, maximises scheduler pressure
+            // 32× FMLA — fills the FP execution unit, maximises scheduler pressure.
+            // Note: `out` (not `inout`) is intentional. The goal is FP unit saturation
+            // for scheduler pressure, not mathematically correct FMLA accumulation.
+            // Register values between iterations are irrelevant — even if the compiler
+            // clobbers v0-v7 between asm blocks (unlikely: only a bool load separates
+            // them), the FMLA burst still occupies the execution units for ~32 cycles.
             unsafe {
                 core::arch::asm!(
                     "fmla v0.4s, v1.4s, v2.4s",
@@ -169,7 +174,7 @@ mod imp {
                 options(nostack),
             );
         }
-        mach_time() - t0
+        mach_time().wrapping_sub(t0)
     }
 
     impl EntropySource for SITVASource {

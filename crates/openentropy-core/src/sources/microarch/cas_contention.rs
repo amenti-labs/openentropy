@@ -77,7 +77,7 @@ static CAS_CONTENTION_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
     is_fast: false,
 };
@@ -105,14 +105,12 @@ impl EntropySource for CASContentionSource {
             Arc::new((0..total_atomics).map(|_| AtomicU64::new(0)).collect());
 
         let go = Arc::new(AtomicU64::new(0));
-        let stop = Arc::new(AtomicU64::new(0));
 
         let mut handles = Vec::with_capacity(nthreads);
 
         for thread_id in 0..nthreads {
             let targets = targets.clone();
             let go = go.clone();
-            let stop = stop.clone();
             let count = samples_per_thread;
 
             handles.push(thread::spawn(move || {
@@ -125,10 +123,6 @@ impl EntropySource for CASContentionSource {
                 }
 
                 for _ in 0..count {
-                    if stop.load(Ordering::Relaxed) != 0 {
-                        break;
-                    }
-
                     lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1);
                     let idx = ((lcg >> 32) as usize % NUM_TARGETS) * TARGET_SPACING;
 
@@ -150,17 +144,14 @@ impl EntropySource for CASContentionSource {
             }));
         }
 
-        // Start all threads.
+        // Start all threads simultaneously for maximum contention.
         go.store(1, Ordering::Release);
 
-        // Collect results.
+        // Collect results (threads are bounded by their iteration count).
         let results: Vec<ThreadResult> = handles
             .into_iter()
             .map(|h| h.join().unwrap_or(ThreadResult { timings: vec![] }))
             .collect();
-
-        // Signal stop (in case any thread is still running).
-        stop.store(1, Ordering::Release);
 
         // XOR-combine timings from all threads for maximum entropy.
         let min_len = results.iter().map(|r| r.timings.len()).min().unwrap_or(0);

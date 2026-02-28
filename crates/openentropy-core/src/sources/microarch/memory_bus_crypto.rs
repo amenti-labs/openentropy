@@ -34,10 +34,11 @@
 //! of any published hardware specification.
 
 use std::ptr;
-use std::time::Instant;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 use crate::sources::helpers::extract_timing_entropy;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+use crate::sources::helpers::mach_time;
 
 static MEMORY_BUS_CRYPTO_INFO: SourceInfo = SourceInfo {
     name: "memory_bus_crypto",
@@ -76,6 +77,19 @@ pub struct MemoryBusCryptoSource;
 mod imp {
     use super::*;
 
+    /// RAII guard for mmap regions — ensures munmap on drop (including panic unwind).
+    struct MappedRegions(Vec<*mut u8>);
+
+    impl Drop for MappedRegions {
+        fn drop(&mut self) {
+            for &r in &self.0 {
+                unsafe {
+                    libc::munmap(r as *mut libc::c_void, REGION_SIZE);
+                }
+            }
+        }
+    }
+
     impl EntropySource for MemoryBusCryptoSource {
         fn info(&self) -> &SourceInfo {
             &MEMORY_BUS_CRYPTO_INFO
@@ -95,11 +109,11 @@ mod imp {
             // Map NUM_REGIONS separate anonymous regions.
             // Each is in a distinct virtual address range, which maximises
             // the probability that they fall in different AES key-tweak domains.
-            let mut regions: Vec<*mut u8> = Vec::with_capacity(NUM_REGIONS);
+            let mut raw_regions: Vec<*mut u8> = Vec::with_capacity(NUM_REGIONS);
 
             unsafe {
                 for i in 0..NUM_REGIONS {
-                    let ptr = libc::mmap(
+                    let p = libc::mmap(
                         ptr::null_mut(),
                         REGION_SIZE,
                         libc::PROT_READ | libc::PROT_WRITE,
@@ -108,27 +122,27 @@ mod imp {
                         0,
                     ) as *mut u8;
 
-                    if ptr == libc::MAP_FAILED as *mut u8 {
-                        // Partial allocation: clean up and return empty.
-                        for &r in &regions {
-                            libc::munmap(r as *mut libc::c_void, REGION_SIZE);
-                        }
+                    if p == libc::MAP_FAILED as *mut u8 {
+                        // Partial allocation: RAII guard will clean up on drop.
+                        let _guard = MappedRegions(raw_regions);
                         return Vec::new();
                     }
 
                     // Touch every page to ensure physical backing.
                     for page in 0..REGION_PAGES {
-                        ptr::write_volatile(ptr.add(page * APPLE_PAGE_SIZE), i as u8);
+                        ptr::write_volatile(p.add(page * APPLE_PAGE_SIZE), i as u8);
                     }
-                    regions.push(ptr);
+                    raw_regions.push(p);
                 }
             }
 
+            // RAII guard: munmap on drop, including panic unwind.
+            let regions = MappedRegions(raw_regions);
+
             let mut timings: Vec<u64> = Vec::with_capacity(raw_count);
 
-            // Pseudo-random walk across regions to avoid predictable patterns.
-            // Using a simple LCG rather than rand to keep dependencies minimal.
-            let mut lcg: u64 = 0xFEED_FACE_DEAD_BEEF;
+            // Seed LCG from mach_time to prevent predictable access patterns.
+            let mut lcg: u64 = mach_time() | 1;
 
             unsafe {
                 for _ in 0..raw_count {
@@ -145,8 +159,8 @@ mod imp {
                     let src_off = ((lcg >> 16) as usize % (REGION_SIZE / 64)) * 64;
                     let dst_off = (((lcg >> 48) as usize * 97) % (REGION_SIZE / 64)) * 64;
 
-                    let src_ptr = regions[src_idx].add(src_off);
-                    let dst_ptr = regions[dst_idx].add(dst_off);
+                    let src_ptr = regions.0[src_idx].add(src_off);
+                    let dst_ptr = regions.0[dst_idx].add(dst_off);
 
                     // Write to source to ensure the cache line is dirty.
                     ptr::write_volatile(src_ptr, (lcg & 0xFF) as u8);
@@ -163,18 +177,16 @@ mod imp {
 
                     // Now access the destination — this forces the memory
                     // controller to activate a different AES-XTS key context.
-                    let t0 = Instant::now();
+                    let t0 = mach_time();
                     let _v = ptr::read_volatile(dst_ptr);
-                    let elapsed = t0.elapsed().as_nanos() as u64;
+                    let elapsed = mach_time().wrapping_sub(t0);
 
                     timings.push(elapsed);
                 }
-
-                // Clean up all mapped regions.
-                for &r in &regions {
-                    libc::munmap(r as *mut libc::c_void, REGION_SIZE);
-                }
             }
+
+            // regions dropped here (RAII munmap)
+            drop(regions);
 
             extract_timing_entropy(&timings, n_samples)
         }

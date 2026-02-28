@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
 
-use crate::sources::helpers::run_command_raw;
+use crate::sources::helpers::{run_command_raw, xor_fold_u64};
 
 /// Number of getpid() calls to measure for timing jitter.
 const JITTER_ROUNDS: usize = 256;
@@ -30,7 +30,7 @@ static PROCESS_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::System,
     platform: Platform::MacOS,
     requirements: &[],
-    entropy_rate_estimate: 2.0,
+    entropy_rate_estimate: 1.0,
     composite: false,
     is_fast: false,
 };
@@ -92,13 +92,17 @@ impl EntropySource for ProcessSource {
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         let mut entropy = Vec::with_capacity(n_samples);
 
-        // 1. Extract raw bytes from process table snapshot
+        // 1. Extract raw bytes from process table snapshot.
+        // ps output is ASCII (0x20-0x7E + 0x0A), so XOR of adjacent bytes
+        // would produce a biased distribution. Use 8-byte XOR-fold to mix
+        // more input bits per output byte and reduce ASCII range bias.
         if let Some(stdout) = snapshot_process_table() {
-            // XOR consecutive byte pairs for mixing
-            for pair in stdout.chunks(2) {
-                if pair.len() == 2 {
-                    entropy.push(pair[0] ^ pair[1]);
+            for chunk in stdout.chunks(8) {
+                let mut val = 0u64;
+                for (i, &b) in chunk.iter().enumerate() {
+                    val |= (b as u64) << (i * 8);
                 }
+                entropy.push(xor_fold_u64(val));
                 if entropy.len() >= n_samples {
                     break;
                 }

@@ -490,7 +490,9 @@ pub fn stationarity_test(data: &[u8]) -> StationarityResult {
         0.0
     };
 
-    // F critical value at α=0.05, df1=9, df2=large ≈ 1.88
+    // F critical value at α=0.05, df1=9, df2→∞ ≈ 1.88.
+    // This is the asymptotic value; for finite df2 the true critical value
+    // is slightly higher (more permissive), so this is conservative.
     let is_stationary = f_stat < 1.88;
 
     StationarityResult {

@@ -21,6 +21,8 @@ use crate::sources::helpers::extract_timing_entropy;
 use crate::sources::helpers::mach_time;
 #[cfg(target_os = "macos")]
 use crate::sources::helpers::xor_fold_u64;
+#[cfg(target_os = "macos")]
+use std::sync::OnceLock;
 
 static GPU_DIVERGENCE_INFO: SourceInfo = SourceInfo {
     name: "gpu_divergence",
@@ -254,7 +256,17 @@ kernel void divergence(
         }
     }
 
+    /// Release an Objective-C object (sends `release` message).
+    unsafe fn objc_release(obj: Id) {
+        if !obj.is_null() {
+            unsafe {
+                msg_send_fn!(unsafe extern "C" fn(Id, Sel))(obj, sel("release"));
+            }
+        }
+    }
+
     /// Compile the Metal shader source and return a compute pipeline state.
+    /// Releases all intermediate ObjC objects (NSStrings, library, function).
     unsafe fn compile_shader(device: Id) -> Option<Id> {
         unsafe {
             let source = nsstring(SHADER_SOURCE);
@@ -273,15 +285,21 @@ kernel void divergence(
                 &mut error,
             );
             if library.is_null() {
+                objc_release(error);
+                objc_release(source);
                 return None;
             }
+            // source NSString no longer needed
+            objc_release(source);
 
             // library.newFunctionWithName:("divergence")
             let func_name = nsstring("divergence");
             let sel_func = sel("newFunctionWithName:");
             let function =
                 msg_send_fn!(unsafe extern "C" fn(Id, Sel, Id) -> Id)(library, sel_func, func_name);
+            objc_release(func_name);
             if function.is_null() {
+                objc_release(library);
                 return None;
             }
 
@@ -294,7 +312,13 @@ kernel void divergence(
                 function,
                 &mut error2,
             );
+
+            // Release intermediates (pipeline retains what it needs)
+            objc_release(function);
+            objc_release(library);
+
             if pipeline.is_null() {
+                objc_release(error2);
                 return None;
             }
 
@@ -370,7 +394,8 @@ impl EntropySource for GPUDivergenceSource {
     fn is_available(&self) -> bool {
         #[cfg(target_os = "macos")]
         {
-            metal::MetalState::new().is_some()
+            static METAL_AVAILABLE: OnceLock<bool> = OnceLock::new();
+            *METAL_AVAILABLE.get_or_init(|| metal::MetalState::new().is_some())
         }
         #[cfg(not(target_os = "macos"))]
         {

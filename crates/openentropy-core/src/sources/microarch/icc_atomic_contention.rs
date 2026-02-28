@@ -63,8 +63,9 @@ impl EntropySource for ICCAtomicContentionSource {
     }
 
     fn is_available(&self) -> bool {
-        // Requires at least 2 hardware threads (always true on Apple Silicon).
-        true
+        // ICC bus arbitration is Apple Silicon-specific. The source runs on
+        // other platforms but measures a different (uncharacterized) phenomenon.
+        cfg!(target_os = "macos")
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
@@ -137,7 +138,7 @@ impl EntropySource for ICCAtomicContentionSource {
         // Mix main thread timings with contending thread timings
         // by XOR-interleaving. The combination captures the full
         // arbitration state from both sides of each conflict.
-        let contender_timings = thread_timings.lock().unwrap();
+        let contender_timings = thread_timings.lock().unwrap_or_else(|e| e.into_inner());
         let mut combined: Vec<u64> =
             Vec::with_capacity(main_timings.len() + contender_timings.len());
         let min_len = main_timings.len().min(contender_timings.len());

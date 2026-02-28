@@ -141,41 +141,45 @@ fn run_fifo(path: &str, args: &StreamArgs) {
     let mode = super::parse_conditioning(&args.conditioning);
     let buffer_size = if args.rate > 0 { args.rate } else { 4096 };
 
-    // Create FIFO if it doesn't exist; verify it's a FIFO if it does.
-    if std::path::Path::new(path).exists() {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::FileTypeExt;
-            let meta = std::fs::metadata(path).unwrap();
-            if !meta.file_type().is_fifo() {
-                eprintln!("Error: {path} exists and is not a FIFO.");
+    // Create FIFO atomically — avoids TOCTOU race between exists() and mkfifo().
+    #[cfg(unix)]
+    {
+        use std::ffi::CString;
+        let c_path = match CString::new(path) {
+            Ok(c) => c,
+            Err(_) => {
+                eprintln!("Error: FIFO path contains invalid characters.");
                 std::process::exit(1);
             }
-        }
-    } else {
-        #[cfg(unix)]
-        {
-            use std::ffi::CString;
-            let c_path = match CString::new(path) {
-                Ok(c) => c,
-                Err(_) => {
-                    eprintln!("Error: FIFO path contains invalid characters.");
-                    std::process::exit(1);
+        };
+        // SAFETY: c_path is a valid NUL-terminated CString.
+        let ret = unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) };
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EEXIST) {
+                // Path already exists — verify it's actually a FIFO.
+                use std::os::unix::fs::FileTypeExt;
+                match std::fs::metadata(path) {
+                    Ok(meta) if meta.file_type().is_fifo() => {
+                        // Existing FIFO, reuse it.
+                    }
+                    _ => {
+                        eprintln!("Error: {path} exists and is not a FIFO.");
+                        std::process::exit(1);
+                    }
                 }
-            };
-            // SAFETY: c_path is a valid NUL-terminated CString.
-            let ret = unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) };
-            if ret != 0 {
-                eprintln!("Error creating FIFO: {}", std::io::Error::last_os_error());
+            } else {
+                eprintln!("Error creating FIFO: {err}");
                 std::process::exit(1);
             }
+        } else {
             println!("Created FIFO: {path}");
         }
-        #[cfg(not(unix))]
-        {
-            eprintln!("Named pipes not supported on this platform.");
-            std::process::exit(1);
-        }
+    }
+    #[cfg(not(unix))]
+    {
+        eprintln!("Named pipes not supported on this platform.");
+        std::process::exit(1);
     }
 
     println!(
@@ -206,14 +210,20 @@ fn run_fifo(path: &str, args: &StreamArgs) {
     let _ = std::fs::remove_file(path);
 }
 
-/// Pre-computed CString for the FIFO path so the signal handler avoids heap
-/// allocation (malloc is not async-signal-safe).
-static FIFO_CPATH: std::sync::OnceLock<std::ffi::CString> = std::sync::OnceLock::new();
+/// Raw pointer to a pre-computed CString for the FIFO path.
+/// Uses `AtomicPtr` instead of `OnceLock` because `AtomicPtr::load` is a single
+/// atomic read — guaranteed async-signal-safe, unlike `OnceLock::get()`.
+/// The CString is intentionally leaked (never freed) since the process exits
+/// immediately after the signal handler runs.
+static FIFO_CPATH_PTR: std::sync::atomic::AtomicPtr<libc::c_char> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// Register a signal handler that removes the FIFO on Ctrl+C / SIGTERM.
 fn install_cleanup_handler(path: &str) {
     if let Ok(c) = std::ffi::CString::new(path) {
-        let _ = FIFO_CPATH.set(c);
+        // Leak the CString so the pointer remains valid for the signal handler.
+        let ptr = c.into_raw();
+        FIFO_CPATH_PTR.store(ptr, std::sync::atomic::Ordering::Release);
     }
     // SAFETY: signal() registers a C-linkage handler for SIGINT/SIGTERM.
     // signal_handler is a valid extern "C" fn with correct signature.
@@ -230,10 +240,12 @@ fn install_cleanup_handler(path: &str) {
 }
 
 extern "C" fn signal_handler(_: libc::c_int) {
-    // Only call async-signal-safe functions here.
-    if let Some(c_path) = FIFO_CPATH.get() {
+    // Only async-signal-safe functions below.
+    // AtomicPtr::load is a single atomic read — async-signal-safe.
+    let ptr = FIFO_CPATH_PTR.load(std::sync::atomic::Ordering::Acquire);
+    if !ptr.is_null() {
         unsafe {
-            libc::unlink(c_path.as_ptr());
+            libc::unlink(ptr);
         }
     }
     unsafe {

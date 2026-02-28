@@ -3,26 +3,6 @@ use std::time::Instant;
 use openentropy_core::analysis;
 use openentropy_core::conditioning::{ConditioningMode, condition, min_entropy_estimate};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AnalyzeView {
-    Summary,
-    Detailed,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AnalyzeStatus {
-    Good,
-    Warning,
-    Critical,
-}
-
-struct SourceInterpretation {
-    status: AnalyzeStatus,
-    findings: Vec<String>,
-    strengths: Vec<String>,
-    meaning: &'static str,
-}
-
 pub struct AnalyzeArgs {
     pub positional: Vec<String>,
     pub all: bool,
@@ -31,19 +11,12 @@ pub struct AnalyzeArgs {
     pub cross_correlation: bool,
     pub entropy: bool,
     pub conditioning: String,
-    pub view: String,
     pub include_telemetry: bool,
     pub report: bool,
 }
 
 pub fn run(args: AnalyzeArgs) {
     if args.report {
-        if args.entropy || args.cross_correlation || args.view != "summary" {
-            eprintln!(
-                "Note: --report mode runs the NIST test battery; \
-                 --entropy, --cross-correlation, and --view are ignored."
-            );
-        }
         run_report(&args);
     } else {
         run_analysis(&args);
@@ -51,27 +24,25 @@ pub fn run(args: AnalyzeArgs) {
 }
 
 // ---------------------------------------------------------------------------
-// Statistical analysis path (default)
+// Forensic analysis path (default)
 // ---------------------------------------------------------------------------
 
 fn run_analysis(args: &AnalyzeArgs) {
     let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
     let mode = super::parse_conditioning(&args.conditioning);
-    let view = AnalyzeView::parse(&args.view);
 
-    let resolved = super::resolve_sources(&args.positional, args.all);
-    let sources = resolved.into_vec();
+    let sources = super::resolve_sources(&args.positional, args.all);
 
+    println!("Forensic analysis — spectral, bias, stationarity, runs, distribution");
+    println!("(For throughput/stability ranking, use `bench` instead.)\n");
     println!(
-        "Analyzing {} source(s), {} samples each (view: {})...\n",
+        "Analyzing {} source(s), {} samples each...\n",
         sources.len(),
         args.samples,
-        view.as_str()
     );
 
     let mut all_results = Vec::new();
     let mut all_data: Vec<(String, Vec<u8>)> = Vec::new();
-    let mut status_counts = [0usize; 3];
 
     for source in &sources {
         let name = source.name().to_string();
@@ -88,19 +59,8 @@ fn run_analysis(args: &AnalyzeArgs) {
         let result = analysis::full_analysis(&name, &data);
         println!(" {:.2}s, {} bytes", collect_time.as_secs_f64(), data.len());
 
-        let interpretation = interpret_source(&result);
-        match interpretation.status {
-            AnalyzeStatus::Good => status_counts[0] += 1,
-            AnalyzeStatus::Warning => status_counts[1] += 1,
-            AnalyzeStatus::Critical => status_counts[2] += 1,
-        }
+        print_source_forensics(&result);
 
-        match view {
-            AnalyzeView::Summary => print_source_summary(&result, &interpretation),
-            AnalyzeView::Detailed => print_source_detailed(&result, &interpretation),
-        }
-
-        // Min-entropy breakdown (MCV primary + diagnostic estimators)
         if args.entropy {
             let entropy_input = if mode == ConditioningMode::Raw {
                 data.clone()
@@ -110,12 +70,12 @@ fn run_analysis(args: &AnalyzeArgs) {
             let report = min_entropy_estimate(&entropy_input);
             let report_str = format!("{report}");
             println!(
-                "  ┌─ Min-Entropy Breakdown ({name}, conditioning: {}, {} bytes)",
+                "  ├─ Min-Entropy Breakdown (conditioning: {}, {} bytes)",
                 args.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
-                println!("  │ {line}");
+                println!("  │  {line}");
             }
             println!("  └─");
         }
@@ -125,20 +85,6 @@ fn run_analysis(args: &AnalyzeArgs) {
         if args.cross_correlation {
             all_data.push((name, data));
         }
-    }
-
-    println!("\n{:=<68}", "");
-    println!(
-        "Analysis Summary: {} good, {} warning, {} critical",
-        status_counts[0], status_counts[1], status_counts[2]
-    );
-    println!("{:=<68}", "");
-    if status_counts[2] > 0 {
-        println!("Recommendation: exclude critical sources from default pool selection.");
-    } else if status_counts[1] > 0 {
-        println!("Recommendation: warning sources can remain in pool with strong conditioning.");
-    } else {
-        println!("Recommendation: all analyzed sources are good candidates for pool inclusion.");
     }
 
     // Cross-correlation matrix.
@@ -175,24 +121,175 @@ fn run_analysis(args: &AnalyzeArgs) {
     }
 }
 
+/// Print forensic test results for a single source as a compact table.
+fn print_source_forensics(r: &analysis::SourceAnalysis) {
+    let grade = openentropy_core::grade_min_entropy(r.min_entropy.max(0.0));
+
+    println!();
+    println!(
+        "  {} — H={:.3} H∞={:.3} (grade {}) — {} bytes",
+        r.source_name, r.shannon_entropy, r.min_entropy, grade, r.sample_size
+    );
+
+    // 7 forensic tests, each with a verdict and key metric.
+    let ac = &r.autocorrelation;
+    let sp = &r.spectral;
+    let bb = &r.bit_bias;
+    let d = &r.distribution;
+    let st = &r.stationarity;
+    let ru = &r.runs;
+
+    let tests: Vec<(&str, &str, String)> = vec![
+        (
+            "Autocorrelation",
+            verdict_autocorr(ac.max_abs_correlation),
+            format!(
+                "max|r|={:.4} at lag {}, {}/{} violations",
+                ac.max_abs_correlation,
+                ac.max_abs_lag,
+                ac.violations,
+                ac.lags.len()
+            ),
+        ),
+        (
+            "Spectral flatness",
+            verdict_spectral(sp.flatness),
+            format!(
+                "flatness={:.4} (1.0=white noise), dominant freq={:.4}",
+                sp.flatness, sp.dominant_frequency
+            ),
+        ),
+        (
+            "Bit bias",
+            verdict_bias(bb.overall_bias, bb.has_significant_bias),
+            format!(
+                "overall={:.4}, bits=[{}]",
+                bb.overall_bias,
+                bb.bit_probabilities
+                    .iter()
+                    .map(|p| format!("{:.3}", p))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        ),
+        (
+            "Distribution",
+            verdict_distribution(d.ks_p_value),
+            format!(
+                "KS p={:.4}, mean={:.1}, skew={:.3}, kurt={:.3}",
+                d.ks_p_value, d.mean, d.skewness, d.kurtosis
+            ),
+        ),
+        (
+            "Stationarity",
+            verdict_stationarity(st.f_statistic, st.is_stationary),
+            format!("F={:.2} ({} windows)", st.f_statistic, st.n_windows),
+        ),
+        (
+            "Runs",
+            verdict_runs(ru, r.sample_size),
+            format!(
+                "longest={} (expect {:.0}), total={} (expect {:.0})",
+                ru.longest_run, ru.expected_longest_run, ru.total_runs, ru.expected_runs
+            ),
+        ),
+    ];
+
+    for (name, verdict, detail) in &tests {
+        println!("    {:<20} {:>4}  {}", name, verdict, detail);
+    }
+    println!();
+}
+
+fn verdict_autocorr(max_abs: f64) -> &'static str {
+    if max_abs > 0.15 {
+        "FAIL"
+    } else if max_abs > 0.05 {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
+fn verdict_spectral(flatness: f64) -> &'static str {
+    if flatness < 0.5 {
+        "FAIL"
+    } else if flatness < 0.75 {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
+fn verdict_bias(overall: f64, has_significant: bool) -> &'static str {
+    if overall > 0.02 {
+        "FAIL"
+    } else if has_significant {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
+fn verdict_distribution(ks_p: f64) -> &'static str {
+    if ks_p < 0.001 {
+        "FAIL"
+    } else if ks_p < 0.01 {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
+fn verdict_stationarity(f_stat: f64, is_stationary: bool) -> &'static str {
+    if f_stat > 3.0 {
+        "FAIL"
+    } else if !is_stationary {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
+fn verdict_runs(ru: &analysis::RunsResult, _sample_size: usize) -> &'static str {
+    let longest_ratio = if ru.expected_longest_run > 0.0 {
+        ru.longest_run as f64 / ru.expected_longest_run
+    } else {
+        1.0
+    };
+    let runs_dev = if ru.expected_runs > 0.0 {
+        (ru.total_runs as f64 - ru.expected_runs).abs() / ru.expected_runs
+    } else {
+        0.0
+    };
+    if longest_ratio > 3.0 || runs_dev > 0.4 {
+        "FAIL"
+    } else if longest_ratio > 2.0 || runs_dev > 0.2 {
+        "WARN"
+    } else {
+        "PASS"
+    }
+}
+
 // ---------------------------------------------------------------------------
-// NIST-inspired test battery path (--report)
+// NIST test battery path (--report)
 // ---------------------------------------------------------------------------
 
 fn run_report(args: &AnalyzeArgs) {
     let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
     let mode = super::parse_conditioning(&args.conditioning);
 
-    let resolved = super::resolve_sources(&args.positional, args.all);
-    let sources = resolved.into_vec();
+    let sources = super::resolve_sources(&args.positional, args.all);
 
     if sources.is_empty() {
         eprintln!("No sources matched filter.");
         std::process::exit(1);
     }
 
+    println!("NIST randomness test battery — formal pass/fail with p-values");
+    println!("(For throughput/stability ranking, use `bench` instead.)\n");
     println!(
-        "Running NIST test battery on {} source(s), {} samples each...\n",
+        "Testing {} source(s), {} samples each...\n",
         sources.len(),
         args.samples
     );
@@ -201,7 +298,7 @@ fn run_report(args: &AnalyzeArgs) {
 
     for src in &sources {
         let info = src.info();
-        print!("  Collecting from {}...", info.name);
+        print!("  {}...", info.name);
 
         let t0 = Instant::now();
         let raw_data = src.collect(args.samples);
@@ -338,326 +435,4 @@ fn generate_markdown_report(
     }
 
     report
-}
-
-fn print_source_summary(r: &analysis::SourceAnalysis, i: &SourceInterpretation) {
-    println!();
-    println!("  ┌─ {} ({} bytes)", r.source_name, r.sample_size);
-    println!(
-        "  │ Entropy: H={:.3} H∞={:.3} (grade {})",
-        r.shannon_entropy,
-        r.min_entropy,
-        openentropy_core::grade_min_entropy(r.min_entropy.max(0.0))
-    );
-    println!(
-        "  │ Status: {} ({} finding(s))",
-        i.status.as_str(),
-        i.findings.len()
-    );
-
-    if i.findings.is_empty() {
-        println!("  │ Findings: none");
-    } else {
-        for finding in &i.findings {
-            println!("  │ Finding: {finding}");
-        }
-    }
-
-    if !i.strengths.is_empty() {
-        for strength in &i.strengths {
-            println!("  │ Strength: {strength}");
-        }
-    }
-
-    println!("  │ What this means: {}", i.meaning);
-    println!("  └─");
-}
-
-fn print_source_detailed(r: &analysis::SourceAnalysis, i: &SourceInterpretation) {
-    println!();
-    println!("  ┌─ {} ({} bytes)", r.source_name, r.sample_size);
-    println!(
-        "  │ Entropy:         H={:.4} H∞={:.4} (grade {})",
-        r.shannon_entropy,
-        r.min_entropy,
-        openentropy_core::grade_min_entropy(r.min_entropy.max(0.0))
-    );
-    println!("  │ Status: {}", i.status.as_str());
-
-    // Autocorrelation
-    let ac = &r.autocorrelation;
-    let ac_flag = if ac.max_abs_correlation > 0.15 {
-        " critical"
-    } else if ac.max_abs_correlation > 0.05 {
-        " warning"
-    } else {
-        " ok"
-    };
-    println!(
-        "  │ Autocorrelation:  max|r|={:.4} (lag {}), {}/{} violations [{}]",
-        ac.max_abs_correlation,
-        ac.max_abs_lag,
-        ac.violations,
-        ac.lags.len(),
-        ac_flag
-    );
-
-    // Spectral
-    let sp = &r.spectral;
-    let sp_flag = if sp.flatness < 0.5 {
-        "critical"
-    } else if sp.flatness < 0.75 {
-        "warning"
-    } else {
-        "ok"
-    };
-    println!(
-        "  │ Spectral:         flatness={:.4} (1.0=white noise), dominant_freq={:.4} [{}]",
-        sp.flatness, sp.dominant_frequency, sp_flag
-    );
-
-    // Bit bias
-    let bb = &r.bit_bias;
-    let bias_flag = if bb.overall_bias > 0.02 {
-        "critical"
-    } else if bb.has_significant_bias {
-        "warning"
-    } else {
-        "ok"
-    };
-    let bits_str: Vec<String> = bb
-        .bit_probabilities
-        .iter()
-        .map(|&p| format!("{:.3}", p))
-        .collect();
-    println!(
-        "  │ Bit bias:         [{}] overall={:.4} [{}]",
-        bits_str.join(" "),
-        bb.overall_bias,
-        bias_flag
-    );
-
-    // Distribution
-    let d = &r.distribution;
-    let dist_flag = if d.ks_p_value < 0.001 {
-        "critical"
-    } else if d.ks_p_value < 0.01 {
-        "warning"
-    } else {
-        "ok"
-    };
-    println!(
-        "  │ Distribution:     mean={:.1} std={:.1} skew={:.3} kurt={:.3} KS_p={:.4} [{}]",
-        d.mean, d.std_dev, d.skewness, d.kurtosis, d.ks_p_value, dist_flag
-    );
-
-    // Stationarity
-    let st = &r.stationarity;
-    let stat_flag = if st.f_statistic > 3.0 {
-        "critical"
-    } else if st.is_stationary {
-        "ok"
-    } else {
-        "warning"
-    };
-    println!(
-        "  │ Stationarity*:    F={:.2} [{}]",
-        st.f_statistic, stat_flag
-    );
-
-    // Runs
-    let ru = &r.runs;
-    let longest_ratio = if ru.expected_longest_run > 0.0 {
-        ru.longest_run as f64 / ru.expected_longest_run
-    } else {
-        1.0
-    };
-    let runs_dev_ratio = if ru.expected_runs > 0.0 {
-        ((ru.total_runs as f64 - ru.expected_runs).abs() / ru.expected_runs).abs()
-    } else {
-        0.0
-    };
-    let runs_flag = if longest_ratio > 3.0 || runs_dev_ratio > 0.4 {
-        "critical"
-    } else if longest_ratio > 2.0 || runs_dev_ratio > 0.2 {
-        "warning"
-    } else {
-        "ok"
-    };
-    println!(
-        "  │ Runs:             longest={} (expected {:.1}), total={} (expected {:.0}) [{}]",
-        ru.longest_run, ru.expected_longest_run, ru.total_runs, ru.expected_runs, runs_flag
-    );
-    println!("  │ *stationarity is a heuristic windowed F-test");
-    println!("  │ What this means: {}", i.meaning);
-
-    println!("  └─");
-}
-
-fn interpret_source(r: &analysis::SourceAnalysis) -> SourceInterpretation {
-    let mut warnings = 0usize;
-    let mut criticals = 0usize;
-    let mut findings = Vec::new();
-    let mut strengths = Vec::new();
-
-    // Entropy gate: min-entropy is the most fundamental quality indicator.
-    let min_h = r.min_entropy;
-    if min_h < 1.0 {
-        criticals += 1;
-        findings.push(format!(
-            "Very low min-entropy (H∞={min_h:.3}); source provides negligible randomness."
-        ));
-    } else if min_h < 4.0 {
-        warnings += 1;
-        findings.push(format!(
-            "Below-average min-entropy (H∞={min_h:.3}); requires strong conditioning."
-        ));
-    } else {
-        strengths.push(format!("Min-entropy is healthy (H∞={min_h:.3})."));
-    }
-
-    let ac = r.autocorrelation.max_abs_correlation;
-    if ac > 0.15 {
-        criticals += 1;
-        findings.push(format!(
-            "High autocorrelation (max|r|={ac:.3}) indicates strong sequential dependence."
-        ));
-    } else if ac > 0.05 {
-        warnings += 1;
-        findings.push(format!(
-            "Autocorrelation above heuristic threshold (max|r|={ac:.3})."
-        ));
-    } else {
-        strengths.push(format!("Low autocorrelation (max|r|={ac:.3})."));
-    }
-
-    let flatness = r.spectral.flatness;
-    if flatness < 0.5 {
-        criticals += 1;
-        findings.push(format!(
-            "Low spectral flatness ({flatness:.3}) suggests tonal structure."
-        ));
-    } else if flatness < 0.75 {
-        warnings += 1;
-        findings.push(format!(
-            "Spectral flatness ({flatness:.3}) is below ideal white-noise range."
-        ));
-    } else {
-        strengths.push(format!("Spectral flatness is healthy ({flatness:.3})."));
-    }
-
-    let bias = r.bit_bias.overall_bias;
-    if bias > 0.02 {
-        criticals += 1;
-        findings.push(format!("Significant overall bit bias ({bias:.4})."));
-    } else if bias > 0.01 {
-        warnings += 1;
-        findings.push(format!("Noticeable bit bias ({bias:.4})."));
-    } else {
-        strengths.push(format!("Bit bias is low ({bias:.4})."));
-    }
-
-    let ks_p = r.distribution.ks_p_value;
-    if ks_p < 0.001 {
-        criticals += 1;
-        findings.push(format!("Distribution KS p-value is very low ({ks_p:.4})."));
-    } else if ks_p < 0.01 {
-        warnings += 1;
-        findings.push(format!("Distribution KS p-value is low ({ks_p:.4})."));
-    } else {
-        strengths.push(format!(
-            "Distribution check is acceptable (KS p={ks_p:.4})."
-        ));
-    }
-
-    let f_stat = r.stationarity.f_statistic;
-    if f_stat > 3.0 {
-        criticals += 1;
-        findings.push(format!(
-            "Strong non-stationarity signal (windowed F={f_stat:.2})."
-        ));
-    } else if !r.stationarity.is_stationary {
-        warnings += 1;
-        findings.push(format!(
-            "Potential non-stationarity in windowed test (F={f_stat:.2})."
-        ));
-    } else {
-        strengths.push(format!("Stationarity heuristic is stable (F={f_stat:.2})."));
-    }
-
-    let longest_ratio = if r.runs.expected_longest_run > 0.0 {
-        r.runs.longest_run as f64 / r.runs.expected_longest_run
-    } else {
-        1.0
-    };
-    let runs_dev_ratio = if r.runs.expected_runs > 0.0 {
-        ((r.runs.total_runs as f64 - r.runs.expected_runs).abs() / r.runs.expected_runs).abs()
-    } else {
-        0.0
-    };
-    if longest_ratio > 3.0 || runs_dev_ratio > 0.4 {
-        criticals += 1;
-        findings.push(format!(
-            "Runs pattern is far from random expectation (longest ratio={longest_ratio:.2}, total deviation={:.1}%).",
-            runs_dev_ratio * 100.0
-        ));
-    } else if longest_ratio > 2.0 || runs_dev_ratio > 0.2 {
-        warnings += 1;
-        findings.push(format!(
-            "Runs pattern moderately deviates from expectation (longest ratio={longest_ratio:.2}, total deviation={:.1}%).",
-            runs_dev_ratio * 100.0
-        ));
-    } else {
-        strengths.push("Runs behavior is close to random expectation.".to_string());
-    }
-
-    let (status, meaning) = if criticals > 0 {
-        (
-            AnalyzeStatus::Critical,
-            "High-risk source for standalone use; exclude from default pool or require strong conditioning.",
-        )
-    } else if warnings > 0 {
-        (
-            AnalyzeStatus::Warning,
-            "Usable in a multi-source pool with strong conditioning and monitoring.",
-        )
-    } else {
-        (
-            AnalyzeStatus::Good,
-            "Good standalone characteristics and strong candidate for pooled entropy collection.",
-        )
-    };
-
-    SourceInterpretation {
-        status,
-        findings,
-        strengths,
-        meaning,
-    }
-}
-
-impl AnalyzeView {
-    fn parse(s: &str) -> Self {
-        match s {
-            "detailed" => Self::Detailed,
-            _ => Self::Summary,
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Summary => "summary",
-            Self::Detailed => "detailed",
-        }
-    }
-}
-
-impl AnalyzeStatus {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Good => "GOOD",
-            Self::Warning => "WARNING",
-            Self::Critical => "CRITICAL",
-        }
-    }
 }

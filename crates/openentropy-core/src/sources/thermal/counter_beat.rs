@@ -61,7 +61,7 @@ static COUNTER_BEAT_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AppleSilicon, Requirement::AudioUnit],
-    entropy_rate_estimate: 2000.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
     is_fast: false,
 };

@@ -76,11 +76,19 @@ fn get_bluetooth_info_timed() -> (Option<String>, u64) {
                 if !status.success() {
                     return (None, elapsed);
                 }
-                let stdout = child
-                    .wait_with_output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
-                return (stdout, elapsed);
+                // Child already reaped by try_wait — read stdout directly
+                // (wait_with_output() would call waitpid again, getting empty output).
+                use std::io::Read;
+                let mut stdout_str = String::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_string(&mut stdout_str);
+                }
+                let result = if stdout_str.is_empty() {
+                    None
+                } else {
+                    Some(stdout_str)
+                };
+                return (result, elapsed);
             }
             Ok(None) => {
                 if Instant::now() >= deadline {

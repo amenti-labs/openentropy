@@ -135,12 +135,9 @@ impl EntropySource for PreemptionBoundarySource {
         }
 
         if preemption_times.is_empty() {
-            // Fallback: return raw timer bytes if no preemption events observed.
-            let t: u64;
-            unsafe {
-                core::arch::asm!("mrs {v}, cntvct_el0", v = out(reg) t, options(nostack, nomem));
-            }
-            return t.to_le_bytes()[..n_samples.min(8)].to_vec();
+            // No preemption events observed — return empty to signal collection
+            // failure rather than emitting predictable CNTVCT counter bytes.
+            return Vec::new();
         }
 
         // Preemption jumps are sparse events (not a continuous timing stream),

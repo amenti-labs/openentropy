@@ -8,7 +8,7 @@ How raw hardware entropy becomes cryptographically uniform random bytes.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     Entropy Sources (49)                      │
+│                     Entropy Sources (63)                      │
 │  clock_jitter, dns_timing, page_fault_timing, ...            │
 │  Each returns raw bytes — NO internal conditioning           │
 └──────────────────┬───────────────────────────────────────────┘
@@ -37,13 +37,9 @@ How raw hardware entropy becomes cryptographically uniform random bytes.
 
 ### Conditioned Output (Default)
 
-The default pipeline applies two stages:
+The default pipeline applies **SHA-256 conditioning** directly to the raw entropy stream. Each 32-byte output block is `SHA-256(state || chunk || counter)`, with the internal state derived separately from the output for forward secrecy. This produces cryptographically uniform output (8.0 bits/byte Shannon entropy) regardless of source quality.
 
-1. **Von Neumann debiasing** — removes statistical bias by examining bit pairs. Outputs 1 for `(1,0)`, 0 for `(0,1)`, discards `(0,0)` and `(1,1)`. Reduces throughput by ~4x but eliminates bias without assumptions about the source distribution.
-
-2. **SHA-256 hashing** — maps the debiased stream to uniformly distributed bytes. Produces exactly the requested number of bytes via iterative hashing.
-
-After conditioning, output is 8.0 bits/byte Shannon entropy regardless of source quality.
+**Von Neumann debiasing** is a separate mode (`--conditioning vonneumann`) — it is NOT applied before SHA-256. Von Neumann removes statistical bias by examining bit pairs (outputs 1 for `(1,0)`, 0 for `(0,1)`, discards same pairs), reducing throughput by ~4x while preserving the noise structure better than SHA-256.
 
 ### Raw Output (Opt-in)
 
@@ -60,7 +56,7 @@ Raw mode returns XOR-combined source bytes with **no conditioning at all** — n
 | Interface | How to access |
 |-----------|---------------|
 | Rust API | `pool.get_raw_bytes(n)` |
-| CLI | `openentropy stream --unconditioned` |
+| CLI | `openentropy stream --conditioning raw` |
 | CLI | `openentropy stream --fifo <path> --conditioning raw` |
 | HTTP API | `GET /api/v1/random?length=N&type=hex&raw=true` (requires `--allow-raw` flag) |
 | Python SDK | `pool.get_raw_bytes(n)` |
@@ -73,7 +69,7 @@ The HTTP server requires the `--allow-raw` startup flag to enable raw mode — t
 pub enum ConditioningMode {
     Raw,         // No processing — pass through as-is
     VonNeumann,  // Von Neumann debiasing only
-    Sha256,      // Von Neumann + SHA-256 (default)
+    Sha256,      // SHA-256 conditioning (default)
 }
 
 pub fn condition(data: &[u8], output_len: usize, mode: ConditioningMode) -> Vec<u8>
@@ -97,7 +93,7 @@ The refactored design enforces a clean boundary: sources produce raw samples, th
 | Feature | OpenEntropy | ANU QRNG | Outshift QRNG | Linux `/dev/urandom` |
 |---------|-----------------|----------|---------------|---------------------|
 | Raw output available | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Source diversity | 49 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
+| Source diversity | 63 sources | 1 (vacuum fluctuation) | 1 (superconducting) | ~5 (interrupts, etc.) |
 | Conditioning visible | ✅ Optional, documented | ❌ Opaque | ❌ DRBG post-processing | ❌ ChaCha20 CSPRNG |
 | Self-hosted | ✅ Local binary | ❌ Cloud API | ❌ Cloud API | ✅ Kernel |
 | Statistical tests | ✅ Built-in NIST SP 800-22 | ❌ | ❌ | ❌ |
@@ -124,5 +120,5 @@ OpenEntropy's raw mode is the equivalent of tapping the wire *before* the DRBG. 
 ## Security Considerations
 
 - **Raw output is NOT suitable for cryptographic use.** Raw bytes have lower Shannon entropy (often 2-6 bits/byte vs 8.0) and may contain statistical patterns.
-- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. The pool chains internal state (each output block updates the state), providing forward secrecy. However, openentropy is not a full CSPRNG — it is an entropy source, not a complete cryptographic random number generator.
+- **Conditioned output uses SHA-256**, which is a cryptographic hash. The output is computationally uniform. The pool's internal state is derived separately from the output (`SHA-256(output || domain_separator)`), providing forward secrecy: observing output does not reveal the internal state. However, openentropy is not a full CSPRNG — it is an entropy source, not a complete cryptographic random number generator.
 - **The HTTP server's `--allow-raw` flag** exists specifically to prevent accidental deployment of raw endpoints. Production deployments should not enable it unless raw access is explicitly needed.

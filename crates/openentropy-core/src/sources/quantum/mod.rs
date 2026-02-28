@@ -1,4 +1,4 @@
-mod qcicada_source;
+pub mod qcicada_source;
 
 pub use qcicada_source::{QCicadaConfig, QCicadaSource};
 

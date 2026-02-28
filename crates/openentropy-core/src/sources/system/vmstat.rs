@@ -34,7 +34,7 @@ static VMSTAT_INFO: SourceInfo = SourceInfo {
     requirements: &[],
     entropy_rate_estimate: 2.0,
     composite: false,
-    is_fast: true,
+    is_fast: false,
 };
 
 impl VmstatSource {

@@ -12,18 +12,20 @@ use axum::{
     response::Json,
     routing::get,
 };
-use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
-
 use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::pool::EntropyPool;
 use openentropy_core::telemetry::{
     TelemetryWindowReport, collect_telemetry_snapshot, collect_telemetry_window,
 };
+use serde::{Deserialize, Serialize};
 
 /// Shared server state.
+///
+/// `EntropyPool` uses interior mutability (`Mutex<Vec<u8>>`, `Mutex<[u8;32]>`, etc.)
+/// so all its methods take `&self`. No outer mutex needed — concurrent HTTP requests
+/// can access the pool simultaneously without serializing.
 struct AppState {
-    pool: Mutex<EntropyPool>,
+    pool: EntropyPool,
     allow_raw: bool,
 }
 
@@ -105,19 +107,42 @@ async fn handle_random(
     let mode = if let Some(ref c) = params.conditioning {
         match c.as_str() {
             "raw" if state.allow_raw => ConditioningMode::Raw,
+            "raw" => {
+                return Json(RandomResponse {
+                    data_type,
+                    length: 0,
+                    data: serde_json::Value::Array(vec![]),
+                    success: false,
+                    conditioned: false,
+                    source: params.source.clone(),
+                    error: Some("Raw conditioning is not enabled. Start the server with --allow-raw to permit unconditioned output.".to_string()),
+                })
+                .with_status(StatusCode::FORBIDDEN);
+            }
             "vonneumann" | "von_neumann" | "vn" => ConditioningMode::VonNeumann,
-            "raw" => ConditioningMode::Sha256, // raw not allowed
             _ => ConditioningMode::Sha256,
         }
-    } else if params.raw.unwrap_or(false) && state.allow_raw {
-        ConditioningMode::Raw
+    } else if params.raw.unwrap_or(false) {
+        if state.allow_raw {
+            ConditioningMode::Raw
+        } else {
+            return Json(RandomResponse {
+                data_type,
+                length: 0,
+                data: serde_json::Value::Array(vec![]),
+                success: false,
+                conditioned: false,
+                source: params.source.clone(),
+                error: Some("Raw output is not enabled. Start the server with --allow-raw to permit unconditioned output.".to_string()),
+            })
+            .with_status(StatusCode::FORBIDDEN);
+        }
     } else {
         ConditioningMode::Sha256
     };
 
-    let pool = state.pool.lock().await;
     let raw = if let Some(ref source_name) = params.source {
-        match pool.get_source_bytes(source_name, length, mode) {
+        match state.pool.get_source_bytes(source_name, length, mode) {
             Some(bytes) => bytes,
             None => {
                 let err_msg = format!(
@@ -136,7 +161,7 @@ async fn handle_random(
             }
         }
     } else {
-        pool.get_bytes(length, mode)
+        state.pool.get_bytes(length, mode)
     };
     let use_raw = mode == ConditioningMode::Raw;
 
@@ -144,8 +169,13 @@ async fn handle_random(
         "hex16" => {
             let hex_pairs: Vec<String> = raw
                 .chunks(2)
-                .filter(|c| c.len() == 2)
-                .map(|c| format!("{:02x}{:02x}", c[0], c[1]))
+                .map(|c| {
+                    if c.len() == 2 {
+                        format!("{:02x}{:02x}", c[0], c[1])
+                    } else {
+                        format!("{:02x}", c[0])
+                    }
+                })
                 .collect();
             serde_json::Value::Array(
                 hex_pairs
@@ -198,8 +228,7 @@ impl<T> JsonWithStatus<T> for Json<T> {
 }
 
 async fn handle_health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
-    let pool = state.pool.lock().await;
-    let report = pool.health_report();
+    let report = state.pool.health_report();
     Json(HealthResponse {
         status: if report.healthy > 0 {
             "healthy".to_string()
@@ -218,9 +247,7 @@ async fn handle_sources(
     Query(params): Query<DiagnosticsParams>,
 ) -> Json<SourcesResponse> {
     let telemetry_start = include_telemetry(&params).then(collect_telemetry_snapshot);
-    let pool = state.pool.lock().await;
-    let report = pool.health_report();
-    drop(pool);
+    let report = state.pool.health_report();
     let telemetry_v1 = telemetry_start.map(collect_telemetry_window);
     let sources: Vec<SourceEntry> = report
         .sources
@@ -248,9 +275,7 @@ async fn handle_pool_status(
     Query(params): Query<DiagnosticsParams>,
 ) -> Json<serde_json::Value> {
     let telemetry_start = include_telemetry(&params).then(collect_telemetry_snapshot);
-    let pool = state.pool.lock().await;
-    let report = pool.health_report();
-    drop(pool);
+    let report = state.pool.health_report();
 
     let mut payload = serde_json::json!({
         "healthy": report.healthy,
@@ -275,9 +300,7 @@ async fn handle_pool_status(
 }
 
 async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let pool = state.pool.lock().await;
-    let source_names = pool.source_names();
-    drop(pool);
+    let source_names = state.pool.source_names();
 
     Json(serde_json::json!({
         "name": "OpenEntropy Server",
@@ -321,10 +344,7 @@ async fn handle_index(State(state): State<Arc<AppState>>) -> Json<serde_json::Va
 
 /// Build the axum router.
 fn build_router(pool: EntropyPool, allow_raw: bool) -> Router {
-    let state = Arc::new(AppState {
-        pool: Mutex::new(pool),
-        allow_raw,
-    });
+    let state = Arc::new(AppState { pool, allow_raw });
 
     Router::new()
         .route("/", get(handle_index))

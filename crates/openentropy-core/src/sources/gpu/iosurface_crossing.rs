@@ -16,6 +16,8 @@ use crate::source::{EntropySource, Platform, Requirement, SourceCategory, Source
 use crate::sources::helpers::extract_timing_entropy;
 #[cfg(target_os = "macos")]
 use crate::sources::helpers::mach_time;
+#[cfg(target_os = "macos")]
+use std::sync::OnceLock;
 
 static IOSURFACE_CROSSING_INFO: SourceInfo = SourceInfo {
     name: "iosurface_crossing",
@@ -176,10 +178,12 @@ mod iosurface {
             // Lock for read (cross-domain coherence).
             IOSurfaceLock(surface, K_IOSURFACE_LOCK_READ_ONLY, std::ptr::null_mut());
 
-            // Read back (may hit different cache/memory path).
-            if !base.is_null() {
+            // Re-obtain base address after re-lock — the kernel may have
+            // remapped the surface between unlock and lock.
+            let read_base = IOSurfaceGetBaseAddress(surface);
+            if !read_base.is_null() {
                 let size = IOSurfaceGetAllocSize(surface);
-                let slice = std::slice::from_raw_parts(base as *const u8, size);
+                let slice = std::slice::from_raw_parts(read_base as *const u8, size);
                 std::hint::black_box(slice[iteration % size]);
             }
 
@@ -228,7 +232,8 @@ impl EntropySource for IOSurfaceCrossingSource {
     fn is_available(&self) -> bool {
         #[cfg(target_os = "macos")]
         {
-            iosurface::is_available()
+            static IOSURFACE_AVAILABLE: OnceLock<bool> = OnceLock::new();
+            *IOSURFACE_AVAILABLE.get_or_init(iosurface::is_available)
         }
         #[cfg(not(target_os = "macos"))]
         {

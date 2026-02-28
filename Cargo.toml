@@ -16,7 +16,7 @@ license = "MIT"
 authors = ["Amenti Labs"]
 repository = "https://github.com/amenti-labs/openentropy"
 homepage = "https://github.com/amenti-labs/openentropy"
-description = "Harvest real entropy from 45 hardware noise sources — conditioned for crypto, raw for research"
+description = "Harvest real entropy from 60+ hardware noise sources — conditioned for crypto, raw for research"
 rust-version = "1.85"
 keywords = ["entropy", "randomness", "hardware", "TRNG", "security"]
 categories = ["cryptography", "hardware-support", "os"]
@@ -53,6 +53,9 @@ pyo3 = { version = "0.23", features = ["extension-module"] }
 # Session recording
 uuid = { version = "1", features = ["v4"] }
 ctrlc = "3"
+
+# Hardware
+qcicada = "0.2"
 
 # Testing
 statrs = "0.18"

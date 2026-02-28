@@ -36,3 +36,4 @@ uuid = { workspace = true }
 
 log = { workspace = true }
 getrandom = { workspace = true }
+qcicada = { workspace = true }

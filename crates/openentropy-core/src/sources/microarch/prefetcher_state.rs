@@ -73,13 +73,11 @@ impl EntropySource for PrefetcherStateSource {
         const N_ACCESSES: usize = 500;
         const N_TRAIN: usize = 1000;
 
-        // 8 MB buffer exceeds L2 cache
+        // 8 MB buffer exceeds L2 cache.
+        // Use Vec for RAII — automatically freed on drop, including panic unwind.
         let buf_size = 8 * 1024 * 1024 + 4096;
-        let layout = std::alloc::Layout::from_size_align(buf_size, 4096).unwrap();
-        let buf = unsafe { std::alloc::alloc(layout) };
-        if buf.is_null() {
-            return Vec::new();
-        }
+        let mut buf_vec: Vec<u8> = vec![0u8; buf_size];
+        let buf = buf_vec.as_mut_ptr();
 
         // Touch all pages
         for i in (0..buf_size).step_by(4096) {
@@ -126,7 +124,7 @@ impl EntropySource for PrefetcherStateSource {
             unsafe { ptr::read_volatile(buf.add(s % buf_size)) };
         }
 
-        unsafe { std::alloc::dealloc(buf, layout) };
+        drop(buf_vec);
 
         // XOR learned and random timings to capture prefetcher state
         let combined: Vec<u64> = timings

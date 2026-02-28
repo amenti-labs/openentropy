@@ -16,6 +16,7 @@ use crate::source::EntropySource;
 pub fn sources() -> Vec<Box<dyn EntropySource>> {
     vec![
         Box::new(AudioPLLTimingSource),
+        Box::new(CounterBeatSource),
         Box::new(DisplayPllSource),
         Box::new(PciePllSource),
     ]

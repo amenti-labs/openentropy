@@ -38,8 +38,10 @@ pub fn sources() -> Vec<Box<dyn EntropySource>> {
     vec![
         Box::new(AMXTimingSource::default()),
         Box::new(APRRJitTimingSource),
+        Box::new(CASContentionSource::default()),
         Box::new(CntfrqCacheTimingSource),
         Box::new(CommonCryptoAesTimingSource),
+        Box::new(DenormalTimingSource),
         Box::new(DualClockDomainSource),
         Box::new(DVFSRaceSource),
         Box::new(GxfRegisterTimingSource),

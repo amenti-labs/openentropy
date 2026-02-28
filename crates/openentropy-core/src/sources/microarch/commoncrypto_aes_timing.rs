@@ -145,14 +145,23 @@ mod imp {
         }
     }
 
+    /// Probe whether CCCrypt actually works by performing a single encryption.
+    fn cccrypt_probe() -> bool {
+        let key = [0u8; AES_KEY_SIZE];
+        let iv = [0u8; AES_BLOCK_SIZE];
+        let plaintext = [0u8; AES_BLOCK_SIZE];
+        // SAFETY: CCCrypt with valid buffers of correct sizes.
+        unsafe { time_cccrypt(&key, &iv, &plaintext).is_some() }
+    }
+
     impl EntropySource for CommonCryptoAesTimingSource {
         fn info(&self) -> &SourceInfo {
             &COMMONCRYPTO_AES_TIMING_INFO
         }
 
         fn is_available(&self) -> bool {
-            // CommonCrypto is part of libSystem on macOS — always available.
-            true
+            static CCCRYPT_AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+            *CCCRYPT_AVAILABLE.get_or_init(cccrypt_probe)
         }
 
         fn collect(&self, n_samples: usize) -> Vec<u8> {

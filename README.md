@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*58 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*63 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
 
 **Built for Apple Silicon. No special hardware. No API keys. Just physics.**
 
@@ -34,9 +34,6 @@ openentropy scan
 # Benchmark all fast sources
 openentropy bench
 
-# Capture a 3-second telemetry window
-openentropy telemetry --window-sec 3
-
 # Output 64 random hex bytes
 openentropy stream --format hex --bytes 64
 
@@ -44,7 +41,7 @@ openentropy stream --format hex --bytes 64
 openentropy monitor
 ```
 
-> By default, only fast sources (<2s) are used. Pass `--sources all` to include slower sources (DNS, TCP, GPU, BLE).
+> By default, only fast sources (<2s) are used. Pass `all` as a positional argument to include slower sources (DNS, TCP, GPU, BLE).
 
 ### Python
 
@@ -74,7 +71,7 @@ maturin develop
 
 ## Two Audiences
 
-**Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) meets NIST SP 800-90B requirements.
+**Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) produces cryptographic-quality random bytes.
 
 **Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source.
 
@@ -106,7 +103,7 @@ Conditioning is **optional and configurable**. Use `--conditioning` on the CLI o
 
 | Mode | Flag | Description |
 |------|------|-------------|
-| **SHA-256** (default) | `--conditioning sha256` | Full NIST SP 800-90B conditioning. Cryptographic quality output. |
+| **SHA-256** (default) | `--conditioning sha256` | SHA-256 conditioning. Cryptographic quality output. |
 | **Von Neumann** | `--conditioning vonneumann` | Debiasing only — removes bias while preserving more of the raw signal structure. |
 | **Raw** | `--conditioning raw` | No processing. Source bytes with zero whitening — preserves the actual hardware noise signal for research. |
 
@@ -118,7 +115,7 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 | Doc | Description |
 |-----|-------------|
-| [Source Catalog](docs/SOURCES.md) | All 58 entropy sources with physics explanations |
+| [Source Catalog](docs/SOURCES.md) | All 63 entropy sources with physics explanations |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
 | [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
@@ -133,19 +130,20 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-58 sources across 12 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+63 sources across 13 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
 
-### Thermal (3)
+### Thermal (4)
 
 Each source taps a **physically independent** oscillator. They beat the CPU's 24 MHz crystal against other independent PLLs on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise.
 
 | Source | Description |
 |--------|-------------|
 | `audio_pll_timing` | Audio PLL clock drift from CoreAudio device property queries |
+| `counter_beat` | Two-oscillator beat frequency: CPU counter (CNTVCT_EL0) vs audio PLL crystal |
 | `display_pll` | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
 | `pcie_pll` | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
 
-### Timing (5)
+### Timing (7)
 
 | Source | Description |
 |--------|-------------|
@@ -154,8 +152,10 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `page_fault_timing` | Minor page fault timing via mmap/munmap cycles |
 | `mach_continuous_timing` | mach_continuous_time() kernel sleep-offset path |
 | `ane_timing` | Apple Neural Engine clock domain crossing jitter via IOKit |
+| `commpage_clock_timing` | macOS COMMPAGE seqlock update synchronization timing |
+| `mach_timing` | mach_absolute_time() nanosecond timing jitter |
 
-### Scheduling (5)
+### Scheduling (6)
 
 | Source | Description |
 |--------|-------------|
@@ -164,6 +164,7 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `pe_core_arithmetic` | P-core/E-core migration timing entropy from arithmetic loop jitter |
 | `dispatch_queue_timing` | GCD libdispatch global queue timing — system-wide thread pool entropy |
 | `timer_coalescing` | OS timer coalescing wakeup jitter from system-wide timer queue state |
+| `preemption_boundary` | Kernel scheduler preemption timing via CNTVCT_EL0 reads |
 
 ### IO (6)
 
@@ -185,7 +186,7 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `kqueue_events` | Kqueue event multiplexing timing from timers, files, and sockets |
 | `keychain_timing` | Keychain/securityd round-trip timing jitter |
 
-### Microarch (15)
+### Microarch (16)
 
 | Source | Description |
 |--------|-------------|
@@ -196,7 +197,6 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `icc_atomic_contention` | Apple Silicon ICC bus arbitration via cross-core atomic contention |
 | `prefetcher_state` | Hardware prefetcher stride-learning state |
 | `aprr_jit_timing` | Apple APRR undocumented register JIT toggle timing |
-| `preemption_boundary` | Kernel scheduler preemption timing via CNTVCT_EL0 reads |
 | `sev_event_timing` | ARM64 SEV/SEVL broadcast event timing via ICC fabric load |
 | `cntfrq_cache_timing` | CNTFRQ_EL0 system-register cache timing |
 | `gxf_register_timing` | Apple GXF EL0-accessible register trap-path timing |
@@ -204,6 +204,8 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `sitva` | Scheduler-induced timing variance amplification via NEON FMLA |
 | `memory_bus_crypto` | AES-XTS crypto context switching timing from cache flush cycles |
 | `commoncrypto_aes_timing` | CommonCrypto AES-128-CBC warm/cold key schedule bimodal timing |
+| `cas_contention` | Multi-thread atomic CAS arbitration contention jitter |
+| `denormal_timing` | Floating-point denormal multiply-accumulate timing jitter |
 
 ### GPU (3)
 
@@ -221,7 +223,7 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `tcp_connect_timing` | TCP handshake timing variance |
 | `wifi_rssi` | WiFi received signal strength fluctuations *(requires WiFi)* |
 
-### System (7)
+### System (6)
 
 | Source | Description |
 |--------|-------------|
@@ -229,7 +231,6 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `vmstat_deltas` | VM subsystem page fault and swap counters |
 | `process_table` | Process table snapshot entropy |
 | `ioregistry` | IOKit registry value mining |
-| `commpage_clock_timing` | macOS COMMPAGE seqlock update synchronization timing |
 | `proc_info_timing` | proc_pidinfo / proc_pid_rusage syscall kernel proc_lock contention |
 | `getentropy_timing` | getentropy() SEP TRNG reseed timing |
 
@@ -250,6 +251,12 @@ Each source taps a **physically independent** oscillator. They beat the CPU's 24
 | `bluetooth_noise` | BLE ambient RF noise |
 | `smc_highvar_timing` | SMC thermistor ADC + fuel gauge I2C bus timing |
 
+### Quantum (1)
+
+| Source | Description |
+|--------|-------------|
+| `qcicada` | Crypta Labs QCicada USB QRNG — photonic shot noise *(requires QCicada USB hardware)* |
+
 Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
 
 ---
@@ -269,8 +276,8 @@ openentropy scan --telemetry
 openentropy bench                    # standard profile on fast sources
 openentropy bench --profile quick    # faster confidence pass
 openentropy bench --profile deep     # higher-confidence benchmark
-openentropy bench --sources all      # all sources
-openentropy bench --sources silicon  # filter by name
+openentropy bench all                # all sources
+openentropy bench clock_jitter       # filter by name
 openentropy bench --rank-by throughput
 openentropy bench --telemetry
 openentropy bench --output bench.json
@@ -311,11 +318,11 @@ openentropy monitor --telemetry
 | s | Export snapshot |
 | q/Esc | Quit |
 
-### `bench --sources` — Test specific sources
+### `bench` — Test specific sources
 
 ```bash
-openentropy bench --sources mach_timing
-openentropy bench --sources mach_timing,clock_jitter
+openentropy bench mach_timing
+openentropy bench mach_timing,clock_jitter
 ```
 
 ### `bench` pool quality section
@@ -340,6 +347,8 @@ openentropy server --port 8080 --allow-raw    # enable raw output
 openentropy server --port 8080 --telemetry    # print startup telemetry snapshot
 ```
 
+> **Security:** The server binds to `127.0.0.1` (localhost only) by default. It has no authentication or rate limiting. Do not expose to untrusted networks without adding a reverse proxy with appropriate access controls.
+
 ```bash
 curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
 curl "http://localhost:8080/health"
@@ -351,25 +360,17 @@ curl "http://localhost:8080/pool/status?telemetry=true"
 
 ```bash
 openentropy analyze                          # summary view, raw, entropy on
-openentropy analyze --view detailed
-openentropy analyze --sources mach_timing --no-entropy
+openentropy analyze --entropy                # include min-entropy breakdown
+openentropy analyze --report                 # run NIST test battery
 openentropy analyze --cross-correlation --output analysis.json
 openentropy analyze --telemetry --output analysis.json
-```
-
-### `telemetry` — Standalone telemetry capture
-
-```bash
-openentropy telemetry                      # single telemetry_v1 snapshot
-openentropy telemetry --window-sec 5       # start/end window with deltas
-openentropy telemetry --window-sec 5 --output telemetry.json
 ```
 
 ### `analyze --report` — NIST test battery
 
 ```bash
 openentropy analyze --report
-openentropy analyze --report --sources mach_timing --samples 50000
+openentropy analyze --report mach_timing --samples 50000
 openentropy analyze --report --telemetry --output report.md
 ```
 
@@ -385,7 +386,7 @@ openentropy sessions sessions/<session-id> --analyze --entropy --telemetry --out
 
 ```toml
 [dependencies]
-openentropy-core = "0.7"
+openentropy-core = "0.8"
 ```
 
 ```rust
@@ -412,7 +413,7 @@ Cargo workspace with 6 crates:
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
 ```
-Sources (58) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
+Sources (63) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
                                                                  │                       ├── Rust API
                                                            ┌─────┴─────┐                ├── CLI / TUI
                                                            │ sha256    │ (default)       ├── HTTP Server
@@ -427,8 +428,8 @@ Sources (58) → raw samples → Entropy Pool (XOR combine) → Conditioning (op
 
 | Platform | Sources | Notes |
 |----------|:-------:|-------|
-| **MacBook (M-series)** | **58/58** | Full suite — WiFi, BLE, camera, mic |
-| **Mac Mini / Studio / Pro** | 50–52 | No built-in camera, mic on some models |
+| **MacBook (M-series)** | **63/63** | Full suite — WiFi, BLE, camera, mic |
+| **Mac Mini / Studio / Pro** | 50–55 | No built-in camera, mic on some models |
 | **Intel Mac** | ~20 | Some silicon/microarch sources are ARM-specific |
 | **Linux** | 12–15 | Timing, network, disk, process sources + NVMe passthrough |
 

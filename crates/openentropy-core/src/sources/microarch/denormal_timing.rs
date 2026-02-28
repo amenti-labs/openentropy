@@ -27,7 +27,7 @@ static DENORMAL_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Microarch,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 300.0,
+    entropy_rate_estimate: 0.5,
     composite: false,
     is_fast: false,
 };

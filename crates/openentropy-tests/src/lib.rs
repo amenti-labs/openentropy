@@ -647,8 +647,29 @@ pub fn compression_ratio(data: &[u8]) -> TestResult {
         return insufficient(name, 32, n);
     }
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
-    encoder.write_all(data).unwrap();
-    let compressed = encoder.finish().unwrap();
+    if encoder.write_all(data).is_err() {
+        return TestResult {
+            name: name.to_string(),
+            passed: false,
+            p_value: None,
+            statistic: 0.0,
+            details: "zlib write failed".to_string(),
+            grade: 'F',
+        };
+    }
+    let compressed = match encoder.finish() {
+        Ok(c) => c,
+        Err(_) => {
+            return TestResult {
+                name: name.to_string(),
+                passed: false,
+                p_value: None,
+                statistic: 0.0,
+                details: "zlib finish failed".to_string(),
+                grade: 'F',
+            };
+        }
+    };
     let ratio = compressed.len() as f64 / n as f64;
     let grade = if ratio > 0.95 {
         'A'
@@ -679,14 +700,25 @@ pub fn kolmogorov_complexity(data: &[u8]) -> TestResult {
         return insufficient(name, 32, n);
     }
 
-    let compress_at = |level: u32| -> usize {
+    let compress_at = |level: u32| -> Option<usize> {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(level));
-        encoder.write_all(data).unwrap();
-        encoder.finish().unwrap().len()
+        encoder.write_all(data).ok()?;
+        Some(encoder.finish().ok()?.len())
     };
 
-    let c1 = compress_at(1);
-    let c9 = compress_at(9);
+    let (c1, c9) = match (compress_at(1), compress_at(9)) {
+        (Some(a), Some(b)) => (a, b),
+        _ => {
+            return TestResult {
+                name: name.to_string(),
+                passed: false,
+                p_value: None,
+                statistic: 0.0,
+                details: "zlib compression failed".to_string(),
+                grade: 'F',
+            };
+        }
+    };
     let complexity = c9 as f64 / n as f64;
     let spread = (c1 as f64 - c9 as f64) / n as f64;
     let grade = if complexity > 0.95 {

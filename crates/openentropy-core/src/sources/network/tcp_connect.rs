@@ -5,6 +5,7 @@
 //! load, and network path congestion.
 
 use std::net::{SocketAddr, TcpStream};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -72,7 +73,8 @@ impl EntropySource for TCPConnectSource {
     }
 
     fn is_available(&self) -> bool {
-        tcp_connect_rtt(TCP_TARGETS[0], TCP_TIMEOUT).is_some()
+        static TCP_AVAILABLE: OnceLock<bool> = OnceLock::new();
+        *TCP_AVAILABLE.get_or_init(|| tcp_connect_rtt(TCP_TARGETS[0], TCP_TIMEOUT).is_some())
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

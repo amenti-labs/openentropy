@@ -6,7 +6,7 @@
 
 use crate::source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 
-use crate::sources::helpers::{command_exists, pack_nibbles};
+use crate::sources::helpers::{command_exists, pack_nibbles, run_command_output_timeout};
 
 /// Duration of audio capture in seconds.
 const CAPTURE_DURATION: &str = "0.1";
@@ -66,8 +66,10 @@ impl EntropySource for AudioNoiseSource {
     fn collect(&self, n_samples: usize) -> Vec<u8> {
         // Capture raw signed 16-bit PCM audio from the default input device.
         // ffmpeg -f avfoundation -i ":0" -t 0.1 -f s16le -ar 44100 -ac 1 pipe:1
-        let result = std::process::Command::new("ffmpeg")
-            .args([
+        let device_input = format!(":{}", self.config.device_index.unwrap_or(0));
+        let result = run_command_output_timeout(
+            "ffmpeg",
+            &[
                 "-hide_banner",
                 "-loglevel",
                 "error",
@@ -75,7 +77,7 @@ impl EntropySource for AudioNoiseSource {
                 "-f",
                 "avfoundation",
                 "-i",
-                &format!(":{}", self.config.device_index.unwrap_or(0)),
+                &device_input,
                 "-t",
                 CAPTURE_DURATION,
                 "-f",
@@ -85,15 +87,13 @@ impl EntropySource for AudioNoiseSource {
                 "-ac",
                 "1",
                 "pipe:1",
-            ])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
+            ],
+            5000, // 5 second timeout — ffmpeg capture is 0.1s, generous margin
+        );
 
         let raw_audio = match result {
-            Ok(output) if output.status.success() => output.stdout,
-            _ => return Vec::new(),
+            Some(output) => output.stdout,
+            None => return Vec::new(),
         };
 
         // Each sample is 2 bytes (signed 16-bit little-endian).

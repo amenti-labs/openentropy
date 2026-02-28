@@ -42,7 +42,7 @@ static NVME_PASSTHROUGH_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IO,
     platform: Platform::Linux,
     requirements: &[Requirement::RawBlockDevice],
-    entropy_rate_estimate: 2500.0,
+    entropy_rate_estimate: 2.0,
     composite: false,
     is_fast: true,
 };
@@ -79,6 +79,9 @@ mod passthrough {
         timeout_ms: u32,
         result: u32,
     }
+
+    // Compile-time check: NvmePassthruCmd must match the kernel's struct layout (72 bytes).
+    const _: () = assert!(std::mem::size_of::<NvmePassthruCmd>() == 72);
 
     /// NVME_IOCTL_ADMIN_CMD = _IOWR('N', 0x41, struct nvme_passthru_cmd)
     /// On Linux: direction = _IOWR = 0xC0000000, size = sizeof(nvme_passthru_cmd) = 72 = 0x48

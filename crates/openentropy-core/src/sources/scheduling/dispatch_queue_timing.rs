@@ -75,13 +75,18 @@ mod libdispatch {
     pub type DispatchQueueT = *mut c_void;
     /// Opaque GCD semaphore handle.
     pub type DispatchSemaphoreT = *mut c_void;
-    /// `DISPATCH_TIME_FOREVER` — semaphore wait with no timeout.
-    pub const DISPATCH_TIME_FOREVER: u64 = u64::MAX;
+    /// `DISPATCH_TIME_NOW` — base for computing dispatch timeouts.
+    pub const DISPATCH_TIME_NOW: u64 = 0;
 
     // GCD priority levels.
     pub const _DISPATCH_QUEUE_PRIORITY_HIGH: i64 = 2;
     pub const DISPATCH_QUEUE_PRIORITY_LOW: i64 = -2;
     pub const DISPATCH_QUEUE_PRIORITY_BACKGROUND: i64 = i16::MIN as i64;
+
+    /// 100ms timeout in nanoseconds — more than enough for a GCD dispatch
+    /// round-trip (typical: 8–25 µs). Prevents indefinite blocking if the
+    /// thread pool is saturated.
+    pub const SEMAPHORE_TIMEOUT_NS: i64 = 100_000_000;
 
     #[link(name = "System", kind = "dylib")]
     unsafe extern "C" {
@@ -89,6 +94,7 @@ mod libdispatch {
         pub fn dispatch_semaphore_create(value: isize) -> DispatchSemaphoreT;
         pub fn dispatch_semaphore_signal(dsema: DispatchSemaphoreT) -> isize;
         pub fn dispatch_semaphore_wait(dsema: DispatchSemaphoreT, timeout: u64) -> isize;
+        pub fn dispatch_time(when: u64, delta: i64) -> u64;
         pub fn dispatch_async_f(
             queue: DispatchQueueT,
             context: *mut c_void,
@@ -143,12 +149,14 @@ mod imp {
             for i in 0..32_usize {
                 let queue =
                     unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
-                // SAFETY: signal_semaphore is a valid function; sem is valid
-                // until dispatch_semaphore_wait returns.
                 let sem = unsafe { dispatch_semaphore_create(0) };
+                if sem.is_null() {
+                    continue;
+                }
                 unsafe {
+                    let timeout = dispatch_time(DISPATCH_TIME_NOW, SEMAPHORE_TIMEOUT_NS);
                     dispatch_async_f(queue, sem, signal_semaphore);
-                    dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+                    dispatch_semaphore_wait(sem, timeout);
                     dispatch_release(sem);
                 }
             }
@@ -157,22 +165,23 @@ mod imp {
                 let queue =
                     unsafe { dispatch_get_global_queue(priorities[i % priorities.len()], 0) };
 
-                // SAFETY: sem is valid from create to release, and dispatch_async_f
-                // captures it only for the duration of the block execution. We wait
-                // for the semaphore before releasing, so there is no use-after-free.
                 let sem = unsafe { dispatch_semaphore_create(0) };
+                if sem.is_null() {
+                    continue;
+                }
 
                 let t0 = mach_time();
-                unsafe {
+                let timed_out = unsafe {
+                    let timeout = dispatch_time(DISPATCH_TIME_NOW, SEMAPHORE_TIMEOUT_NS);
                     dispatch_async_f(queue, sem, signal_semaphore);
-                    dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
-                }
+                    dispatch_semaphore_wait(sem, timeout) != 0
+                };
                 let elapsed = mach_time().wrapping_sub(t0);
 
                 unsafe { dispatch_release(sem) };
 
-                // Sanity filter: reject suspend/resume artifacts (>10ms).
-                if elapsed < 240_000 {
+                // Skip timed-out samples and suspend/resume artifacts (>10ms).
+                if !timed_out && elapsed < 240_000 {
                     timings.push(elapsed);
                 }
             }

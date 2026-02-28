@@ -1,17 +1,26 @@
 # Changelog
 
-## 0.8.0 — 2026-02-26
+## 0.8.0 — 2026-02-27
 
 ### Added
 
-- **TUI category grouping** — Sources organized into 11 collapsible category groups with `{`/`}` jump navigation, `Space`/`Enter` collapse/expand, and `C` fold all.
+- **`record --all`** — Record from every available source with a single flag, matching `bench`, `analyze`, and `stream`. Positional source names remain supported.
+- **TUI multiselect recording** — Select multiple sources with `Space`/`Enter` (yellow = selected), then press `r` to record from all selected sources simultaneously. Recording uses 1000-byte samples for throughput regardless of display sample size.
+- **TUI help modal** — Press `?` for a full keybinding reference overlay.
+- **Quantum category** — New `quantum` source category with QCicada QRNG source. Live mode switching (`m` key) cycles between raw/sha256/samples post-processing modes.
+- **TUI category grouping** — Sources organized into collapsible category groups with `{`/`}` jump navigation and `C` fold all.
 - **14 new entropy sources** across timing, scheduling, network, signal, and microarch categories.
 
 ### Changed
 
-- **Source directory reorganization** — 59 sources moved from flat layout into 11 category-based subdirectories (`gpu/`, `io/`, `ipc/`, `microarch/`, `network/`, `scheduling/`, `sensor/`, `signal/`, `system/`, `thermal/`, `timing/`).
+- **Source directory reorganization** — 63 sources moved from flat layout into 13 category-based subdirectories (`gpu/`, `io/`, `ipc/`, `microarch/`, `network/`, `quantum/`, `scheduling/`, `sensor/`, `signal/`, `system/`, `thermal/`, `timing/`).
 - **Pool batched parallel collection** for improved throughput.
-- Source count increased from 45 to 59.
+- **TUI source selection unified** — `Space`/`Enter` toggles sources on/off (selected = yellow, active = yellow+bold+`●`). No separate mark/select distinction.
+- Source count increased from 45 to 63.
+
+### Removed
+
+- **TUI compare overlay** (`Tab`) — Removed non-functional compare feature. The compare source never received live data; only showed stale history.
 
 ### Fixed
 

@@ -102,8 +102,15 @@ pub fn sha256_condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
         h.update(state);
         h.update(chunk);
         h.update(counter.to_le_bytes());
-        state = h.finalize().into();
-        output.extend_from_slice(&state);
+        let digest: [u8; 32] = h.finalize().into();
+        output.extend_from_slice(&digest);
+
+        // Derive state separately from output for forward secrecy.
+        let mut sh = Sha256::new();
+        sh.update(digest);
+        sh.update(b"openentropy_state");
+        state = sh.finalize().into();
+
         offset += 64;
         counter += 1;
         if offset >= raw.len() {
@@ -115,7 +122,10 @@ pub fn sha256_condition_bytes(raw: &[u8], n_output: usize) -> Vec<u8> {
 }
 
 /// SHA-256 condition with explicit state, sample, counter, and extra data.
-/// Returns (new_state, 32-byte digest).
+/// Returns (new_state, 32-byte output).
+///
+/// The new state is derived separately from the output to provide forward
+/// secrecy: knowing the output does not reveal the internal state.
 pub fn sha256_condition(
     state: &[u8; 32],
     sample: &[u8],
@@ -134,8 +144,15 @@ pub fn sha256_condition(
 
     h.update(extra);
 
-    let digest: [u8; 32] = h.finalize().into();
-    (digest, digest)
+    let output: [u8; 32] = h.finalize().into();
+
+    // Derive state separately from output for forward secrecy.
+    let mut sh = Sha256::new();
+    sh.update(output);
+    sh.update(b"openentropy_state");
+    let new_state: [u8; 32] = sh.finalize().into();
+
+    (new_state, output)
 }
 
 // ---------------------------------------------------------------------------
@@ -175,12 +192,18 @@ pub fn von_neumann_debias(data: &[u8]) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 
 /// XOR-fold: reduce data by XORing the first half with the second half.
+/// If the input has an odd length, the trailing byte is XORed into the last
+/// output byte to avoid silently discarding entropy.
 pub fn xor_fold(data: &[u8]) -> Vec<u8> {
     if data.len() < 2 {
         return data.to_vec();
     }
     let half = data.len() / 2;
-    (0..half).map(|i| data[i] ^ data[half + i]).collect()
+    let mut result: Vec<u8> = (0..half).map(|i| data[i] ^ data[half + i]).collect();
+    if data.len() % 2 == 1 && !result.is_empty() {
+        *result.last_mut().unwrap() ^= data[data.len() - 1];
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +309,11 @@ pub fn collision_estimate(data: &[u8]) -> f64 {
             }
         }
         if collision_count == 0 {
-            return 8.0; // No collisions at all
+            // No adjacent collisions at all. This is consistent with high entropy
+            // but also with small sample sizes. Returns 8.0 (maximum) as a
+            // non-conservative upper bound. The primary MCV estimator provides
+            // the conservative bound; this is a diagnostic only.
+            return 8.0;
         }
         // q_hat ≈ collision_count / (n-1), min-entropy from q >= p_max^2
         let q_hat = collision_count as f64 / (data.len() - 1) as f64;
@@ -639,6 +666,37 @@ pub fn quick_shannon(data: &[u8]) -> f64 {
     h
 }
 
+/// Quick lag-1 autocorrelation for a byte slice.
+///
+/// Returns the biased (population) lag-1 ACF estimate: r ∈ [-1, 1].
+/// Values near 0 indicate no serial correlation (good for entropy).
+/// Values near ±1 indicate strong correlation (bad — consecutive samples
+/// are predictable from their predecessors).
+///
+/// Uses the standard biased ACF estimator (denominator = n, not n-1).
+/// This is the Box-Jenkins convention, preferred for ACF because it
+/// guarantees the resulting autocorrelation function is positive semi-definite.
+///
+/// O(n), suitable for hot-path use during collection.
+pub fn quick_autocorrelation_lag1(data: &[u8]) -> f64 {
+    if data.len() < 2 {
+        return 0.0;
+    }
+    let n = data.len();
+    let arr: Vec<f64> = data.iter().map(|&b| b as f64).collect();
+    let mean: f64 = arr.iter().sum::<f64>() / n as f64;
+    let var: f64 = arr.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+    if var < 1e-10 {
+        return 0.0;
+    }
+    let mut sum = 0.0;
+    for i in 0..n - 1 {
+        sum += (arr[i] - mean) * (arr[i + 1] - mean);
+    }
+    // Biased ACF: divide by n*var (same denominator as variance).
+    sum / (n as f64 * var)
+}
+
 /// Grade a source based on its min-entropy (H∞) value.
 ///
 /// This is the **single source of truth** for entropy grading. All CLI commands,
@@ -681,7 +739,9 @@ pub fn quick_quality(data: &[u8]) -> QualityReport {
 
     let shannon = quick_shannon(data);
 
-    // Compression ratio
+    // Compression ratio — silenced errors are intentional: if compression
+    // fails, comp_ratio = 0 and the score degrades gracefully (loses the
+    // 20% compression component).
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
     use std::io::Write;
@@ -890,12 +950,13 @@ mod tests {
 
     #[test]
     fn test_xor_fold_odd_length() {
-        // With 5 bytes, half=2, so XOR data[0..2] with data[2..4]
+        // With 5 bytes, half=2, so XOR data[0..2] with data[2..4],
+        // then XOR the trailing byte (5) into the last output byte.
         let data = vec![1, 2, 3, 4, 5];
         let folded = xor_fold(&data);
         assert_eq!(folded.len(), 2);
         assert_eq!(folded[0], 1 ^ 3);
-        assert_eq!(folded[1], 2 ^ 4);
+        assert_eq!(folded[1], (2 ^ 4) ^ 5);
     }
 
     // -----------------------------------------------------------------------

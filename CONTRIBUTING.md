@@ -14,7 +14,7 @@
 ```
 Cargo.toml                    # Workspace root
 crates/
-├── openentropy-core/            # EntropySource trait, 49 sources, pool, conditioning
+├── openentropy-core/            # EntropySource trait, 63 sources, pool, conditioning
 │   └── src/
 │       ├── source.rs         # EntropySource trait definition
 │       ├── sources/          # All 49 source implementations
@@ -91,7 +91,7 @@ maturin build --release
 
 ## Adding a New Entropy Source
 
-1. **Create a source module** in `crates/openentropy-core/src/sources/`. If your source fits an existing category file (e.g., `timing.rs`, `silicon.rs`), add it there. Otherwise create a new file.
+1. **Create a source module** in `crates/openentropy-core/src/sources/`. If your source fits an existing category directory (e.g., `timing/mod.rs`, `microarch/mod.rs`), add it there. Otherwise create a new directory.
 
 2. **Implement the `EntropySource` trait**:
 
@@ -130,9 +130,9 @@ impl EntropySource for YourSource {
 }
 ```
 
-3. **Register the source** in `crates/openentropy-core/src/sources/mod.rs`:
+3. **Register the source** in the category's `mod.rs` (e.g., `crates/openentropy-core/src/sources/timing/mod.rs`):
    - Add `pub mod your_module;` to the module declarations
-   - Add `Box::new(your_module::YourSource)` to the `all_sources()` vector
+   - Add `Box::new(your_module::YourSource)` to the category's `sources()` vector
 
 4. **Add tests** in the appropriate test module or in `crates/openentropy-tests/`.
 

@@ -1,14 +1,11 @@
-//! Shared telemetry helpers used by multiple CLI commands, plus the standalone
-//! `openentropy telemetry` subcommand implementation.
-
-use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::time::Duration;
+//! Shared telemetry helpers used by multiple CLI commands.
 
 use openentropy_core::{
     TelemetryMetricDelta, TelemetrySnapshot, TelemetryWindowReport, collect_telemetry_snapshot,
     collect_telemetry_window,
 };
+use std::cmp::Ordering;
+use std::collections::HashMap;
 
 /// Telemetry capture lifecycle helper shared by command handlers.
 pub struct TelemetryCapture {
@@ -290,29 +287,4 @@ pub fn print_snapshot_if_enabled(enabled: bool, label: &str) -> Option<Telemetry
     let snapshot = collect_telemetry_snapshot();
     print_snapshot_summary(label, &snapshot);
     Some(snapshot)
-}
-
-/// Standalone telemetry command.
-pub fn run(window_sec: f64, output_path: Option<&str>) {
-    if !window_sec.is_finite() || window_sec < 0.0 {
-        eprintln!("Invalid --window-sec value: {window_sec}. Expected a finite value >= 0.");
-        std::process::exit(2);
-    }
-    let window_sec = window_sec.min(86_400.0);
-    if window_sec > 0.0 {
-        println!("Collecting telemetry window for {:.2}s...", window_sec);
-        let start = collect_telemetry_snapshot();
-        std::thread::sleep(Duration::from_secs_f64(window_sec));
-        let report = collect_telemetry_window(start);
-        print_window_summary("telemetry", &report);
-        if let Some(path) = output_path {
-            super::write_json(&report, path, "Telemetry window");
-        }
-    } else {
-        let snapshot = collect_telemetry_snapshot();
-        print_snapshot_summary("telemetry", &snapshot);
-        if let Some(path) = output_path {
-            super::write_json(&snapshot, path, "Telemetry snapshot");
-        }
-    }
 }

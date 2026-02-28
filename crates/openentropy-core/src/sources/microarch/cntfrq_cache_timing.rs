@@ -106,9 +106,20 @@ mod imp {
 
     type FnPtr = unsafe extern "C" fn() -> u64;
 
+    /// RAII guard for a JIT mmap page — ensures munmap on drop (including panic unwind).
+    struct JitPage(*mut libc::c_void);
+
+    impl Drop for JitPage {
+        fn drop(&mut self) {
+            unsafe {
+                munmap(self.0, 4096);
+            }
+        }
+    }
+
     /// Allocate a JIT page, write the MRS+RET instruction pair, return a callable fn.
-    /// Caller must munmap the page (4096 bytes at the returned pointer address).
-    unsafe fn build_jit_mrs() -> Option<(FnPtr, *mut libc::c_void)> {
+    /// The JitPage guard ensures munmap on drop.
+    unsafe fn build_jit_mrs() -> Option<(FnPtr, JitPage)> {
         let page = unsafe {
             mmap(
                 std::ptr::null_mut(),
@@ -132,7 +143,7 @@ mod imp {
             core::arch::asm!("dsb ish", "isb", options(nostack));
         }
         let fn_ptr: FnPtr = unsafe { std::mem::transmute(page) };
-        Some((fn_ptr, page))
+        Some((fn_ptr, JitPage(page)))
     }
 
     /// Read CNTFRQ via JIT and return elapsed 24 MHz ticks.
@@ -151,22 +162,23 @@ mod imp {
         }
 
         fn is_available(&self) -> bool {
-            // Build a test JIT page; if mmap succeeds and the MRS doesn't trap, available.
-            unsafe {
-                if let Some((fn_ptr, page)) = build_jit_mrs() {
-                    // Test read
-                    let t = time_cntfrq_jit(fn_ptr);
-                    munmap(page, 4096);
-                    t < 100_000 // sanity: should be ≤200 ticks normally
-                } else {
-                    false
+            use std::sync::OnceLock;
+            static CNTFRQ_AVAILABLE: OnceLock<bool> = OnceLock::new();
+            *CNTFRQ_AVAILABLE.get_or_init(|| {
+                unsafe {
+                    if let Some((fn_ptr, _guard)) = build_jit_mrs() {
+                        let t = time_cntfrq_jit(fn_ptr);
+                        t < 100_000 // sanity: should be ≤200 ticks normally
+                    } else {
+                        false
+                    }
                 }
-            }
+            })
         }
 
         fn collect(&self, n_samples: usize) -> Vec<u8> {
             unsafe {
-                let Some((fn_ptr, page)) = build_jit_mrs() else {
+                let Some((fn_ptr, _page_guard)) = build_jit_mrs() else {
                     return Vec::new();
                 };
 
@@ -187,8 +199,7 @@ mod imp {
                     }
                 }
 
-                munmap(page, 4096);
-
+                // _page_guard drops here, calling munmap automatically
                 extract_timing_entropy_debiased(&timings, n_samples)
             }
         }

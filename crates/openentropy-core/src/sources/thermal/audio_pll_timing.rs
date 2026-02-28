@@ -26,7 +26,7 @@ static AUDIO_PLL_TIMING_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::Thermal,
     platform: Platform::MacOS,
     requirements: &[Requirement::AudioUnit],
-    entropy_rate_estimate: 5.0,
+    entropy_rate_estimate: 3.0,
     composite: false,
     is_fast: true,
 };

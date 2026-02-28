@@ -1,9 +1,9 @@
 //! DiskIOSource — NVMe/SSD read latency jitter.
 //!
 //! Creates a temporary 64KB file, performs random seeks and 4KB reads,
-//! and extracts LSBs of nanosecond timing deltas as entropy.
+//! and extracts timing entropy via the standard delta/XOR/fold pipeline.
 //!
-//! **Raw output characteristics:** LSBs of inter-read timing deltas.
+//! **Raw output characteristics:** Timing deltas from random disk reads.
 //! Use SHA-256 conditioning for uniform output.
 
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -12,6 +12,7 @@ use std::time::Instant;
 use tempfile::NamedTempFile;
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
+use crate::sources::helpers::extract_timing_entropy;
 
 /// Size of the temporary file used for random reads.
 const TEMP_FILE_SIZE: usize = 64 * 1024; // 64 KB
@@ -29,9 +30,9 @@ static DISK_IO_INFO: SourceInfo = SourceInfo {
     category: SourceCategory::IO,
     platform: Platform::Any,
     requirements: &[],
-    entropy_rate_estimate: 3.0,
+    entropy_rate_estimate: 1.5,
     composite: false,
-    is_fast: true,
+    is_fast: false,
 };
 
 /// Entropy source that harvests timing jitter from NVMe/SSD random reads.
@@ -69,7 +70,6 @@ impl EntropySource for DiskIOSource {
             return Vec::new();
         }
 
-        let mut raw = Vec::with_capacity(n_samples);
         let mut read_buf = vec![0u8; READ_BLOCK_SIZE];
         let max_offset = TEMP_FILE_SIZE.saturating_sub(READ_BLOCK_SIZE);
 
@@ -77,14 +77,17 @@ impl EntropySource for DiskIOSource {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
-        let mut lcg_state = seed | 1;
+        let mut lcg_state = if seed == 0 {
+            0xDEAD_BEEF_CAFE_1235u64
+        } else {
+            seed | 1
+        };
 
-        let mut prev_ns: u64 = 0;
+        // Over-sample: 4x raw readings per output byte for the extraction pipeline.
+        let num_reads = n_samples * 4 + 64;
+        let mut timings = Vec::with_capacity(num_reads);
 
-        // Oversample to ensure enough raw data.
-        let num_reads = n_samples * 2 + 64;
-
-        for i in 0..num_reads {
+        for _ in 0..num_reads {
             lcg_state = lcg_state
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
@@ -95,21 +98,10 @@ impl EntropySource for DiskIOSource {
             let _ = tmpfile.read(&mut read_buf);
             let elapsed_ns = t0.elapsed().as_nanos() as u64;
 
-            if i > 0 {
-                let delta = elapsed_ns.wrapping_sub(prev_ns);
-                // Extract lowest byte of delta — raw, unconditioned
-                raw.push(delta as u8);
-            }
-
-            prev_ns = elapsed_ns;
-
-            if raw.len() >= n_samples {
-                break;
-            }
+            timings.push(elapsed_ns);
         }
 
-        raw.truncate(n_samples);
-        raw
+        extract_timing_entropy(&timings, n_samples)
     }
 }
 

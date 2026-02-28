@@ -7,7 +7,7 @@
 //!
 
 use crate::source::{EntropySource, Platform, SourceCategory, SourceInfo};
-use crate::sources::helpers::{mach_time, xor_fold_u64};
+use crate::sources::helpers::{extract_timing_entropy, mach_time};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -59,9 +59,9 @@ impl EntropySource for DVFSRaceSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
-        // We need enough race differentials to extract n_samples bytes.
-        // Each race produces one u64 differential; XOR-fold pairs → bytes.
-        let raw_count = n_samples * 4 + 64;
+        // Cap thread spawns: each race spawns 2 threads, so 256 races = 512 threads max.
+        // extract_timing_entropy handles the oversampling/debiasing.
+        let raw_count = (n_samples * 4 + 64).min(256);
         let mut diffs: Vec<u64> = Vec::with_capacity(raw_count);
 
         // Get timebase for ~2μs window calculation.
@@ -123,11 +123,7 @@ impl EntropySource for DVFSRaceSource {
             diffs.push(diff);
         }
 
-        // Extract entropy: XOR adjacent diffs, then xor-fold to bytes.
-        let xored: Vec<u64> = diffs.windows(2).map(|w| w[0] ^ w[1]).collect();
-        let mut raw: Vec<u8> = xored.iter().map(|&x| xor_fold_u64(x)).collect();
-        raw.truncate(n_samples);
-        raw
+        extract_timing_entropy(&diffs, n_samples)
     }
 }
 

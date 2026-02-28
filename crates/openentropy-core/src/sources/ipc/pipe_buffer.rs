@@ -145,7 +145,9 @@ impl EntropySource for PipeBufferSource {
                     // SAFETY: fds[1] is a valid file descriptor from pipe().
                     unsafe {
                         let flags = libc::fcntl(fds[1], libc::F_GETFL);
-                        libc::fcntl(fds[1], libc::F_SETFL, flags | libc::O_NONBLOCK);
+                        if flags >= 0 {
+                            libc::fcntl(fds[1], libc::F_SETFL, flags | libc::O_NONBLOCK);
+                        }
                     }
                 }
                 pipe_pool.push(fds);

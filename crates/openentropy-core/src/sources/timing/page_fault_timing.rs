@@ -30,7 +30,7 @@ impl EntropySource for PageFaultTimingSource {
     }
 
     fn is_available(&self) -> bool {
-        true
+        cfg!(unix)
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {

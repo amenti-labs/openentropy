@@ -15,7 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -42,8 +42,6 @@ pub enum ChartMode {
     RandomWalk,
     ByteDistribution,
     Autocorrelation,
-    /// Camera shot-noise visualization (sensor source)
-    CameraShotNoise,
 }
 
 impl ChartMode {
@@ -55,22 +53,7 @@ impl ChartMode {
             Self::OutputValue => Self::RandomWalk,
             Self::RandomWalk => Self::ByteDistribution,
             Self::ByteDistribution => Self::Autocorrelation,
-            Self::Autocorrelation => Self::CameraShotNoise,
-            Self::CameraShotNoise => Self::Shannon,
-        }
-    }
-
-    /// Returns true if this mode is source-specific
-    /// (only relevant for a particular source)
-    pub fn is_source_specific(self) -> bool {
-        matches!(self, Self::CameraShotNoise)
-    }
-
-    /// Check if this mode is appropriate for the given source name
-    pub fn is_applicable_for(self, source_name: &str) -> bool {
-        match self {
-            Self::CameraShotNoise => source_name == "camera_noise",
-            _ => true,
+            Self::Autocorrelation => Self::Shannon,
         }
     }
 
@@ -83,7 +66,6 @@ impl ChartMode {
             Self::RandomWalk => "Random walk",
             Self::ByteDistribution => "Byte dist",
             Self::Autocorrelation => "Autocorrelation",
-            Self::CameraShotNoise => "Camera Shot Noise",
         }
     }
 
@@ -95,7 +77,6 @@ impl ChartMode {
             Self::RandomWalk => "sum",
             Self::ByteDistribution => "count",
             Self::Autocorrelation => "r",
-            Self::CameraShotNoise => "pixels",
         }
     }
 
@@ -109,7 +90,6 @@ impl ChartMode {
             Self::RandomWalk => "Cumulative bias detector",
             Self::ByteDistribution => "Byte value histogram",
             Self::Autocorrelation => "Sequential independence check",
-            Self::CameraShotNoise => "Camera sensor shot-noise lattice",
         }
     }
 
@@ -158,12 +138,6 @@ impl ChartMode {
                 "|r| above 0.3 = concerning dependency between consecutive samples.",
                 "Persistent non-zero correlation = the source has memory/structure.",
             ],
-            Self::CameraShotNoise => &[
-                "Visualizes live camera sensor shot-noise and dark-current grain.",
-                "Grid intensity is driven directly by recent raw bytes from camera_noise.",
-                "Light level and lens coverage visibly change the texture pattern.",
-                "Quantum-origin noise is present, but mixed with analog readout effects.",
-            ],
         }
     }
 
@@ -174,10 +148,7 @@ impl ChartMode {
             Self::MinEntropy => s.min_entropy,
             Self::CollectTime => s.collect_time_ms,
             Self::OutputValue => s.output_value,
-            Self::RandomWalk
-            | Self::ByteDistribution
-            | Self::Autocorrelation
-            | Self::CameraShotNoise => 0.0,
+            Self::RandomWalk | Self::ByteDistribution | Self::Autocorrelation => 0.0,
         }
     }
 
@@ -197,7 +168,7 @@ impl ChartMode {
                 let bound = (min_val.abs().max(max_val.abs()) + 0.1).min(1.0);
                 (-bound, bound)
             }
-            Self::ByteDistribution | Self::CameraShotNoise => (0.0, 1.0),
+            Self::ByteDistribution => (0.0, 1.0),
         }
     }
 }
@@ -211,6 +182,9 @@ pub const SAMPLE_SIZES: [usize; 4] = [16, 32, 64, 128];
 
 /// Maximum samples retained per source.
 const MAX_HISTORY: usize = 120;
+
+/// Sample size used for recording (matches CLI `record` command).
+const RECORDING_SAMPLE_SIZE: usize = 1000;
 
 /// Canonical category display order for the TUI source list.
 const CATEGORY_ORDER: &[&str] = &[
@@ -308,11 +282,8 @@ pub fn next_conditioning(mode: ConditioningMode) -> ConditioningMode {
     }
 }
 
-fn preferred_chart_mode_for_source(source_name: &str) -> ChartMode {
-    match source_name {
-        "camera_noise" => ChartMode::CameraShotNoise,
-        _ => ChartMode::RandomWalk,
-    }
+fn preferred_chart_mode_for_source(_source_name: &str) -> ChartMode {
+    ChartMode::RandomWalk
 }
 
 // ---------------------------------------------------------------------------
@@ -326,35 +297,6 @@ pub struct Sample {
     pub min_entropy: f64,
     pub collect_time_ms: f64,
     pub output_value: f64,
-}
-
-// ---------------------------------------------------------------------------
-// Visualization state
-// ---------------------------------------------------------------------------
-
-/// Keep latest raw bytes visible in visualization panels.
-const MAX_STREAM_BYTES: usize = 32;
-
-/// Keep latest raw bits visible in visualization panels.
-const MAX_STREAM_BITS: usize = 256;
-
-/// Generic stream state for source-specific visualizations.
-#[derive(Debug, Clone, Default)]
-pub struct SensorFlowState {
-    /// Latest raw bytes used to drive visualization
-    pub recent_bytes: VecDeque<u8>,
-    /// Latest raw bits used to drive visualization (0/1)
-    pub recent_bits: VecDeque<u8>,
-    /// Number of bits changed vs previous collection cycle
-    pub changed_bits_last: usize,
-    /// Number of consecutive cycles with identical raw bytes
-    pub repeat_streak: u64,
-    /// Fingerprint of recent stream tail (for quick visual comparison)
-    pub stream_fingerprint: u64,
-    /// Last cycle's raw bytes
-    pub last_cycle_bytes: Vec<u8>,
-    /// Frame counter
-    pub frame: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -373,12 +315,9 @@ pub struct Snapshot {
     pub byte_freq: [u64; 256],
     pub source_stats: HashMap<String, SourceHealth>,
     pub active_history: Vec<Sample>,
-    pub compare_history: Vec<Sample>,
     pub recording_samples: u64,
     /// Accumulated random walk values (cumulative sum across collections).
     pub walk: Vec<f64>,
-    /// Camera shot-noise visualization state
-    pub camera_noise: SensorFlowState,
 }
 
 // ---------------------------------------------------------------------------
@@ -401,8 +340,6 @@ struct SharedState {
     walk: HashMap<String, Vec<f64>>,
     /// Session writer for TUI recording. Created when 'r' is pressed, dropped on stop.
     session_writer: Option<SessionWriter>,
-    /// Camera shot-noise visualization state
-    camera_noise: SensorFlowState,
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +361,6 @@ pub struct App {
     conditioning_mode: ConditioningMode,
     chart_mode: ChartMode,
     paused: bool,
-    compare_source: Option<usize>,
     sample_size_idx: usize,
     table_state: TableState,
     /// Whether the TUI is in recording mode (toggled with 'r').
@@ -435,6 +371,10 @@ pub struct App {
     recording_path: Option<PathBuf>,
     /// Last start/stop recording error to surface in the TUI.
     recording_error: Option<String>,
+    /// Source indices toggled for multiselect recording.
+    selected: HashSet<usize>,
+    /// Whether the help modal is showing.
+    show_help: bool,
     /// Which categories are collapsed in the source list.
     collapsed: HashSet<String>,
     /// Computed virtual row list (headers + sources).
@@ -472,7 +412,7 @@ impl App {
             }
         }
 
-        let collapsed: HashSet<String> = category_order.iter().cloned().collect();
+        let collapsed: HashSet<String> = HashSet::new(); // Start expanded so first source auto-activates
         let virtual_rows = build_virtual_rows(&category_order, &category_sources, &collapsed);
 
         let mut app = Self {
@@ -498,30 +438,31 @@ impl App {
                 byte_freq: [0u64; 256],
                 walk: HashMap::new(),
                 session_writer: None,
-                camera_noise: SensorFlowState::default(),
             })),
             collector_flag: Arc::new(AtomicBool::new(false)),
             conditioning_mode: ConditioningMode::default(),
             chart_mode: ChartMode::default(),
             paused: false,
-            compare_source: None,
             sample_size_idx: 1, // default 32 bytes
             table_state: TableState::default().with_selected(Some(0)),
             recording: false,
             recording_since: None,
             recording_path: None,
             recording_error: None,
+            selected: HashSet::new(),
+            show_help: false,
             collapsed,
             virtual_rows,
             category_order,
             category_sources,
         };
 
-        // Find first source row to auto-activate, or stay on first header
+        // Find first source row to auto-select and activate, or stay on first header
         for (i, row) in app.virtual_rows.iter().enumerate() {
             if let VirtualRow::Source { source_idx } = row {
                 app.cursor = i;
                 app.table_state.select(Some(i));
+                app.selected.insert(*source_idx);
                 app.active = Some(*source_idx);
                 break;
             }
@@ -583,7 +524,7 @@ impl App {
                 && let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
             {
-                self.handle_key(key.code);
+                self.handle_key(key);
             }
 
             if last_tick.elapsed() >= self.refresh_rate {
@@ -597,9 +538,16 @@ impl App {
         Ok(())
     }
 
-    fn handle_key(&mut self, key: KeyCode) {
-        match key {
+    fn handle_key(&mut self, key: KeyEvent) {
+        // Help modal: any key dismisses it
+        if self.show_help {
+            self.show_help = false;
+            return;
+        }
+
+        match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.running = false,
+            KeyCode::Char('?') => self.show_help = true,
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.cursor > 0 {
                     self.cursor -= 1;
@@ -624,17 +572,15 @@ impl App {
                 }
                 VirtualRow::Source { source_idx } => {
                     let source_idx = *source_idx;
-                    if self.active == Some(source_idx) {
-                        self.active = None;
+                    if self.selected.remove(&source_idx) {
+                        // Deselected — if it was active, move active to another selected source
+                        if self.active == Some(source_idx) {
+                            self.active = self.selected.iter().copied().min();
+                        }
                     } else {
-                        let name = &self.source_names[source_idx];
-                        let mut s = self.shared.lock().unwrap();
-                        s.source_history.remove(name);
-                        s.byte_freq = [0u64; 256];
-                        drop(s);
-                        self.active = Some(source_idx);
-                        self.chart_mode = preferred_chart_mode_for_source(name);
-                        self.kick_collect();
+                        // Selected — activate it for live viewing
+                        self.selected.insert(source_idx);
+                        self.activate_source(source_idx);
                     }
                 }
             },
@@ -687,16 +633,7 @@ impl App {
                 self.kick_collect();
             }
             KeyCode::Char('g') => {
-                let active = self.active_name().unwrap_or("");
-                let mut next = self.chart_mode.next();
-                // Skip source-specific visualizations when they do not match active source.
-                for _ in 0..20 {
-                    if !next.is_source_specific() || next.is_applicable_for(active) {
-                        break;
-                    }
-                    next = next.next();
-                }
-                self.chart_mode = next;
+                self.chart_mode = self.chart_mode.next();
             }
             KeyCode::Char('p') => self.paused = !self.paused,
             KeyCode::Char('s') => self.export_snapshot(),
@@ -707,16 +644,6 @@ impl App {
             KeyCode::Char('-') | KeyCode::Char('[') => {
                 let secs = (self.refresh_rate.as_secs_f64() * 2.0).min(10.0);
                 self.refresh_rate = Duration::from_secs_f64(secs);
-            }
-            KeyCode::Tab => {
-                // Compare only works when cursor is on a source row
-                if self.compare_source.is_some() {
-                    self.compare_source = None;
-                } else if let Some(source_idx) = self.cursor_source_idx()
-                    && self.active != Some(source_idx)
-                {
-                    self.compare_source = Some(source_idx);
-                }
             }
             KeyCode::Char('n') => {
                 self.sample_size_idx = (self.sample_size_idx + 1) % SAMPLE_SIZES.len();
@@ -739,9 +666,7 @@ impl App {
                     if let Some(cur) = current {
                         let idx = modes.iter().position(|&m| m == cur).unwrap_or(0);
                         let next = modes[(idx + 1) % modes.len()];
-                        let _ = self
-                            .pool
-                            .with_source(&name, |s| s.set_config("mode", next));
+                        let _ = self.pool.with_source(&name, |s| s.set_config("mode", next));
                         self.kick_collect();
                     }
                 }
@@ -766,10 +691,33 @@ impl App {
         self.table_state.select(Some(self.cursor));
     }
 
+    /// Make a source the active (chart) source, resetting its display state.
+    fn activate_source(&mut self, source_idx: usize) {
+        let name = &self.source_names[source_idx];
+        let mut s = self.shared.lock().unwrap();
+        s.source_history.remove(name);
+        s.byte_freq = [0u64; 256];
+        drop(s);
+        self.active = Some(source_idx);
+        self.chart_mode = preferred_chart_mode_for_source(name);
+        self.kick_collect();
+    }
+
     fn start_recording(&mut self) {
+        if self.selected.is_empty() {
+            self.recording_error = Some("No sources selected for recording".to_string());
+            return;
+        }
+
+        let mut indices: Vec<usize> = self.selected.iter().copied().collect();
+        indices.sort();
+        let rec_sources: Vec<String> = indices
+            .iter()
+            .map(|&i| self.source_names[i].clone())
+            .collect();
+
         let config = SessionConfig {
-            // Keep metadata stable even if the user switches active source while recording.
-            sources: self.source_names.clone(),
+            sources: rec_sources,
             conditioning: self.conditioning_mode,
             output_dir: PathBuf::from("sessions"),
             ..Default::default()
@@ -817,6 +765,23 @@ impl App {
             None => return,
         };
 
+        // Collect the names of selected-but-not-active sources for recording
+        let extra_rec_sources: Vec<String> = if self.recording {
+            let mut indices: Vec<usize> = self
+                .selected
+                .iter()
+                .copied()
+                .filter(|&i| Some(i) != self.active)
+                .collect();
+            indices.sort();
+            indices
+                .iter()
+                .map(|&i| self.source_names[i].clone())
+                .collect()
+        } else {
+            vec![]
+        };
+
         let pool = Arc::clone(&self.pool);
         let shared = Arc::clone(&self.shared);
         let flag = Arc::clone(&self.collector_flag);
@@ -861,16 +826,6 @@ impl App {
                 }
                 s.collecting = false;
 
-                // Update camera shot-noise visualization state
-                if active_name == "camera_noise" {
-                    update_flow_state(&mut s.camera_noise, &raw_bytes);
-                }
-
-                // Write to session if recording
-                if let Some(ref mut writer) = s.session_writer {
-                    let _ = writer.write_sample(&active_name, &raw_bytes, &cond_bytes);
-                }
-
                 for src in &health.sources {
                     s.source_stats.insert(src.name.clone(), src.clone());
                     if src.name == active_name {
@@ -884,6 +839,38 @@ impl App {
                         });
                         if hist.len() > MAX_HISTORY {
                             hist.pop_front();
+                        }
+                    }
+                }
+
+                // Recording: collect from all selected sources at full sample size
+                let is_recording = s.session_writer.is_some();
+                drop(s); // release lock during collection
+                if is_recording {
+                    let rec_size = RECORDING_SAMPLE_SIZE;
+                    // Active source: separate larger collection for the session
+                    let rec_raw = pool
+                        .get_source_raw_bytes(&active_name, rec_size)
+                        .unwrap_or_default();
+                    if !rec_raw.is_empty() {
+                        let rec_cond = condition(&rec_raw, rec_size, mode);
+                        let mut s = shared.lock().unwrap();
+                        if let Some(ref mut writer) = s.session_writer {
+                            let _ = writer.write_sample(&active_name, &rec_raw, &rec_cond);
+                        }
+                    }
+                    // Other selected sources
+                    for src_name in &extra_rec_sources {
+                        let raw = pool
+                            .get_source_raw_bytes(src_name, rec_size)
+                            .unwrap_or_default();
+                        if raw.is_empty() {
+                            continue;
+                        }
+                        let cond = condition(&raw, rec_size, mode);
+                        let mut s = shared.lock().unwrap();
+                        if let Some(ref mut writer) = s.session_writer {
+                            let _ = writer.write_sample(src_name, &raw, &cond);
                         }
                     }
                 }
@@ -972,10 +959,6 @@ impl App {
     pub fn is_collapsed(&self, cat_key: &str) -> bool {
         self.collapsed.contains(cat_key)
     }
-    #[cfg(test)]
-    pub fn category_order(&self) -> &[String] {
-        &self.category_order
-    }
     pub fn category_sources(&self) -> &HashMap<String, Vec<usize>> {
         &self.category_sources
     }
@@ -1006,11 +989,20 @@ impl App {
     pub fn sample_size(&self) -> usize {
         SAMPLE_SIZES[self.sample_size_idx]
     }
-    pub fn compare_source(&self) -> Option<usize> {
-        self.compare_source
-    }
     pub fn table_state_mut(&mut self) -> &mut TableState {
         &mut self.table_state
+    }
+
+    pub fn show_help(&self) -> bool {
+        self.show_help
+    }
+
+    pub fn is_selected(&self, source_idx: usize) -> bool {
+        self.selected.contains(&source_idx)
+    }
+
+    pub fn selected_count(&self) -> usize {
+        self.selected.len()
     }
 
     pub fn is_recording(&self) -> bool {
@@ -1033,10 +1025,6 @@ impl App {
         self.active.map(|i| self.source_names[i].as_str())
     }
 
-    pub fn compare_name(&self) -> Option<&str> {
-        self.compare_source.map(|i| self.source_names[i].as_str())
-    }
-
     pub fn source_infos(&self) -> Vec<openentropy_core::pool::SourceInfoSnapshot> {
         self.pool.source_infos()
     }
@@ -1047,14 +1035,14 @@ impl App {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        let history_for = |name: Option<&str>| -> Vec<Sample> {
-            name.and_then(|n| s.source_history.get(n))
-                .map(|d| d.iter().copied().collect())
-                .unwrap_or_default()
-        };
-
         // Update recording sample count from the writer
         let rec_samples = s.session_writer.as_ref().map_or(0, |w| w.total_samples());
+
+        let active_history = self
+            .active_name()
+            .and_then(|n| s.source_history.get(n))
+            .map(|d| d.iter().copied().collect())
+            .unwrap_or_default();
 
         Snapshot {
             raw_hex: s.raw_hex.clone(),
@@ -1066,58 +1054,15 @@ impl App {
             last_export: s.last_export.clone(),
             byte_freq: s.byte_freq,
             source_stats: s.source_stats.clone(),
-            active_history: history_for(self.active_name()),
-            compare_history: history_for(self.compare_name()),
+            active_history,
             recording_samples: rec_samples,
             walk: self
                 .active_name()
                 .and_then(|n| s.walk.get(n))
                 .cloned()
                 .unwrap_or_default(),
-            camera_noise: s.camera_noise.clone(),
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Visualization state update functions
-// ---------------------------------------------------------------------------
-
-fn append_stream(state_bytes: &mut VecDeque<u8>, state_bits: &mut VecDeque<u8>, raw_bytes: &[u8]) {
-    for &byte in raw_bytes {
-        state_bytes.push_back(byte);
-        while state_bytes.len() > MAX_STREAM_BYTES {
-            state_bytes.pop_front();
-        }
-
-        // MSB->LSB for readability in panel display.
-        for bit in (0..8).rev() {
-            state_bits.push_back((byte >> bit) & 1);
-        }
-        while state_bits.len() > MAX_STREAM_BITS {
-            state_bits.pop_front();
-        }
-    }
-}
-
-fn count_bit_changes(a: &[u8], b: &[u8]) -> usize {
-    let max_len = a.len().max(b.len());
-    let mut changes = 0usize;
-    for i in 0..max_len {
-        let av = *a.get(i).unwrap_or(&0);
-        let bv = *b.get(i).unwrap_or(&0);
-        changes += (av ^ bv).count_ones() as usize;
-    }
-    changes
-}
-
-fn stream_fingerprint(bytes: &VecDeque<u8>) -> u64 {
-    let mut hash = 0xcbf29ce484222325u64;
-    for &b in bytes {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
 }
 
 /// Build the virtual row list from category order, source map, and collapse state.
@@ -1140,20 +1085,6 @@ fn build_virtual_rows(
         }
     }
     rows
-}
-
-fn update_flow_state(state: &mut SensorFlowState, raw_bytes: &[u8]) {
-    state.frame = state.frame.wrapping_add(1);
-    state.changed_bits_last = count_bit_changes(raw_bytes, &state.last_cycle_bytes);
-    if raw_bytes == state.last_cycle_bytes.as_slice() {
-        state.repeat_streak = state.repeat_streak.saturating_add(1);
-    } else {
-        state.repeat_streak = 0;
-    }
-    state.last_cycle_bytes.clear();
-    state.last_cycle_bytes.extend_from_slice(raw_bytes);
-    append_stream(&mut state.recent_bytes, &mut state.recent_bits, raw_bytes);
-    state.stream_fingerprint = stream_fingerprint(&state.recent_bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -1180,8 +1111,6 @@ mod tests {
         let mode = mode.next();
         assert_eq!(mode, ChartMode::Autocorrelation);
         let mode = mode.next();
-        assert_eq!(mode, ChartMode::CameraShotNoise);
-        let mode = mode.next();
         assert_eq!(mode, ChartMode::Shannon);
     }
 
@@ -1199,7 +1128,6 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.label(), "Random walk");
         assert_eq!(ChartMode::ByteDistribution.label(), "Byte dist");
         assert_eq!(ChartMode::Autocorrelation.label(), "Autocorrelation");
-        assert_eq!(ChartMode::CameraShotNoise.label(), "Camera Shot Noise");
     }
 
     #[test]
@@ -1212,7 +1140,6 @@ mod tests {
             ChartMode::RandomWalk,
             ChartMode::ByteDistribution,
             ChartMode::Autocorrelation,
-            ChartMode::CameraShotNoise,
         ] {
             assert!(
                 !mode.description().is_empty(),
@@ -1230,7 +1157,6 @@ mod tests {
         assert_eq!(ChartMode::RandomWalk.y_label(), "sum");
         assert_eq!(ChartMode::ByteDistribution.y_label(), "count");
         assert_eq!(ChartMode::Autocorrelation.y_label(), "r");
-        assert_eq!(ChartMode::CameraShotNoise.y_label(), "pixels");
     }
 
     #[test]

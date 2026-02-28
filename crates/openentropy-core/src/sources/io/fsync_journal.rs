@@ -70,15 +70,15 @@ impl EntropySource for FsyncJournalSource {
             buf[0] = (i & 0xFF) as u8;
             buf[1] = ((i >> 8) & 0xFF) as u8;
 
-            let t0 = std::time::Instant::now();
             if tmpfile.write_all(&buf).is_err() {
                 continue;
             }
             if tmpfile.flush().is_err() {
                 continue;
             }
-            // fsync forces the full journal commit.
+            // Time only the fsync (journal commit) — not the write+flush above.
             let file = tmpfile.as_file();
+            let t0 = std::time::Instant::now();
             if file.sync_all().is_err() {
                 continue;
             }

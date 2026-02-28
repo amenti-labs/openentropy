@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use openentropy_core::TelemetryWindowReport;
-use openentropy_core::conditioning::{quick_min_entropy, quick_quality, quick_shannon};
+use openentropy_core::conditioning::{
+    quick_autocorrelation_lag1, quick_min_entropy, quick_quality, quick_shannon,
+};
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug)]
@@ -34,7 +36,9 @@ struct SourceAccumulator {
     shannon_sum: f64,
     min_entropy_sum: f64,
     throughput_sum: f64,
+    autocorrelation_sum: f64,
     min_entropy_values: Vec<f64>,
+    collection_times_ms: Vec<f64>,
 }
 
 #[derive(Clone)]
@@ -46,6 +50,8 @@ struct BenchRow {
     avg_shannon: f64,
     avg_min_entropy: f64,
     avg_throughput_bps: f64,
+    avg_autocorrelation: f64,
+    p99_latency_ms: f64,
     stability: f64,
     score: f64,
 }
@@ -81,6 +87,8 @@ struct BenchSourceReport {
     avg_shannon: f64,
     avg_min_entropy: f64,
     avg_throughput_bps: f64,
+    avg_autocorrelation: f64,
+    p99_latency_ms: f64,
     stability: f64,
     grade: char,
     score: f64,
@@ -118,9 +126,8 @@ pub fn run(args: BenchArgs) {
                 "Note: --rounds, --warmup-rounds, and --output are ignored in single-source probe mode."
             );
         }
-        let mode = super::parse_conditioning(&args.conditioning);
         let samples = args.samples_per_round.unwrap_or(5000);
-        run_single_source(&args.positional[0], mode, samples, &args.conditioning);
+        run_single_source(&args.positional[0], samples);
         return;
     }
 
@@ -211,7 +218,9 @@ pub fn run(args: BenchArgs) {
                 entry.success_rounds += 1;
                 entry.shannon_sum += src.entropy;
                 entry.min_entropy_sum += src.min_entropy;
+                entry.autocorrelation_sum += src.autocorrelation;
                 entry.min_entropy_values.push(src.min_entropy);
+                entry.collection_times_ms.push(src.time * 1000.0);
                 if src.time > 0.0 {
                     entry.throughput_sum += bytes_delta as f64 / src.time;
                 }
@@ -238,23 +247,28 @@ pub fn run(args: BenchArgs) {
                 avg_shannon,
                 avg_min_entropy,
                 avg_throughput_bps,
+                avg_autocorrelation,
+                p99_latency_ms,
                 stability,
             ) = if let Some(src_acc) = accum.get(&info.name) {
                 let success_rounds = src_acc.success_rounds;
                 if success_rounds > 0 {
+                    let n = success_rounds as f64;
                     (
                         success_rounds,
                         src_acc.failures,
-                        src_acc.shannon_sum / success_rounds as f64,
-                        src_acc.min_entropy_sum / success_rounds as f64,
-                        src_acc.throughput_sum / success_rounds as f64,
+                        src_acc.shannon_sum / n,
+                        src_acc.min_entropy_sum / n,
+                        src_acc.throughput_sum / n,
+                        src_acc.autocorrelation_sum / n,
+                        percentile(&src_acc.collection_times_ms, 99.0),
                         stability_index(&src_acc.min_entropy_values),
                     )
                 } else {
-                    (0, src_acc.failures, 0.0, 0.0, 0.0, 0.0)
+                    (0, src_acc.failures, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
                 }
             } else {
-                (0, 0, 0.0, 0.0, 0.0, 0.0)
+                (0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
             };
 
             BenchRow {
@@ -265,6 +279,8 @@ pub fn run(args: BenchArgs) {
                 avg_shannon,
                 avg_min_entropy,
                 avg_throughput_bps,
+                avg_autocorrelation,
+                p99_latency_ms,
                 stability,
                 score: 0.0,
             }
@@ -302,17 +318,27 @@ pub fn run(args: BenchArgs) {
     }
 
     rows.sort_by(|a, b| {
-        b.avg_min_entropy
-            .partial_cmp(&a.avg_min_entropy)
+        b.score
+            .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    println!("\n{}", "=".repeat(100));
+    println!("\n{}", "=".repeat(120));
     println!(
-        "{:<26} {:>5} {:>7} {:>7} {:>10} {:>9} {:>10} {:>6} {:>8}",
-        "Source", "Grade", "H", "H∞", "KB/s", "Stability", "Rounds", "Fail", "State"
+        "{:<26} {:>5} {:>7} {:>7} {:>10} {:>6} {:>9} {:>9} {:>10} {:>6} {:>8}",
+        "Source",
+        "Grade",
+        "H",
+        "H∞",
+        "KB/s",
+        "r₁",
+        "p99(ms)",
+        "Stability",
+        "Rounds",
+        "Fail",
+        "State"
     );
-    println!("{}", "-".repeat(100));
+    println!("{}", "-".repeat(120));
     for row in &rows {
         let grade = openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0));
         let state = if row.success_rounds == 0 {
@@ -322,25 +348,102 @@ pub fn run(args: BenchArgs) {
         } else {
             "OK"
         };
-        let composite = if row.composite { " [C]" } else { "" };
+        let display_name = if row.composite {
+            format!("{} [C]", row.name)
+        } else {
+            row.name.clone()
+        };
         let rounds_str = format!("{}/{}", row.success_rounds, settings.rounds);
         println!(
-            "{:<26} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>9.2} {:>10} {:>6} {:>8}{}",
-            row.name,
+            "{:<26} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>6.3} {:>9.1} {:>9.2} {:>10} {:>6} {:>8}",
+            display_name,
             grade,
             row.avg_shannon,
             row.avg_min_entropy,
             row.avg_throughput_bps / 1024.0,
+            row.avg_autocorrelation,
+            row.p99_latency_ms,
             row.stability,
             rounds_str,
             row.failures,
             state,
-            composite
         );
     }
     println!();
     println!("Grade is based on min-entropy (H∞), not Shannon.");
+    println!("r₁ = lag-1 autocorrelation (0 = ideal, ±1 = fully correlated).");
     println!("Stability is derived from run-to-run min-entropy consistency (1.0 = most stable).");
+
+    // Mode comparison for sources with on-device conditioning (e.g. QCicada).
+    let configurable: Vec<String> = infos
+        .iter()
+        .filter(|info| info.config.iter().any(|(k, _)| *k == "mode"))
+        .map(|info| info.name.clone())
+        .collect();
+    for src_name in &configurable {
+        let original_mode = pool_instance
+            .with_source(src_name, |s| {
+                s.config_options()
+                    .iter()
+                    .find(|(k, _)| *k == "mode")
+                    .map(|(_, v)| v.clone())
+            })
+            .flatten()
+            .unwrap_or_else(|| "raw".into());
+
+        println!("\n{}", "=".repeat(68));
+        println!("{src_name} — on-device mode comparison\n");
+        println!(
+            "  {:<12} {:>5} {:>7} {:>7} {:>6} {:>10}",
+            "Mode", "Grade", "H", "H∞", "r₁", "KB/s"
+        );
+        println!("  {}", "-".repeat(55));
+
+        let mode_samples = settings.samples_per_round;
+        for mode_name in &["raw", "sha256", "samples"] {
+            let set_ok = pool_instance
+                .with_source(src_name, |s| s.set_config("mode", mode_name).is_ok())
+                .unwrap_or(false);
+            if !set_ok {
+                continue;
+            }
+
+            // Give the device time to process the mode-switch command, then
+            // flush any stale bytes from the previous mode's buffer.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = pool_instance.get_source_raw_bytes(src_name, 64);
+
+            let t0 = Instant::now();
+            let data = pool_instance
+                .get_source_raw_bytes(src_name, mode_samples)
+                .unwrap_or_default();
+            let elapsed = t0.elapsed();
+
+            if data.is_empty() {
+                println!("  {:<12} (no data)", mode_name);
+                continue;
+            }
+
+            let shannon = quick_shannon(&data);
+            let min_h = quick_min_entropy(&data);
+            let autocorr = quick_autocorrelation_lag1(&data);
+            let grade = openentropy_core::grade_min_entropy(min_h.max(0.0));
+            let kbps = data.len() as f64 / elapsed.as_secs_f64() / 1024.0;
+
+            println!(
+                "  {:<12} {:>5} {:>7.3} {:>7.3} {:>6.3} {:>10.1}",
+                mode_name, grade, shannon, min_h, autocorr, kbps
+            );
+        }
+
+        // Restore original mode.
+        let _ = pool_instance.with_source(src_name, |s| s.set_config("mode", &original_mode));
+
+        println!();
+        println!("  raw     = health-tested noise, no hashing (device-side)");
+        println!("  sha256  = NIST SP 800-90B SHA-256 conditioning (device-side)");
+        println!("  samples = raw ADC readings, no processing");
+    }
 
     let pool_report = if !args.no_pool {
         let bytes = 65_536usize;
@@ -406,6 +509,8 @@ pub fn run(args: BenchArgs) {
                     avg_shannon: row.avg_shannon,
                     avg_min_entropy: row.avg_min_entropy,
                     avg_throughput_bps: row.avg_throughput_bps,
+                    avg_autocorrelation: row.avg_autocorrelation,
+                    p99_latency_ms: row.p99_latency_ms,
                     stability: row.stability,
                     grade: openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0)),
                     score: row.score,
@@ -424,6 +529,17 @@ fn snapshot_counters(sources: &[openentropy_core::SourceHealth]) -> HashMap<Stri
         .iter()
         .map(|s| (s.name.clone(), (s.bytes, s.failures)))
         .collect()
+}
+
+/// Compute the p-th percentile of a float slice using nearest-rank.
+fn percentile(values: &[f64], p: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted: Vec<f64> = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let rank = ((p / 100.0 * sorted.len() as f64).ceil() as usize).max(1);
+    sorted[rank.min(sorted.len()) - 1]
 }
 
 fn stability_index(values: &[f64]) -> f64 {
@@ -503,50 +619,118 @@ impl RankBy {
     }
 }
 
-fn run_single_source(
-    source_name: &str,
-    mode: openentropy_core::conditioning::ConditioningMode,
-    samples: usize,
-    conditioning_label: &str,
-) {
-    let src = match super::find_source(source_name) {
-        Some(s) => s,
-        None => {
-            eprintln!("Source '{source_name}' not found. Run 'openentropy scan' to list sources.");
-            std::process::exit(1);
-        }
-    };
-    let src = &src;
+fn run_single_source(source_name: &str, samples: usize) {
+    let src: std::sync::Arc<dyn openentropy_core::EntropySource> =
+        match super::find_source(source_name) {
+            Some(s) => std::sync::Arc::from(s),
+            None => {
+                eprintln!(
+                    "Source '{source_name}' not found. Run 'openentropy scan' to list sources."
+                );
+                std::process::exit(1);
+            }
+        };
     let info = src.info();
     println!("Probing: {}", info.name);
     println!("  {}", info.description);
     println!();
 
-    let t0 = Instant::now();
-    let raw_data = src.collect(samples);
-    let elapsed = t0.elapsed();
+    // If the source has configurable modes, benchmark each one.
+    let config = src.config_options();
+    let mode_config = config.iter().find(|(k, _)| *k == "mode");
 
-    if raw_data.is_empty() {
-        println!("  No data collected.");
-        return;
+    if let Some((_, current_mode)) = mode_config {
+        let modes = ["raw", "sha256", "samples"];
+        let original_mode = current_mode.clone();
+
+        println!(
+            "  Source has on-device conditioning modes — benchmarking each.\n\
+             \x20 No additional conditioning applied (measuring device output directly).\n"
+        );
+        println!(
+            "  {:<12} {:>5} {:>7} {:>7} {:>6} {:>10} {:>6} {:>8}",
+            "Mode", "Grade", "H", "H∞", "r₁", "KB/s", "Compr", "Unique"
+        );
+        println!("  {}", "-".repeat(68));
+
+        for mode_name in &modes {
+            if src.set_config("mode", mode_name).is_err() {
+                continue;
+            }
+
+            let t0 = Instant::now();
+            let data = src.collect(samples);
+            let elapsed = t0.elapsed();
+
+            if data.is_empty() {
+                println!("  {:<12} (no data)", mode_name);
+                continue;
+            }
+
+            let shannon = quick_shannon(&data);
+            let min_h = quick_min_entropy(&data);
+            let autocorr = quick_autocorrelation_lag1(&data);
+            let grade = openentropy_core::grade_min_entropy(min_h.max(0.0));
+            let quality = quick_quality(&data);
+            let kbps = data.len() as f64 / elapsed.as_secs_f64() / 1024.0;
+
+            println!(
+                "  {:<12} {:>5} {:>7.3} {:>7.3} {:>6.3} {:>10.1} {:>6.4} {:>8}",
+                mode_name,
+                grade,
+                shannon,
+                min_h,
+                autocorr,
+                kbps,
+                quality.compression_ratio,
+                quality.unique_values
+            );
+        }
+
+        // Restore original mode.
+        let _ = src.set_config("mode", &original_mode);
+
+        println!();
+        println!("  raw     = health-tested noise, no hashing (device-side)");
+        println!("  sha256  = NIST SP 800-90B SHA-256 conditioning (device-side)");
+        println!("  samples = raw ADC readings from photodiode, no processing");
+    } else {
+        // Standard single-source probe: measure raw output, no extra conditioning.
+        // Wrap in a thread with timeout to avoid hanging on slow/stuck sources.
+        let t0 = Instant::now();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let src_clone = std::sync::Arc::clone(&src);
+        std::thread::spawn(move || {
+            let data = src_clone.collect(samples);
+            let _ = tx.send(data);
+        });
+        let raw_data = match rx.recv_timeout(std::time::Duration::from_secs(30)) {
+            Ok(data) => data,
+            Err(_) => {
+                println!("  Source timed out after 30s.");
+                return;
+            }
+        };
+        let elapsed = t0.elapsed();
+
+        if raw_data.is_empty() {
+            println!("  No data collected.");
+            return;
+        }
+
+        let shannon = quick_shannon(&raw_data);
+        let min_h = quick_min_entropy(&raw_data);
+        let autocorr = quick_autocorrelation_lag1(&raw_data);
+        let grade = openentropy_core::grade_min_entropy(min_h.max(0.0));
+        let quality = quick_quality(&raw_data);
+
+        println!("  Grade:           {} (based on H∞)", grade);
+        println!("  Samples:         {}", raw_data.len());
+        println!("  Shannon entropy: {:.4} / 8.0 bits", shannon);
+        println!("  Min-entropy H∞:  {:.4} / 8.0 bits", min_h);
+        println!("  Autocorr r₁:    {:.4}", autocorr);
+        println!("  Compression:     {:.4}", quality.compression_ratio);
+        println!("  Unique values:   {}", quality.unique_values);
+        println!("  Latency:         {:.1}ms", elapsed.as_secs_f64() * 1000.0);
     }
-
-    let data = openentropy_core::conditioning::condition(&raw_data, raw_data.len(), mode);
-    let shannon = quick_shannon(&data);
-    let min_h = quick_min_entropy(&data);
-    let grade = openentropy_core::grade_min_entropy(min_h.max(0.0));
-    let quality = quick_quality(&data);
-
-    println!("  Grade:           {} (based on H∞)", grade);
-    println!(
-        "  Samples:         {} (conditioned: {})",
-        raw_data.len(),
-        data.len()
-    );
-    println!("  Conditioning:    {}", conditioning_label);
-    println!("  Shannon entropy: {:.4} / 8.0 bits", shannon);
-    println!("  Min-entropy H∞:  {:.4} / 8.0 bits", min_h);
-    println!("  Compression:     {:.4}", quality.compression_ratio);
-    println!("  Unique values:   {}", quality.unique_values);
-    println!("  Time:            {:.3}s", elapsed.as_secs_f64());
 }

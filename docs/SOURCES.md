@@ -1,6 +1,6 @@
 # Entropy Source Catalog
 
-60 sources across 12 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
+63 sources across 13 mechanism-based categories, each exploiting a different physical phenomenon inside your computer. Every source implements the `EntropySource` trait and produces raw `Vec<u8>` samples that are fed into the entropy pool.
 
 ## Source Summary
 
@@ -10,7 +10,7 @@
 | 2 | `sleep_jitter` | Scheduling | OS scheduler wake-up jitter | 0.4 | All |
 | 3 | `sysctl_deltas` | System | Kernel counter fluctuations | 3.0 | macOS, Linux |
 | 4 | `vmstat_deltas` | System | VM subsystem page counters | 2.0 | macOS, Linux |
-| 5 | `process_table` | System | Process table snapshot hash | 2.0 | macOS |
+| 5 | `process_table` | System | Process table snapshot hash | 1.0 | macOS |
 | 6 | `dns_timing` | Network | DNS resolution latency jitter | 3.0 | All |
 | 7 | `tcp_connect_timing` | Network | TCP handshake timing variance | 2.0 | All |
 | 8 | `wifi_rssi` | Network | WiFi signal strength noise floor | 0.5 | macOS |
@@ -31,16 +31,16 @@
 | 23 | `tlb_shootdown` | Microarch | mprotect() TLB invalidation IPI latency | 2.0 | macOS |
 | 24 | `pipe_buffer` | IPC | Kernel zone allocator via pipe lifecycle | 1.5 | macOS |
 | 25 | `kqueue_events` | IPC | Kqueue event multiplexing jitter | 2.5 | macOS |
-| 26 | `dvfs_race` | Microarch | Cross-core DVFS frequency race | 3.0 | All |
+| 26 | `dvfs_race` | Microarch | Cross-core DVFS frequency race | 3.0 | macOS |
 | 27 | `keychain_timing` | IPC | Keychain/securityd round-trip timing | 3.0 | macOS |
-| 28 | `audio_pll_timing` | Thermal | Audio PLL clock drift from CoreAudio queries | 5.0 | macOS |
+| 28 | `audio_pll_timing` | Thermal | Audio PLL clock drift from CoreAudio queries | 3.0 | macOS |
 | 29 | `mach_continuous_timing` | Timing | mach_continuous_time() kernel sleep-offset path | 2.0 | macOS |
 | 30 | `gpu_divergence` | GPU | GPU shader thread divergence timing | 4.0 | macOS (Metal) |
 | 31 | `iosurface_crossing` | GPU | IOSurface CPU↔GPU memory domain crossing | 2.5 | macOS |
 | 32 | `fsync_journal` | IO | APFS journal commit timing | 2.0 | All |
 | 33 | `display_pll` | Thermal | Display PLL phase noise (~533 MHz pixel clock) | 4.0 | macOS (ARM) |
 | 34 | `pcie_pll` | Thermal | PCIe PHY PLL jitter from IOKit clock domains | 4.0 | macOS (ARM) |
-| 35 | `pe_core_arithmetic` | Scheduling | P-core/E-core migration arithmetic loop jitter | 6.0 | macOS (ARM) |
+| 35 | `pe_core_arithmetic` | Scheduling | P-core/E-core migration arithmetic loop jitter | 6.0 | All |
 | 36 | `memory_bus_crypto` | Microarch | AES-XTS crypto context switch cache flush timing | 2.0 | macOS (ARM) |
 | 37 | `timer_coalescing` | Scheduling | OS timer coalescing wakeup jitter | 2.0 | All |
 | 38 | `dispatch_queue_timing` | Scheduling | GCD libdispatch global queue timing | 3.0 | macOS |
@@ -60,12 +60,15 @@
 | 52 | `commoncrypto_aes_timing` | Microarch | CommonCrypto AES-128-CBC bimodal timing | 2.0 | macOS |
 | 53 | `dual_clock_domain` | Microarch | 24 MHz CNTVCT × 41 MHz private timer beat | 6.0 | macOS (ARM) |
 | 54 | `sitva` | Microarch | Scheduler-induced timing variance via NEON FMLA | 2.0 | macOS (ARM) |
-| 55 | `ane_timing` | Timing | Apple Neural Engine clock domain crossing jitter | 1800.0 | macOS |
-| 56 | `nvme_iokit_sensors` | IO | NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps | 2.0 | macOS |
+| 55 | `ane_timing` | Timing | Apple Neural Engine clock domain crossing jitter | 3.0 | macOS |
+| 56 | `nvme_iokit_sensors` | IO | NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps | 3.0 | macOS |
 | 57 | `nvme_raw_device` | IO | Direct raw block device reads bypassing filesystem with page-aligned I/O | 2.0 | Any |
 | 58 | `nvme_passthrough_linux` | IO | Raw NVMe admin commands via ioctl passthrough on Linux (closest to NAND hardware) | 2.0 | Linux |
 | 59 | `mach_timing` | Timing | mach_absolute_time() nanosecond timing jitter | 0.3 | macOS |
 | 60 | `qcicada` | Quantum | Crypta Labs QCicada USB QRNG — photonic shot noise | 8.0 | Any (USB) |
+| 61 | `counter_beat` | Thermal | Two-oscillator beat frequency: CPU counter vs audio PLL | 3.0 | macOS |
+| 62 | `cas_contention` | Microarch | Multi-thread atomic CAS arbitration contention | 2.0 | All |
+| 63 | `denormal_timing` | Microarch | Floating-point denormal multiply-accumulate timing | 0.5 | All |
 
 ---
 
@@ -103,7 +106,7 @@ Reads the macOS COMMPAGE seqlock update synchronization timing. Bimodal clock re
 
 ### `ane_timing`
 
-**Category:** Timing | **Platform:** macOS | **Est. Rate:** 1800.0
+**Category:** Timing | **Platform:** macOS | **Est. Rate:** 3.0
 
 Apple Neural Engine clock domain crossing jitter via IOKit property reads. The ANE has its own independent clock domain, separate from the CPU, GPU, audio PLL, display PLL, and PCIe PHY. IOKit property reads from ANE services force clock domain crossings between the CPU's 24 MHz crystal and the ANE's independent PLL. Entropy arises from ANE PLL thermal noise, power state transition latency, DMA setup variance, and memory fabric contention.
 
@@ -131,7 +134,7 @@ pthread create/join cycle timing. Involves kernel scheduler decisions, stack all
 
 ### `pe_core_arithmetic`
 
-**Category:** Scheduling | **Platform:** macOS (ARM) | **Est. Rate:** 6.0
+**Category:** Scheduling | **Platform:** All | **Est. Rate:** 6.0
 
 P-core/E-core migration timing entropy from arithmetic loop jitter. Captures the non-deterministic timing of macOS migrating work between performance and efficiency cores. One of the highest entropy rate sources at 6.35 bits/byte.
 
@@ -171,7 +174,7 @@ Virtual memory subsystem counters — page faults, pageins, swapins — driven b
 
 ### `process_table`
 
-**Category:** System | **Platform:** macOS | **Est. Rate:** 2.0
+**Category:** System | **Platform:** macOS | **Est. Rate:** 1.0
 
 Process table snapshot — PIDs, memory usage, CPU times, thread counts. Changes unpredictably with system activity.
 
@@ -239,7 +242,7 @@ IOKit USB device enumeration timing — CV=116%. Traverses the USB stack crossin
 
 ### `nvme_iokit_sensors`
 
-**Category:** IO | **Platform:** macOS | **Est. Rate:** 2.0
+**Category:** IO | **Platform:** macOS | **Est. Rate:** 3.0
 
 NVMe controller sensor polling via IOKit with CNTVCT clock domain crossing timestamps. Reads NVMe controller properties (temperature, SMART counters) via the IOKit C API, forcing clock domain crossings between the CPU's 24 MHz crystal and the NVMe controller's independent PLL. Combines clock domain crossing timing with actual hardware sensor data (temperature ADC noise, SMART counter deltas).
 
@@ -285,7 +288,7 @@ Keychain Services API calls traverse the Security framework into securityd, invo
 
 ---
 
-## Microarchitecture Sources (14)
+## Microarchitecture Sources (16)
 
 ### `speculative_execution`
 
@@ -295,7 +298,7 @@ Branch predictor maintains per-address history depending on all previously execu
 
 ### `dvfs_race`
 
-**Category:** Microarch | **Platform:** All | **Est. Rate:** 3.0
+**Category:** Microarch | **Platform:** macOS | **Est. Rate:** 3.0
 
 Dynamic Voltage and Frequency Scaling frequency transitions. Races workloads across cores sharing a voltage domain.
 
@@ -371,6 +374,18 @@ AES-XTS crypto context switching timing from cross-page cache flush cycles. Exer
 
 CommonCrypto AES-128-CBC warm/cold key schedule bimodal timing. CCCrypt calls show bimodal distribution: ~50 ticks (warm, key schedule cached) vs ~120 ticks (cold, key reload via system fabric). CV=155.4%. Cross-process sensitivity: FileVault/HTTPS bursts visibly shift distribution toward cold path.
 
+### `cas_contention`
+
+**Category:** Microarch | **Platform:** All | **Est. Rate:** 2.0
+
+Multi-thread atomic CAS arbitration contention jitter. Spawns multiple threads performing atomic compare-and-swap operations on shared targets spread across cache lines. The hardware coherence engine must arbitrate concurrent exclusive-access requests, producing physically nondeterministic timing from interconnect fabric latency variations, thermal state, and traffic from other cores.
+
+### `denormal_timing`
+
+**Category:** Microarch | **Platform:** All | **Est. Rate:** 0.5
+
+Floating-point denormal multiply-accumulate timing jitter. Times blocks of floating-point operations on denormalized values (magnitudes between 0 and f64::MIN_POSITIVE). Even on Apple Silicon where denormal handling is fast in hardware, residual timing jitter comes from FPU pipeline state, cache line alignment, and memory controller arbitration.
+
 ---
 
 ## GPU Sources (3)
@@ -395,13 +410,19 @@ NaturalLanguage ANE inference timing via system-wide NLP cache state. Exercises 
 
 ---
 
-## Thermal Sources (3)
+## Thermal Sources (4)
 
 ### `audio_pll_timing`
 
-**Category:** Thermal | **Platform:** macOS | **Est. Rate:** 5.0
+**Category:** Thermal | **Platform:** macOS | **Est. Rate:** 3.0
 
 Audio PLL clock jitter from CoreAudio device property queries. The audio subsystem's independent PLL generates sample clocks from a separate crystal. Phase noise from VCO Johnson-Nyquist noise and charge pump shot noise.
+
+### `counter_beat`
+
+**Category:** Thermal | **Platform:** macOS | **Est. Rate:** 3.0
+
+Two-oscillator beat frequency: CPU counter (CNTVCT_EL0) vs audio PLL crystal. Reads the ARM generic timer counter immediately before and after a CoreAudio property query that forces synchronization with the audio PLL clock domain. The query duration in raw counter ticks is modulated by the instantaneous phase relationship between the CPU crystal and the independent audio PLL crystal.
 
 ### `display_pll`
 
@@ -471,11 +492,11 @@ SMC thermistor ADC + fuel gauge I2C bus — CV=64-66%, 8x outliers. Targets two 
 
 ### `qcicada`
 
-**Category:** Quantum | **Platform:** Any (USB) | **Est. Rate:** 8.0 | **Feature:** `qcicada`
+**Category:** Quantum | **Platform:** Any (USB) | **Est. Rate:** 8.0
 
-Crypta Labs QCicada USB QRNG — photonic shot noise from an LED/photodiode pair. Photon emission and detection are inherently quantum processes governed by Poisson statistics. The device digitises photodiode current fluctuations to produce true quantum random numbers at full entropy (8 bits/byte) per NIST SP 800-90B.
+Crypta Labs QCicada USB QRNG — photonic shot noise from an LED/photodiode pair. Photon emission and detection are inherently quantum processes governed by Poisson statistics. The device digitises photodiode current fluctuations to produce true quantum random numbers at full entropy (8 bits/byte).
 
-**Requires:** QCicada USB hardware + `--features qcicada` build flag.
+**Requires:** QCicada USB hardware.
 
 **CLI mode flag:**
 ```bash
@@ -500,10 +521,10 @@ openentropy stream qcicada --qcicada-mode samples    # Direct QOM samples
 
 | Platform | Available Sources | Notes |
 |----------|:-----------------:|-------|
-| **MacBook (M-series)** | **59/59** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
-| **Mac Mini/Studio/Pro** | 50-53/59 | Most sources — no built-in camera or mic on some models |
-| **Intel Mac** | ~18/59 | Timing, system, network, disk sources; ARM-specific sources unavailable |
-| **Linux** | ~14/59 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
+| **MacBook (M-series)** | **63/63** | Full suite — WiFi, BLE, camera, mic, all sensors and oscillators |
+| **Mac Mini/Studio/Pro** | 50-55/63 | Most sources — no built-in camera or mic on some models |
+| **Intel Mac** | ~18/63 | Timing, system, network, disk sources; ARM-specific sources unavailable |
+| **Linux** | ~14/63 | Timing, network, disk, process sources; no macOS/ARM-specific sources |
 
 ## Entropy Quality Notes
 
@@ -513,7 +534,7 @@ Individual source quality varies. Raw (unconditioned) source output often has bi
 - **Raw NIST test pass rates** for individual sources range from 11/31 to 28/31
 - **After pool conditioning** (SHA-256 + mixing + os.urandom), output passes 28-31/31 NIST tests
 
-The conditioning pipeline extracts genuine entropy from biased sources and produces cryptographic-quality output. This is consistent with NIST SP 800-90B: measure min-entropy of the raw source, then apply SHA-256 conditioning.
+The conditioning pipeline extracts genuine entropy from biased sources and produces cryptographic-quality output. The general approach follows NIST SP 800-90B guidance: measure min-entropy of the raw source, then apply approved conditioning (SHA-256). Note: OpenEntropy has not been formally evaluated against SP 800-90B by an accredited lab.
 
 ## Adding a New Source
 
