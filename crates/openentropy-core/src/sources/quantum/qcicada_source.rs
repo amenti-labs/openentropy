@@ -148,6 +148,11 @@ impl EntropySource for QCicadaSource {
         // Lazy-init: open device on first call.
         if guard.is_none() {
             *guard = self.try_open();
+            if guard.is_none() {
+                // USB serial devices need settle time after handle release.
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                *guard = self.try_open();
+            }
         }
 
         let qrng = match guard.as_mut() {
@@ -160,9 +165,14 @@ impl EntropySource for QCicadaSource {
         match qrng.random(n) {
             Ok(bytes) => bytes,
             Err(_) => {
-                // Device disconnected — drop handle so next call retries.
+                // Device error — reconnect and retry once.
                 *guard = None;
-                Vec::new()
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                *guard = self.try_open();
+                match guard.as_mut() {
+                    Some(q) => q.random(n).unwrap_or_default(),
+                    None => Vec::new(),
+                }
             }
         }
     }

@@ -48,7 +48,12 @@ fn run_analysis(args: &AnalyzeArgs) {
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let data = source.collect(args.samples);
+        let mut data = source.collect(args.samples);
+        if data.is_empty() {
+            // Retry once — USB/hardware sources may need reconnection time.
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            data = source.collect(args.samples);
+        }
         let collect_time = t0.elapsed();
 
         if data.is_empty() {
@@ -301,7 +306,12 @@ fn run_report(args: &AnalyzeArgs) {
         print!("  {}...", info.name);
 
         let t0 = Instant::now();
-        let raw_data = src.collect(args.samples);
+        let mut raw_data = src.collect(args.samples);
+        if raw_data.is_empty() {
+            // Retry once — USB/hardware sources may need reconnection time.
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            raw_data = src.collect(args.samples);
+        }
         let data = condition(&raw_data, raw_data.len(), mode);
         print!(" {} bytes", data.len());
 
