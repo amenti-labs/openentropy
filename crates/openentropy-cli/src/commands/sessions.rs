@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 use openentropy_core::analysis;
 use openentropy_core::conditioning::min_entropy_estimate;
 use openentropy_core::session::SessionMeta;
+use openentropy_core::trials::{TrialAnalysis, TrialConfig, trial_analysis};
 
 /// Run the sessions command.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     session_path: Option<&str>,
     dir: &str,
@@ -15,7 +17,17 @@ pub fn run(
     do_entropy: bool,
     output: Option<&str>,
     include_telemetry: bool,
+    do_trials: bool,
+    profile: &str,
 ) {
+    let prof = super::AnalysisProfile::parse(profile);
+    let defaults = prof.sessions_defaults();
+
+    // A non-standard profile implies --analyze
+    let do_analyze = do_analyze || defaults.implies_analyze;
+    let do_entropy = do_entropy || defaults.entropy;
+    let do_trials = do_trials || defaults.trials;
+
     if let Some(path) = session_path {
         // Single session mode
         let session_dir = PathBuf::from(path);
@@ -27,11 +39,25 @@ pub fn run(
 
         show_session(&session_dir);
 
-        if do_analyze || do_entropy {
-            analyze_session(&session_dir, do_entropy, output, include_telemetry);
+        if do_analyze || do_entropy || do_trials {
+            println!(
+                "Profile: {profile} | Entropy: {} | Trials: {}",
+                if do_entropy { "on" } else { "off" },
+                if do_trials { "on" } else { "off" }
+            );
+            analyze_session(
+                &session_dir,
+                do_entropy,
+                output,
+                include_telemetry,
+                do_trials,
+            );
         }
     } else {
         // List mode
+        if prof != super::AnalysisProfile::Standard {
+            eprintln!("Warning: --profile {profile} applies only when a SESSION path is provided.");
+        }
         list_sessions(dir);
     }
 }
@@ -195,6 +221,7 @@ fn analyze_session(
     do_entropy: bool,
     output: Option<&str>,
     include_telemetry: bool,
+    do_trials: bool,
 ) {
     let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let meta = read_session_meta(session_dir);
@@ -293,6 +320,18 @@ fn analyze_session(
         all_results.push(result);
     }
 
+    // PEAR-style trial analysis
+    let mut trial_results: Vec<(String, TrialAnalysis)> = Vec::new();
+    if do_trials {
+        let config = TrialConfig::default();
+        println!("\nPEAR-Style Trial Analysis (200-bit trials):\n");
+        for (name, data) in &all_data {
+            let ta = trial_analysis(data, &config);
+            print_trial_report(name, &ta);
+            trial_results.push((name.clone(), ta));
+        }
+    }
+
     // Cross-correlation if multiple sources
     let cross_matrix = if all_data.len() >= 2 {
         Some(analysis::cross_correlation_matrix(&all_data))
@@ -323,6 +362,18 @@ fn analyze_session(
                 "sources": all_results,
             })
         };
+        if !trial_results.is_empty() {
+            let trials_json: Vec<serde_json::Value> = trial_results
+                .iter()
+                .map(|(name, ta)| {
+                    serde_json::json!({
+                        "source": name,
+                        "analysis": ta,
+                    })
+                })
+                .collect();
+            json["trials"] = serde_json::json!(trials_json);
+        }
         if let Some(window) = telemetry_report {
             json["telemetry_v1"] = serde_json::json!(window);
         }
@@ -390,33 +441,32 @@ fn print_source_report(r: &analysis::SourceAnalysis) {
 }
 
 fn read_session_meta(session_dir: &Path) -> SessionMeta {
-    let json_path = session_dir.join("session.json");
-    let contents = match std::fs::read_to_string(&json_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to read session.json: {e}");
-            std::process::exit(1);
-        }
-    };
-    match serde_json::from_str(&contents) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Failed to parse session.json: {e}");
-            std::process::exit(1);
-        }
-    }
+    super::read_session_meta(session_dir)
 }
 
 fn format_duration_ms(ms: u64) -> String {
-    if ms < 1000 {
-        format!("{ms}ms")
-    } else if ms < 60_000 {
-        format!("{:.1}s", ms as f64 / 1000.0)
-    } else if ms < 3_600_000 {
-        format!("{:.1}m", ms as f64 / 60_000.0)
-    } else {
-        format!("{:.1}h", ms as f64 / 3_600_000.0)
-    }
+    super::format_duration_ms(ms)
+}
+
+fn print_trial_report(name: &str, ta: &TrialAnalysis) {
+    println!(
+        "  \u{250c}\u{2500} Trial Analysis: {} ({} trials of {} bits)",
+        name, ta.num_trials, ta.bits_per_trial
+    );
+    println!(
+        "  \u{2502} Terminal Z:       {:+.4} (p = {:.2e})",
+        ta.terminal_z, ta.terminal_p_value
+    );
+    println!("  \u{2502} Effect size:      {:+.6}", ta.effect_size);
+    println!(
+        "  \u{2502} Cum. deviation:   {:+.1}",
+        ta.terminal_cumulative_deviation
+    );
+    println!(
+        "  \u{2502} Z-scores:         mean={:.4} std={:.4}",
+        ta.mean_z, ta.std_z
+    );
+    println!("  \u{2514}\u{2500}");
 }
 
 fn truncate(s: &str, max: usize) -> String {

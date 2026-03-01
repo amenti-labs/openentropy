@@ -1378,7 +1378,7 @@ mod tests {
         let collapsed = HashSet::new();
         let rows = build_virtual_rows(&order, &map, &collapsed);
         // Row 0 is a header
-        let result = rows.get(0).and_then(|r| match r {
+        let result = rows.first().and_then(|r| match r {
             VirtualRow::Source { source_idx } => Some(*source_idx),
             VirtualRow::Header { .. } => None,
         });

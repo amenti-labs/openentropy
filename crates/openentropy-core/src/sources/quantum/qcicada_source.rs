@@ -143,6 +143,16 @@ impl EntropySource for QCicadaSource {
     }
 
     fn collect(&self, n_samples: usize) -> Vec<u8> {
+        // USB serial has limited throughput; large single requests can timeout.
+        // Each `random()` call is a full protocol round-trip (START command +
+        // ACK + data read), so we want chunks large enough to amortize that
+        // overhead while staying reliable. The QCC reference implementation
+        // uses 1760-byte serial reads, but that's at a lower layer — here
+        // each call carries protocol overhead. 8192 is proven in production
+        // and keeps the per-call timeout (500 + n/10 ≈ 1.3s) well within
+        // the device's ~12.5 KB/s throughput (~655ms actual transfer).
+        const CHUNK_SIZE: usize = 8192;
+
         let mut guard = self.device.lock().unwrap_or_else(|e| e.into_inner());
 
         // Lazy-init: open device on first call.
@@ -155,26 +165,44 @@ impl EntropySource for QCicadaSource {
             }
         }
 
-        let qrng = match guard.as_mut() {
-            Some(q) => q,
-            None => return Vec::new(),
-        };
+        if guard.is_none() {
+            return Vec::new();
+        }
 
-        // Clamp to u16::MAX (protocol limit per call).
-        let n = n_samples.min(u16::MAX as usize) as u16;
-        match qrng.random(n) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                // Device error — reconnect and retry once.
-                *guard = None;
-                std::thread::sleep(std::time::Duration::from_millis(300));
-                *guard = self.try_open();
-                match guard.as_mut() {
-                    Some(q) => q.random(n).unwrap_or_default(),
-                    None => Vec::new(),
+        let mut result = Vec::with_capacity(n_samples);
+        let mut remaining = n_samples;
+
+        while remaining > 0 {
+            let chunk = remaining.min(CHUNK_SIZE) as u16;
+            let read_result = guard.as_mut().unwrap().random(chunk);
+            match read_result {
+                Ok(bytes) => {
+                    if bytes.is_empty() {
+                        break;
+                    }
+                    remaining -= bytes.len();
+                    result.extend_from_slice(&bytes);
+                }
+                Err(_) => {
+                    // Device error — reconnect and retry once.
+                    *guard = None;
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    *guard = self.try_open();
+                    match guard.as_mut().map(|q| q.random(chunk)) {
+                        Some(Ok(bytes)) => {
+                            if bytes.is_empty() {
+                                break;
+                            }
+                            remaining -= bytes.len();
+                            result.extend_from_slice(&bytes);
+                        }
+                        _ => break,
+                    }
                 }
             }
         }
+
+        result
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<(), String> {

@@ -101,9 +101,14 @@ enum Commands {
         #[arg(long)]
         all: bool,
 
-        /// Number of samples to collect per source
-        #[arg(long, default_value = "50000")]
-        samples: usize,
+        /// Analysis profile: quick, standard (default), deep, security
+        #[arg(long, default_value = "standard",
+              value_parser = ["quick", "standard", "deep", "security"])]
+        profile: String,
+
+        /// Number of samples to collect per source (overrides profile default)
+        #[arg(long)]
+        samples: Option<usize>,
 
         /// Write full results as JSON (or Markdown when --report is used)
         #[arg(long)]
@@ -117,9 +122,9 @@ enum Commands {
         #[arg(long)]
         entropy: bool,
 
-        /// Conditioning mode: raw (default), vonneumann, sha256
-        #[arg(long, default_value = "raw", value_parser = ["raw", "vonneumann", "sha256"])]
-        conditioning: String,
+        /// Conditioning mode (overrides profile default): raw, vonneumann, sha256
+        #[arg(long, value_parser = ["raw", "vonneumann", "sha256"])]
+        conditioning: Option<String>,
 
         /// Include telemetry_v1 start/end environment snapshots in output.
         #[arg(long)]
@@ -180,6 +185,10 @@ enum Commands {
         /// Store telemetry_v1 start/end snapshots in session.json.
         #[arg(long)]
         telemetry: bool,
+
+        /// Run calibration check before recording (assess source suitability)
+        #[arg(long)]
+        calibrate: bool,
 
         /// QCicada QRNG post-processing mode
         #[arg(long, value_parser = ["raw", "sha256", "samples"])]
@@ -250,6 +259,25 @@ enum Commands {
         qcicada_mode: Option<String>,
     },
 
+    /// Compare two recorded sessions for statistical differences
+    Compare {
+        /// First session directory
+        session_a: String,
+        /// Second session directory
+        session_b: String,
+        /// Write JSON results to file
+        #[arg(long)]
+        output: Option<String>,
+        /// Include min-entropy breakdown
+        #[arg(long)]
+        entropy: bool,
+
+        /// Analysis profile: standard (default), deep, security
+        #[arg(long, default_value = "standard",
+              value_parser = ["standard", "deep", "security"])]
+        profile: String,
+    },
+
     /// List and analyze recorded entropy sessions
     Sessions {
         /// Path to a specific session directory to inspect or analyze
@@ -274,6 +302,15 @@ enum Commands {
         /// Write analysis results as JSON
         #[arg(long)]
         output: Option<String>,
+
+        /// Run PEAR-style trial analysis (200-bit trials, Z-scores, cumulative deviation)
+        #[arg(long)]
+        trials: bool,
+
+        /// Analysis profile: quick, standard (default), deep, security
+        #[arg(long, default_value = "standard",
+              value_parser = ["quick", "standard", "deep", "security"])]
+        profile: String,
     },
 
     /// Start an HTTP entropy server (ANU QRNG API compatible)
@@ -351,6 +388,7 @@ fn main() {
             source,
             sources,
             all,
+            profile,
             samples,
             output,
             cross_correlation,
@@ -365,6 +403,7 @@ fn main() {
             commands::analyze::run(commands::analyze::AnalyzeArgs {
                 positional,
                 all,
+                profile,
                 samples,
                 output,
                 cross_correlation,
@@ -386,6 +425,7 @@ fn main() {
             analyze,
             conditioning,
             telemetry,
+            calibrate,
             qcicada_mode,
         } => {
             commands::apply_qcicada_mode(qcicada_mode.as_deref());
@@ -406,6 +446,7 @@ fn main() {
                 analyze,
                 conditioning,
                 include_telemetry: telemetry,
+                calibrate,
             })
         }
         Commands::Monitor {
@@ -447,6 +488,19 @@ fn main() {
                 fifo,
             })
         }
+        Commands::Compare {
+            session_a,
+            session_b,
+            output,
+            entropy,
+            profile,
+        } => commands::compare::run(commands::compare::CompareArgs {
+            session_a,
+            session_b,
+            output,
+            entropy,
+            profile,
+        }),
         Commands::Sessions {
             session,
             dir,
@@ -454,6 +508,8 @@ fn main() {
             entropy,
             telemetry,
             output,
+            trials,
+            profile,
         } => commands::sessions::run(
             session.as_deref(),
             &dir,
@@ -461,6 +517,8 @@ fn main() {
             entropy,
             output.as_deref(),
             telemetry,
+            trials,
+            &profile,
         ),
         Commands::Server {
             source,

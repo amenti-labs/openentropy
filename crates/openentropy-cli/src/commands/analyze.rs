@@ -6,20 +6,50 @@ use openentropy_core::conditioning::{ConditioningMode, condition, min_entropy_es
 pub struct AnalyzeArgs {
     pub positional: Vec<String>,
     pub all: bool,
-    pub samples: usize,
+    pub profile: String,
+    pub samples: Option<usize>,
     pub output: Option<String>,
     pub cross_correlation: bool,
     pub entropy: bool,
-    pub conditioning: String,
+    pub conditioning: Option<String>,
     pub include_telemetry: bool,
     pub report: bool,
 }
 
+/// Resolved values after merging profile defaults with explicit flags.
+struct Resolved {
+    samples: usize,
+    conditioning: String,
+    entropy: bool,
+    report: bool,
+    cross_correlation: bool,
+}
+
 pub fn run(args: AnalyzeArgs) {
-    if args.report {
-        run_report(&args);
+    let profile = super::AnalysisProfile::parse(&args.profile);
+    let defaults = profile.analyze_defaults();
+
+    let resolved = Resolved {
+        samples: args.samples.unwrap_or(defaults.samples),
+        conditioning: args
+            .conditioning
+            .as_deref()
+            .unwrap_or(defaults.conditioning)
+            .to_string(),
+        entropy: args.entropy || defaults.entropy,
+        report: args.report || defaults.report,
+        cross_correlation: args.cross_correlation || defaults.cross_correlation,
+    };
+
+    println!(
+        "Profile: {} | Samples: {} | Conditioning: {}",
+        args.profile, resolved.samples, resolved.conditioning
+    );
+
+    if resolved.report {
+        run_report(&args, &resolved);
     } else {
-        run_analysis(&args);
+        run_analysis(&args, &resolved);
     }
 }
 
@@ -27,9 +57,9 @@ pub fn run(args: AnalyzeArgs) {
 // Forensic analysis path (default)
 // ---------------------------------------------------------------------------
 
-fn run_analysis(args: &AnalyzeArgs) {
+fn run_analysis(args: &AnalyzeArgs, resolved: &Resolved) {
     let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
-    let mode = super::parse_conditioning(&args.conditioning);
+    let mode = super::parse_conditioning(&resolved.conditioning);
 
     let sources = super::resolve_sources(&args.positional, args.all);
 
@@ -38,7 +68,7 @@ fn run_analysis(args: &AnalyzeArgs) {
     println!(
         "Analyzing {} source(s), {} samples each...\n",
         sources.len(),
-        args.samples,
+        resolved.samples,
     );
 
     let mut all_results = Vec::new();
@@ -48,11 +78,11 @@ fn run_analysis(args: &AnalyzeArgs) {
         let name = source.name().to_string();
         print!("  {name}...");
         let t0 = Instant::now();
-        let mut data = source.collect(args.samples);
+        let mut data = source.collect(resolved.samples);
         if data.is_empty() {
             // Retry once — USB/hardware sources may need reconnection time.
             std::thread::sleep(std::time::Duration::from_secs(1));
-            data = source.collect(args.samples);
+            data = source.collect(resolved.samples);
         }
         let collect_time = t0.elapsed();
 
@@ -66,7 +96,7 @@ fn run_analysis(args: &AnalyzeArgs) {
 
         print_source_forensics(&result);
 
-        if args.entropy {
+        if resolved.entropy {
             let entropy_input = if mode == ConditioningMode::Raw {
                 data.clone()
             } else {
@@ -76,7 +106,7 @@ fn run_analysis(args: &AnalyzeArgs) {
             let report_str = format!("{report}");
             println!(
                 "  ├─ Min-Entropy Breakdown (conditioning: {}, {} bytes)",
-                args.conditioning,
+                resolved.conditioning,
                 entropy_input.len()
             );
             for line in report_str.lines() {
@@ -87,13 +117,13 @@ fn run_analysis(args: &AnalyzeArgs) {
 
         all_results.push(result);
 
-        if args.cross_correlation {
+        if resolved.cross_correlation {
             all_data.push((name, data));
         }
     }
 
     // Cross-correlation matrix.
-    let cross_matrix = if args.cross_correlation && all_data.len() >= 2 {
+    let cross_matrix = if resolved.cross_correlation && all_data.len() >= 2 {
         Some(analysis::cross_correlation_matrix(&all_data))
     } else {
         None
@@ -280,9 +310,9 @@ fn verdict_runs(ru: &analysis::RunsResult, _sample_size: usize) -> &'static str 
 // NIST test battery path (--report)
 // ---------------------------------------------------------------------------
 
-fn run_report(args: &AnalyzeArgs) {
+fn run_report(args: &AnalyzeArgs, resolved: &Resolved) {
     let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
-    let mode = super::parse_conditioning(&args.conditioning);
+    let mode = super::parse_conditioning(&resolved.conditioning);
 
     let sources = super::resolve_sources(&args.positional, args.all);
 
@@ -296,7 +326,7 @@ fn run_report(args: &AnalyzeArgs) {
     println!(
         "Testing {} source(s), {} samples each...\n",
         sources.len(),
-        args.samples
+        resolved.samples
     );
 
     let mut all_results = Vec::new();
@@ -306,11 +336,11 @@ fn run_report(args: &AnalyzeArgs) {
         print!("  {}...", info.name);
 
         let t0 = Instant::now();
-        let mut raw_data = src.collect(args.samples);
+        let mut raw_data = src.collect(resolved.samples);
         if raw_data.is_empty() {
             // Retry once — USB/hardware sources may need reconnection time.
             std::thread::sleep(std::time::Duration::from_secs(1));
-            raw_data = src.collect(args.samples);
+            raw_data = src.collect(resolved.samples);
         }
         let data = condition(&raw_data, raw_data.len(), mode);
         print!(" {} bytes", data.len());

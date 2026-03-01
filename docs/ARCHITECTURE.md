@@ -6,7 +6,7 @@
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with multiple crates, each with a focused responsibility.
 
-**Version:** 0.8.0
+**Version:** 0.10.0
 **Edition:** Rust 2024
 **License:** MIT
 
@@ -23,6 +23,9 @@ openentropy/
 │   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
 │   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
 │   │       ├── platform.rs         # Source auto-discovery, platform detection
+│   │       ├── analysis.rs         # Statistical analysis (autocorrelation, spectral, bias, runs)
+│   │       ├── comparison.rs       # Forensic session comparison (KS, chi-squared, effect sizes)
+│   │       ├── trials.rs           # PEAR-style trial analysis (Z-scores, Stouffer, calibration)
 │   │       └── sources/            # 63 source implementations, organized by category
 │   │           ├── mod.rs          # all_sources() composed from category modules
 │   │           ├── helpers.rs      # Shared: mach_time, extract_lsbs, xor_fold, etc.
@@ -41,7 +44,7 @@ openentropy/
 │   │
 │   ├── openentropy-cli/               # CLI binary
 │   │   └── src/
-│   │       ├── main.rs             # clap argument parsing, 8 subcommands
+│   │       ├── main.rs             # clap argument parsing, 9 subcommands
 │   │       ├── commands/           # One module per subcommand
 │   │       │   ├── mod.rs          # make_pool() helper with source filtering
 │   │       │   ├── scan.rs         # Discover available sources
@@ -50,8 +53,9 @@ openentropy/
 │   │       │   ├── stream.rs       # Continuous entropy to stdout (includes --fifo)
 │   │       │   ├── server.rs       # Launch HTTP server
 │   │       │   ├── monitor.rs      # Launch TUI dashboard
-│   │       │   ├── record.rs       # Record session data to disk
-│   │       │   ├── sessions.rs     # Inspect/analyze recorded sessions
+│   │       │   ├── record.rs       # Record session data to disk (includes --calibrate)
+│   │       │   ├── sessions.rs     # Inspect/analyze recorded sessions (includes --trials)
+│   │       │   ├── compare.rs      # Differential session comparison with trial analysis
 │   │       │   └── telemetry.rs    # Shared telemetry helpers
 │   │       └── tui/                # Interactive dashboard
 │   │           ├── mod.rs
@@ -89,6 +93,9 @@ The foundational library. Contains all 63 entropy source implementations, the mi
 - `SourceInfo`, `SourceCategory` -- metadata types
 - `detect_available_sources()` -- auto-discovery
 - `quick_shannon()`, `quick_quality()` -- quality assessment functions
+- `full_analysis()`, `cross_correlation_matrix()` -- statistical analysis
+- `comparison::compare()`, `comparison::compare_with_analysis()` -- differential session comparison
+- `trial_analysis()`, `stouffer_combine()`, `calibration_check()` -- PEAR-style trial analysis
 
 ### 2. openentropy-cli
 
@@ -96,7 +103,7 @@ The command-line binary (`openentropy`). Provides nine subcommands for interacti
 
 **Key dependencies:** `openentropy-core`, `openentropy-server`, `openentropy-tests`, `clap`, `ratatui`, `crossterm`, `tokio`
 
-**Subcommands:** `scan`, `bench`, `analyze`, `record`, `sessions`, `monitor`, `stream`, `server`
+**Subcommands:** `scan`, `bench`, `analyze`, `record`, `sessions`, `compare`, `monitor`, `stream`, `server`
 
 ### 3. openentropy-server
 

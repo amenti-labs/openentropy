@@ -71,9 +71,19 @@ maturin develop
 
 ## Two Audiences
 
-**Security engineers** use OpenEntropy to seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) produces cryptographic-quality random bytes.
+**Security engineers** use OpenEntropy to validate entropy quality and seed CSPRNGs:
+```bash
+openentropy analyze --profile security --output audit.md
+```
 
-**Researchers** use OpenEntropy to study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source.
+**Researchers** use OpenEntropy to study raw noise characteristics:
+```bash
+openentropy analyze --profile deep --output analysis.json
+```
+
+Security engineers seed CSPRNGs, generate keys, and supplement `/dev/urandom` with independent hardware entropy. The SHA-256 conditioned output (`--conditioning sha256`, the default) produces cryptographic-quality random bytes. The `security` profile enables the NIST test battery, min-entropy breakdown, and SHA-256 conditioning in one flag.
+
+Researchers study the raw noise characteristics of hardware subsystems. Pass `--conditioning raw` to get unwhitened, unconditioned bytes that preserve the actual noise signal from each source. The `deep` profile enables 100K samples, cross-correlation, and PEAR-style trial analysis.
 
 Raw mode enables:
 - **Hardware characterization** — measure min-entropy, autocorrelation, and spectral properties of individual noise sources
@@ -116,7 +126,9 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 | Doc | Description |
 |-----|-------------|
 | [Source Catalog](docs/SOURCES.md) | All 63 entropy sources with physics explanations |
+| [CLI Reference](docs/CLI.md) | Full command reference and examples |
 | [Conditioning](docs/CONDITIONING.md) | Raw vs VonNeumann vs SHA-256 conditioning modes |
+| [Trial Analysis Methodology](docs/TRIALS.md) | PEAR-style 200-bit trials, calibration gate, and references |
 | [Telemetry Model](docs/TELEMETRY.md) | Experimental telemetry_v1 context model and integration points |
 | [API Reference](docs/API.md) | HTTP server endpoints and response formats |
 | [Architecture](docs/ARCHITECTURE.md) | Crate structure and design decisions |
@@ -130,255 +142,51 @@ Raw mode is what makes OpenEntropy useful for research. Most HWRNG APIs run DRBG
 
 ## Entropy Sources
 
-63 sources across 13 mechanism-based categories. Results from `openentropy bench` on Apple Silicon:
+63 sources across 13 mechanism-based categories:
 
-### Thermal (4)
+| Category | Count |
+|----------|:-----:|
+| Thermal | 4 |
+| Timing | 7 |
+| Scheduling | 6 |
+| IO | 6 |
+| IPC | 4 |
+| Microarchitecture | 16 |
+| GPU | 3 |
+| Network | 3 |
+| System | 6 |
+| Signal | 3 |
+| Sensor | 4 |
+| Quantum | 1 |
 
-Each source taps a **physically independent** oscillator. They beat the CPU's 24 MHz crystal against other independent PLLs on the SoC, capturing uncorrelated Johnson-Nyquist thermal noise.
-
-| Source | Description |
-|--------|-------------|
-| `audio_pll_timing` | Audio PLL clock drift from CoreAudio device property queries |
-| `counter_beat` | Two-oscillator beat frequency: CPU counter (CNTVCT_EL0) vs audio PLL crystal |
-| `display_pll` | Display PLL phase noise from pixel clock (~533 MHz) domain crossing |
-| `pcie_pll` | PCIe PHY PLL jitter from Thunderbolt/PCIe clock domain crossing |
-
-### Timing (7)
-
-| Source | Description |
-|--------|-------------|
-| `clock_jitter` | Phase noise between performance counter and monotonic clocks |
-| `dram_row_buffer` | DRAM row buffer hit/miss timing from random memory accesses |
-| `page_fault_timing` | Minor page fault timing via mmap/munmap cycles |
-| `mach_continuous_timing` | mach_continuous_time() kernel sleep-offset path |
-| `ane_timing` | Apple Neural Engine clock domain crossing jitter via IOKit |
-| `commpage_clock_timing` | macOS COMMPAGE seqlock update synchronization timing |
-| `mach_timing` | mach_absolute_time() nanosecond timing jitter |
-
-### Scheduling (6)
-
-| Source | Description |
-|--------|-------------|
-| `sleep_jitter` | Scheduling jitter in nanosleep() calls |
-| `thread_lifecycle` | Thread create/join kernel scheduling and allocation jitter |
-| `pe_core_arithmetic` | P-core/E-core migration timing entropy from arithmetic loop jitter |
-| `dispatch_queue_timing` | GCD libdispatch global queue timing — system-wide thread pool entropy |
-| `timer_coalescing` | OS timer coalescing wakeup jitter from system-wide timer queue state |
-| `preemption_boundary` | Kernel scheduler preemption timing via CNTVCT_EL0 reads |
-
-### IO (6)
-
-| Source | Description |
-|--------|-------------|
-| `disk_io` | Block device I/O timing jitter |
-| `fsync_journal` | APFS journal commit timing from full storage stack traversal |
-| `usb_enumeration` | IOKit USB device enumeration timing |
-| `nvme_iokit_sensors` | NVMe controller sensor polling via IOKit with clock domain crossing |
-| `nvme_raw_device` | Direct raw block device reads bypassing filesystem *(requires root)* |
-| `nvme_passthrough_linux` | Raw NVMe admin commands via ioctl passthrough *(Linux only)* |
-
-### IPC (4)
-
-| Source | Description |
-|--------|-------------|
-| `mach_ipc` | Mach port complex OOL message and VM remapping timing jitter |
-| `pipe_buffer` | Multi-pipe kernel zone allocator competition and buffer timing jitter |
-| `kqueue_events` | Kqueue event multiplexing timing from timers, files, and sockets |
-| `keychain_timing` | Keychain/securityd round-trip timing jitter |
-
-### Microarch (16)
-
-| Source | Description |
-|--------|-------------|
-| `speculative_execution` | Branch predictor state timing via data-dependent branches |
-| `dvfs_race` | Cross-core DVFS frequency race between thread pairs |
-| `tlb_shootdown` | TLB invalidation broadcast timing via mprotect IPI storms |
-| `amx_timing` | Apple AMX coprocessor matrix multiply timing jitter (debiased) |
-| `icc_atomic_contention` | Apple Silicon ICC bus arbitration via cross-core atomic contention |
-| `prefetcher_state` | Hardware prefetcher stride-learning state |
-| `aprr_jit_timing` | Apple APRR undocumented register JIT toggle timing |
-| `sev_event_timing` | ARM64 SEV/SEVL broadcast event timing via ICC fabric load |
-| `cntfrq_cache_timing` | CNTFRQ_EL0 system-register cache timing |
-| `gxf_register_timing` | Apple GXF EL0-accessible register trap-path timing |
-| `dual_clock_domain` | 24 MHz CNTVCT x 41 MHz Apple private timer beat-frequency |
-| `sitva` | Scheduler-induced timing variance amplification via NEON FMLA |
-| `memory_bus_crypto` | AES-XTS crypto context switching timing from cache flush cycles |
-| `commoncrypto_aes_timing` | CommonCrypto AES-128-CBC warm/cold key schedule bimodal timing |
-| `cas_contention` | Multi-thread atomic CAS arbitration contention jitter |
-| `denormal_timing` | Floating-point denormal multiply-accumulate timing jitter |
-
-### GPU (3)
-
-| Source | Description |
-|--------|-------------|
-| `gpu_divergence` | GPU shader thread execution order divergence entropy |
-| `iosurface_crossing` | IOSurface GPU/CPU memory domain crossing coherence jitter |
-| `nl_inference_timing` | NaturalLanguage ANE inference timing via system-wide NLP cache state |
-
-### Network (3)
-
-| Source | Description |
-|--------|-------------|
-| `dns_timing` | DNS resolution timing jitter |
-| `tcp_connect_timing` | TCP handshake timing variance |
-| `wifi_rssi` | WiFi received signal strength fluctuations *(requires WiFi)* |
-
-### System (6)
-
-| Source | Description |
-|--------|-------------|
-| `sysctl_deltas` | Kernel counter fluctuations across 50+ sysctl keys |
-| `vmstat_deltas` | VM subsystem page fault and swap counters |
-| `process_table` | Process table snapshot entropy |
-| `ioregistry` | IOKit registry value mining |
-| `proc_info_timing` | proc_pidinfo / proc_pid_rusage syscall kernel proc_lock contention |
-| `getentropy_timing` | getentropy() SEP TRNG reseed timing |
-
-### Signal (3)
-
-| Source | Description |
-|--------|-------------|
-| `compression_timing` | zlib compression timing oracle |
-| `hash_timing` | SHA-256 hash timing data-dependency |
-| `spotlight_timing` | Spotlight metadata query timing |
-
-### Sensor (4)
-
-| Source | Description |
-|--------|-------------|
-| `audio_noise` | Microphone ADC thermal noise (Johnson-Nyquist) *(requires mic)* |
-| `camera_noise` | Camera sensor noise (read noise + dark current) *(requires camera)* |
-| `bluetooth_noise` | BLE ambient RF noise |
-| `smc_highvar_timing` | SMC thermistor ADC + fuel gauge I2C bus timing |
-
-### Quantum (1)
-
-| Source | Description |
-|--------|-------------|
-| `qcicada` | Crypta Labs QCicada USB QRNG — photonic shot noise *(requires QCicada USB hardware)* |
-
-Grade is based on min-entropy (H∞). See the [Source Catalog](docs/SOURCES.md) for physics details on each source.
+For full per-source descriptions, platform availability, and physics notes, see
+[Source Catalog](docs/SOURCES.md).
 
 ---
 
 ## CLI Reference
 
-### `scan` — Discover sources
+For the full command reference and examples, see [docs/CLI.md](docs/CLI.md).
+
+Most-used workflows:
 
 ```bash
 openentropy scan
-openentropy scan --telemetry
+openentropy bench
+openentropy stream --format hex --bytes 64
+openentropy analyze --profile security         # NIST battery + entropy + sha256
+openentropy analyze --profile deep             # 100K + forensic + cross-corr + trials
+openentropy record clock_jitter --duration 30s
+openentropy sessions sessions/<id> --profile deep
+openentropy compare sessions/<id-a> sessions/<id-b> --profile deep
 ```
 
-### `bench` — Benchmark sources
+On `sessions`, profile presets apply only when a specific session path is
+provided. `openentropy sessions` with no path always stays in list mode.
 
-```bash
-openentropy bench                    # standard profile on fast sources
-openentropy bench --profile quick    # faster confidence pass
-openentropy bench --profile deep     # higher-confidence benchmark
-openentropy bench all                # all sources
-openentropy bench clock_jitter       # filter by name
-openentropy bench --rank-by throughput
-openentropy bench --telemetry
-openentropy bench --output bench.json
-```
-
-`bench --output` JSON includes optional `telemetry_v1` when `--telemetry` is enabled.
-Treat telemetry as run context (load, thermal/frequency/memory signals), not as an entropy score.
-
-### `stream` — Continuous output
-
-```bash
-openentropy stream --format hex --bytes 256
-openentropy stream --format raw --bytes 1024 | your-program
-openentropy stream --format base64 --rate 1024           # rate-limited
-openentropy stream --conditioning raw --format raw       # no conditioning
-openentropy stream --conditioning vonneumann --format hex # debiased only
-openentropy stream --conditioning sha256 --format hex    # full conditioning (default)
-```
-
-### `monitor` — Interactive TUI dashboard
-
-```bash
-openentropy monitor
-openentropy monitor --telemetry
-```
-
-| Key | Action |
-|-----|--------|
-| ↑/↓ or j/k | Navigate source list |
-| Space/Enter | Select source (starts collecting) |
-| g | Cycle chart mode (time series, histogram, random walk, etc.) |
-| c | Cycle conditioning mode (SHA-256 → Von Neumann → Raw) |
-| n | Cycle sample size |
-| +/- | Adjust refresh rate |
-| Tab | Compare two sources (select one, move cursor to another, Tab) |
-| p | Pause/resume collection |
-| r | Start/stop recording |
-| s | Export snapshot |
-| q/Esc | Quit |
-
-### `bench` — Test specific sources
-
-```bash
-openentropy bench mach_timing
-openentropy bench mach_timing,clock_jitter
-```
-
-### `bench` pool quality section
-
-```bash
-openentropy bench                    # includes pool quality by default
-openentropy bench --no-pool          # skip pool section
-```
-
-### `stream --fifo` — Named pipe (FIFO)
-
-```bash
-openentropy stream --fifo /tmp/openentropy-rng
-# Another terminal: head -c 32 /tmp/openentropy-rng | xxd
-```
-
-### `server` — HTTP entropy server
-
-```bash
-openentropy server --port 8080
-openentropy server --port 8080 --allow-raw    # enable raw output
-openentropy server --port 8080 --telemetry    # print startup telemetry snapshot
-```
-
-> **Security:** The server binds to `127.0.0.1` (localhost only) by default. It has no authentication or rate limiting. Do not expose to untrusted networks without adding a reverse proxy with appropriate access controls.
-
-```bash
-curl "http://localhost:8080/api/v1/random?length=256&type=uint8"
-curl "http://localhost:8080/health"
-curl "http://localhost:8080/sources?telemetry=true"
-curl "http://localhost:8080/pool/status?telemetry=true"
-```
-
-### `analyze` — Statistical source analysis
-
-```bash
-openentropy analyze                          # summary view, raw, entropy on
-openentropy analyze --entropy                # include min-entropy breakdown
-openentropy analyze --report                 # run NIST test battery
-openentropy analyze --cross-correlation --output analysis.json
-openentropy analyze --telemetry --output analysis.json
-```
-
-### `analyze --report` — NIST test battery
-
-```bash
-openentropy analyze --report
-openentropy analyze --report mach_timing --samples 50000
-openentropy analyze --report --telemetry --output report.md
-```
-
-### `sessions` — Analyze recorded sessions
-
-```bash
-openentropy sessions sessions/<session-id> --analyze --entropy --telemetry --output session_analysis.json
-```
+PEAR-style trial methodology references (200-bit trials, terminal Z, weighted
+Stouffer composition, calibration gating) are documented in
+[docs/TRIALS.md](docs/TRIALS.md).
 
 ---
 
@@ -386,7 +194,7 @@ openentropy sessions sessions/<session-id> --analyze --entropy --telemetry --out
 
 ```toml
 [dependencies]
-openentropy-core = "0.8"
+openentropy-core = "0.10"
 ```
 
 ```rust

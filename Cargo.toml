@@ -55,7 +55,7 @@ uuid = { version = "1", features = ["v4"] }
 ctrlc = "3"
 
 # Hardware
-qcicada = "0.2"
+qcicada = "0.2.1"
 
 # Testing
 statrs = "0.18"

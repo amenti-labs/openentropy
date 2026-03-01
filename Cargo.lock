@@ -1378,9 +1378,9 @@ dependencies = [
 
 [[package]]
 name = "qcicada"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1621545f55954c57fe1c931efc61a1aaafcb0dc080b2578c481d1f9225665c4"
+checksum = "2de1c09486d02cac7384aece7ca959eeeab833328ed7f960070a7e6e4304c465"
 dependencies = [
  "log",
  "p256",

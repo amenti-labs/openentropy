@@ -20,6 +20,7 @@ pub struct RecordArgs {
     pub analyze: bool,
     pub conditioning: String,
     pub include_telemetry: bool,
+    pub calibrate: bool,
 }
 
 /// Run the record command.
@@ -36,6 +37,53 @@ pub fn run(args: RecordArgs) {
     let available: Vec<String> = sources.iter().map(|s| s.name().to_string()).collect();
     for source in sources {
         pool.add_source(source);
+    }
+
+    // Calibration check
+    if args.calibrate {
+        use openentropy_core::trials::{TrialConfig, calibration_check};
+
+        println!("Running calibration check...\n");
+        let config = TrialConfig::default();
+        let mut any_failed = false;
+
+        for source_name in &available {
+            let cal_bytes = match pool.get_source_raw_bytes(source_name, 5000) {
+                Some(bytes) => bytes,
+                None => {
+                    eprintln!("  {source_name}: FAIL (calibration collection error)");
+                    any_failed = true;
+                    continue;
+                }
+            };
+            if cal_bytes.is_empty() {
+                eprintln!("  {source_name}: FAIL (no data returned during calibration)");
+                any_failed = true;
+                continue;
+            }
+            let result = calibration_check(&cal_bytes, &config);
+            let status = if result.is_suitable { "PASS" } else { "FAIL" };
+            println!(
+                "  {source_name}: {status} ({} trials, Z={:+.4}, bias={:.6}, H={:.4})",
+                result.analysis.num_trials,
+                result.analysis.terminal_z,
+                result.bit_bias,
+                result.shannon_entropy,
+            );
+            for warning in &result.warnings {
+                println!("    ! {warning}");
+            }
+            if !result.is_suitable {
+                any_failed = true;
+            }
+        }
+
+        if any_failed {
+            eprintln!("\nCalibration failed. Source(s) not suitable for PEAR-style experiments.");
+            eprintln!("Fix source issues or omit --calibrate to skip.");
+            std::process::exit(1);
+        }
+        println!("\nCalibration passed. Proceeding with recording.\n");
     }
 
     // Parse duration

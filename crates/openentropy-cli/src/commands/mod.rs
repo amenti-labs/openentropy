@@ -1,5 +1,6 @@
 pub mod analyze;
 pub mod bench;
+pub mod compare;
 pub mod monitor;
 pub mod record;
 pub mod scan;
@@ -208,6 +209,157 @@ pub fn print_cross_correlation(matrix: &CrossCorrMatrix, source_count: usize) {
     }
 }
 
+/// Read and parse session.json from a session directory.
+pub fn read_session_meta(session_dir: &std::path::Path) -> openentropy_core::session::SessionMeta {
+    let json_path = session_dir.join("session.json");
+    let contents = match std::fs::read_to_string(&json_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to read {}: {e}", json_path.display());
+            std::process::exit(1);
+        }
+    };
+    match serde_json::from_str(&contents) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Failed to parse {}: {e}", json_path.display());
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Read raw.bin from a session directory.
+pub fn read_raw_bin(session_dir: &std::path::Path) -> Vec<u8> {
+    let raw_path = session_dir.join("raw.bin");
+    if !raw_path.exists() {
+        eprintln!("Missing raw.bin in {}", session_dir.display());
+        std::process::exit(1);
+    }
+    match std::fs::read(&raw_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to read {}: {e}", raw_path.display());
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Format a millisecond duration as a human-readable string.
+pub fn format_duration_ms(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else if ms < 60_000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else if ms < 3_600_000 {
+        format!("{:.1}m", ms as f64 / 60_000.0)
+    } else {
+        format!("{:.1}h", ms as f64 / 3_600_000.0)
+    }
+}
+
+/// Analysis profile presets. Individual flags always override.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnalysisProfile {
+    Quick,
+    Standard,
+    Deep,
+    Security,
+}
+
+pub struct AnalyzeDefaults {
+    pub samples: usize,
+    pub conditioning: &'static str,
+    pub entropy: bool,
+    pub report: bool,
+    pub cross_correlation: bool,
+}
+
+pub struct SessionsDefaults {
+    pub entropy: bool,
+    pub trials: bool,
+    pub implies_analyze: bool,
+}
+
+pub struct CompareDefaults {
+    pub entropy: bool,
+}
+
+impl AnalysisProfile {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "quick" => Self::Quick,
+            "deep" => Self::Deep,
+            "security" => Self::Security,
+            _ => Self::Standard,
+        }
+    }
+
+    pub fn analyze_defaults(self) -> AnalyzeDefaults {
+        match self {
+            Self::Quick => AnalyzeDefaults {
+                samples: 10_000,
+                conditioning: "raw",
+                entropy: false,
+                report: false,
+                cross_correlation: false,
+            },
+            Self::Standard => AnalyzeDefaults {
+                samples: 50_000,
+                conditioning: "raw",
+                entropy: false,
+                report: false,
+                cross_correlation: false,
+            },
+            Self::Deep => AnalyzeDefaults {
+                samples: 100_000,
+                conditioning: "raw",
+                entropy: true,
+                report: false,
+                cross_correlation: true,
+            },
+            Self::Security => AnalyzeDefaults {
+                samples: 50_000,
+                conditioning: "sha256",
+                entropy: true,
+                report: true,
+                cross_correlation: false,
+            },
+        }
+    }
+
+    pub fn sessions_defaults(self) -> SessionsDefaults {
+        match self {
+            Self::Quick => SessionsDefaults {
+                entropy: false,
+                trials: false,
+                implies_analyze: true,
+            },
+            Self::Standard => SessionsDefaults {
+                entropy: false,
+                trials: false,
+                implies_analyze: false,
+            },
+            Self::Deep => SessionsDefaults {
+                entropy: true,
+                trials: true,
+                implies_analyze: true,
+            },
+            Self::Security => SessionsDefaults {
+                entropy: true,
+                trials: false,
+                implies_analyze: true,
+            },
+        }
+    }
+
+    pub fn compare_defaults(self) -> CompareDefaults {
+        match self {
+            Self::Quick | Self::Standard => CompareDefaults { entropy: false },
+            Self::Deep | Self::Security => CompareDefaults { entropy: true },
+        }
+    }
+}
+
 /// Write a serializable value as pretty JSON to a file.
 pub fn write_json<T: serde::Serialize>(value: &T, path: &str, label: &str) {
     match serde_json::to_string_pretty(value) {
@@ -265,6 +417,30 @@ mod tests {
             parse_conditioning("VonNeumann"),
             ConditioningMode::VonNeumann
         );
+    }
+
+    #[test]
+    fn test_analyze_profile_standard_defaults() {
+        let d = AnalysisProfile::Standard.analyze_defaults();
+        assert_eq!(d.samples, 50_000);
+        assert_eq!(d.conditioning, "raw");
+        assert!(!d.entropy);
+        assert!(!d.report);
+        assert!(!d.cross_correlation);
+    }
+
+    #[test]
+    fn test_sessions_profile_deep_defaults() {
+        let d = AnalysisProfile::Deep.sessions_defaults();
+        assert!(d.implies_analyze);
+        assert!(d.entropy);
+        assert!(d.trials);
+    }
+
+    #[test]
+    fn test_compare_profile_security_defaults() {
+        let d = AnalysisProfile::Security.compare_defaults();
+        assert!(d.entropy);
     }
 
     // -----------------------------------------------------------------------

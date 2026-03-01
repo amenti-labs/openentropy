@@ -42,6 +42,7 @@
 //! collects from all registered sources and concatenates their byte streams.
 
 pub mod analysis;
+pub mod comparison;
 pub mod conditioning;
 pub mod platform;
 pub mod pool;
@@ -49,6 +50,7 @@ pub mod session;
 pub mod source;
 pub mod sources;
 pub mod telemetry;
+pub mod trials;
 
 pub use conditioning::{
     ConditioningMode, MinEntropyReport, QualityReport, condition, grade_min_entropy,
@@ -66,6 +68,10 @@ pub use telemetry::{
     MODEL_ID as TELEMETRY_MODEL_ID, MODEL_VERSION as TELEMETRY_MODEL_VERSION, TelemetryMetric,
     TelemetryMetricDelta, TelemetrySnapshot, TelemetryWindowReport, build_telemetry_window,
     collect_telemetry_snapshot, collect_telemetry_window,
+};
+pub use trials::{
+    CalibrationResult, StoufferResult, TrialAnalysis, TrialConfig, calibration_check,
+    stouffer_combine, trial_analysis,
 };
 
 /// Library version (from Cargo.toml).
