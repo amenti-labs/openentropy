@@ -72,7 +72,10 @@ openentropy/
 │   │
 │   └── openentropy-python/            # Python bindings
 │       └── src/
-│           └── lib.rs              # PyO3 module: EntropyPool, run_all_tests, etc.
+│           ├── lib.rs              # PyO3 module: EntropyPool, run_all_tests, etc.
+│           ├── analysis_bindings.rs # 9 analysis function bindings (pythonize)
+│           ├── comparison_bindings.rs # 9 comparison function bindings (pythonize)
+│           └── trials_bindings.rs  # 3 trials function bindings (pythonize + depythonize)
 │
 ├── openentropy/               # Python package wrapper for compiled extension
 ├── pyproject.toml                  # Python packaging (pip install)
@@ -123,7 +126,7 @@ A self-contained crate implementing 31 statistical tests inspired by the NIST SP
 
 PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` that is loaded as a native Python extension module.
 
-**Key dependencies:** `openentropy-core`, `openentropy-tests`, `pyo3`
+**Key dependencies:** `openentropy-core`, `openentropy-tests`, `pyo3`, `pythonize`
 
 ## Data Flow
 

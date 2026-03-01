@@ -49,6 +49,7 @@ serde_json = "1"
 
 # Python
 pyo3 = { version = "0.23", features = ["extension-module"] }
+pythonize = "0.23"
 
 # Session recording
 uuid = { version = "1", features = ["v4"] }

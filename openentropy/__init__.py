@@ -23,6 +23,30 @@ from openentropy.openentropy import (
     grade_min_entropy,
     quick_quality,
     version as _rust_version,
+    # Analysis
+    full_analysis,
+    autocorrelation_profile,
+    spectral_analysis,
+    bit_bias,
+    distribution_stats,
+    stationarity_test,
+    runs_analysis,
+    cross_correlation_matrix,
+    pearson_correlation,
+    # Comparison
+    compare,
+    aggregate_delta,
+    two_sample_tests,
+    cliffs_delta,
+    temporal_analysis,
+    digram_analysis,
+    markov_analysis,
+    multi_lag_analysis,
+    run_length_comparison,
+    # Trials
+    trial_analysis,
+    stouffer_combine,
+    calibration_check,
 )
 
 __rust_backend__ = True
@@ -31,6 +55,7 @@ __version__ = _rust_version()
 
 def version() -> str:
     return _rust_version()
+
 
 __all__ = [
     "EntropyPool",
@@ -48,4 +73,28 @@ __all__ = [
     "version",
     "__version__",
     "__rust_backend__",
+    # Analysis
+    "full_analysis",
+    "autocorrelation_profile",
+    "spectral_analysis",
+    "bit_bias",
+    "distribution_stats",
+    "stationarity_test",
+    "runs_analysis",
+    "cross_correlation_matrix",
+    "pearson_correlation",
+    # Comparison
+    "compare",
+    "aggregate_delta",
+    "two_sample_tests",
+    "cliffs_delta",
+    "temporal_analysis",
+    "digram_analysis",
+    "markov_analysis",
+    "multi_lag_analysis",
+    "run_length_comparison",
+    # Trials
+    "trial_analysis",
+    "stouffer_combine",
+    "calibration_check",
 ]

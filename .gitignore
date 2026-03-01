@@ -3,6 +3,7 @@
 # IDE
 # Legacy Python code (preserved for reference, not part of release)
 # Local scratch / planning
+.sisyphus/
 # Rust
 *$py.class
 *.bin

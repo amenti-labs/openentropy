@@ -205,6 +205,26 @@ let bytes = pool.get_random_bytes(256);
 let health = pool.health_report();
 ```
 
+Analyze and compare entropy data programmatically:
+
+```rust
+use openentropy_core::{full_analysis, compare, trial_analysis};
+
+let data = pool.get_raw_bytes(5000);
+
+// Per-source statistical analysis
+let analysis = full_analysis("my_source", &data);
+println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
+
+// Differential comparison of two streams
+let other = pool.get_raw_bytes(5000);
+let diff = compare("stream_a", &data, "stream_b", &other);
+
+// PEAR-style trial analysis
+let trials = trial_analysis(&data, &Default::default());
+println!("Terminal Z: {:.4}, p = {:.4}", trials.terminal_z, trials.terminal_p_value);
+```
+
 ---
 
 ## Architecture

@@ -73,6 +73,13 @@ pub use trials::{
     CalibrationResult, StoufferResult, TrialAnalysis, TrialConfig, calibration_check,
     stouffer_combine, trial_analysis,
 };
+pub use comparison::{
+    AggregateDelta, ComparisonResult, DigramAnalysis, MarkovAnalysis, MultiLagAnalysis,
+    RunLengthComparison, TemporalAnalysis, TwoSampleTests, WindowAnomaly,
+    aggregate_delta, cliffs_delta, compare, compare_with_analysis, digram_analysis,
+    markov_analysis, multi_lag_analysis, run_length_comparison, temporal_analysis,
+    two_sample_tests,
+};
 
 /// Library version (from Cargo.toml).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

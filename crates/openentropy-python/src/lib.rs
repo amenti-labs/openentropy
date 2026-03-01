@@ -9,6 +9,10 @@ use pyo3::types::{PyBytes, PyDict, PyList};
 use openentropy_core::conditioning::ConditioningMode;
 use openentropy_core::pool::EntropyPool as RustPool;
 
+mod analysis_bindings;
+mod comparison_bindings;
+mod trials_bindings;
+
 fn parse_conditioning_mode(conditioning: &str) -> PyResult<ConditioningMode> {
     match conditioning {
         "raw" => Ok(ConditioningMode::Raw),
@@ -357,5 +361,8 @@ fn openentropy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(grade_min_entropy, m)?)?;
     m.add_function(wrap_pyfunction!(quick_quality, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    analysis_bindings::register(m)?;
+    comparison_bindings::register(m)?;
+    trials_bindings::register(m)?;
     Ok(())
 }
