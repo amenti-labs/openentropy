@@ -44,3 +44,8 @@ research/
 sessions/
 openentropy-snapshot-*.json
 session_analysis_integration.md
+
+# Astro / Starlight docs site
+node_modules/
+website/.astro/
+website/dist/
