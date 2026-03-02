@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Chaos theory analysis module** — Added `openentropy_core::chaos` with five methods: Hurst exponent (R/S), Lyapunov exponent (Rosenstein), correlation dimension (Grassberger-Procaccia), BiEntropy/TBiEntropy, and epiplexity (compression-based structure detection).
+- **CLI `--chaos` flag** — Added opt-in chaos analysis to `openentropy analyze`; outputs PASS/WARN/FAIL verdicts for each metric per source.
+- **Deep profile chaos integration** — `--profile deep` now enables chaos analysis by default.
+- **Chaos documentation** — Added method explanations, thresholds, and usage examples to `docs/CLI.md` and architecture notes to `docs/ARCHITECTURE.md`.
+
 - **Python SDK: 21 new analysis/comparison/trials bindings** — Full programmatic parity with CLI analysis capabilities via PyO3.
 - **9 analysis functions** — `full_analysis`, `autocorrelation_profile`, `spectral_analysis`, `bit_bias`, `distribution_stats`, `stationarity_test`, `runs_analysis`, `cross_correlation_matrix`, `pearson_correlation`. All accept `bytes` and return `dict` (or `float` for `pearson_correlation`).
 - **9 comparison functions** — `compare`, `aggregate_delta`, `two_sample_tests`, `cliffs_delta`, `temporal_analysis`, `digram_analysis`, `markov_analysis`, `multi_lag_analysis`, `run_length_comparison`. Differential statistical analysis between two byte streams.

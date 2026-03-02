@@ -138,6 +138,10 @@ enum Commands {
         /// QCicada QRNG post-processing mode
         #[arg(long, value_parser = ["raw", "sha256", "samples"])]
         qcicada_mode: Option<String>,
+
+        /// Run chaos theory analysis (Hurst, Lyapunov, correlation dimension, BiEntropy, Epiplexity)
+        #[arg(long)]
+        chaos: bool,
     },
 
     /// Record entropy samples to disk for offline analysis
@@ -397,6 +401,7 @@ fn main() {
             telemetry,
             report,
             qcicada_mode,
+            chaos,
         } => {
             commands::apply_qcicada_mode(qcicada_mode.as_deref());
             let positional = merge_positional_and_legacy(&source, sources.as_deref());
@@ -411,6 +416,7 @@ fn main() {
                 conditioning,
                 include_telemetry: telemetry,
                 report,
+                chaos,
             })
         }
         Commands::Record {

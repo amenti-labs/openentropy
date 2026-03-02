@@ -272,6 +272,7 @@ pub struct AnalyzeDefaults {
     pub entropy: bool,
     pub report: bool,
     pub cross_correlation: bool,
+    pub chaos: bool,
 }
 
 pub struct SessionsDefaults {
@@ -302,6 +303,7 @@ impl AnalysisProfile {
                 entropy: false,
                 report: false,
                 cross_correlation: false,
+                chaos: false,
             },
             Self::Standard => AnalyzeDefaults {
                 samples: 50_000,
@@ -309,6 +311,7 @@ impl AnalysisProfile {
                 entropy: false,
                 report: false,
                 cross_correlation: false,
+                chaos: false,
             },
             Self::Deep => AnalyzeDefaults {
                 samples: 100_000,
@@ -316,6 +319,7 @@ impl AnalysisProfile {
                 entropy: true,
                 report: false,
                 cross_correlation: true,
+                chaos: true,
             },
             Self::Security => AnalyzeDefaults {
                 samples: 50_000,
@@ -323,6 +327,7 @@ impl AnalysisProfile {
                 entropy: true,
                 report: true,
                 cross_correlation: false,
+                chaos: false,
             },
         }
     }

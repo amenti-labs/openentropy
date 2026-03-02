@@ -225,6 +225,18 @@ let trials = trial_analysis(&data, &Default::default());
 println!("Terminal Z: {:.4}, p = {:.4}", trials.terminal_z, trials.terminal_p_value);
 ```
 
+Chaos theory analysis (distinguish true randomness from deterministic chaos):
+
+```rust
+use openentropy_core::chaos::chaos_analysis;
+
+let result = chaos_analysis(&data);
+println!("Hurst H={:.4}, Lyapunov λ={:.4}, D₂={:.4}",
+    result.hurst.hurst_exponent,
+    result.lyapunov.lyapunov_exponent,
+    result.correlation_dimension.dimension);
+```
+
 ---
 
 ## Architecture
@@ -297,6 +309,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Ideas:
 - Windows platform support
 
 ---
+
+## References
+
+- NIST SP 800-22: [A Statistical Test Suite for Random and Pseudorandom Number Generators](https://csrc.nist.gov/publications/detail/sp/800-22/rev-1a/final)
+- Bone, A. (2026): [QRNG Analysis Toolkit](https://github.com/vikingdude81/qrng-analysis-toolkit) — chaos theory analysis methods (Hurst exponent, Lyapunov exponent, correlation dimension, BiEntropy, Epiplexity) were reimplemented in Rust from mathematical definitions, inspired by this Python toolkit
+- Croll, G.J. (2013): [BiEntropy — The Approximate Entropy of a Finite Binary String](https://arxiv.org/abs/1305.0954)
+- Hurst, H.E. (1951): Long-term storage capacity of reservoirs
+- Rosenstein, M.T., Collins, J.J. & De Luca, C.J. (1993): A practical method for calculating largest Lyapunov exponents from small data sets
+- Grassberger, P. & Procaccia, I. (1983): Measuring the strangeness of strange attractors
+- Shannon, C.E. (1948): A Mathematical Theory of Communication
+
+---
+
 
 ## License
 
