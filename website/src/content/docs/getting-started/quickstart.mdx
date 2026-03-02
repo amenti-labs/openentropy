@@ -1,0 +1,100 @@
+---
+title: Quickstart
+description: Common operations across Rust, Python, and CLI
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Discover Available Sources
+
+<Tabs syncKey="lang">
+  <TabItem label="Rust">
+  ```rust
+  use openentropy_core::detect_available_sources;
+
+  let sources = detect_available_sources();
+  println!("{} entropy sources available", sources.len());
+  for source in &sources {
+      println!("  - {}", source.name);
+  }
+  ```
+  </TabItem>
+  <TabItem label="Python">
+  ```python
+  from openentropy import detect_available_sources
+
+  sources = detect_available_sources()
+  print(f"{len(sources)} entropy sources available")
+  ```
+  </TabItem>
+  <TabItem label="CLI">
+  ```bash
+  openentropy scan
+  openentropy bench
+  ```
+  </TabItem>
+</Tabs>
+
+## Get Random Bytes
+
+<Tabs syncKey="lang">
+  <TabItem label="Rust">
+  ```rust
+  use openentropy_core::EntropyPool;
+
+  let pool = EntropyPool::auto();
+  let bytes = pool.get_random_bytes(256);
+  ```
+  </TabItem>
+  <TabItem label="Python">
+  ```python
+  from openentropy import EntropyPool
+
+  pool = EntropyPool.auto()
+  data = pool.get_random_bytes(256)
+  ```
+  </TabItem>
+  <TabItem label="CLI">
+  ```bash
+  openentropy stream --format hex --bytes 64
+  openentropy stream --format base64 --bytes 256
+  ```
+  </TabItem>
+</Tabs>
+
+## Analyze Entropy
+
+<Tabs syncKey="lang">
+  <TabItem label="Rust">
+  ```rust
+  use openentropy_core::{EntropyPool, full_analysis};
+
+  let pool = EntropyPool::auto();
+  let data = pool.get_raw_bytes(5000);
+  let analysis = full_analysis("my_source", &data);
+  println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
+  ```
+  </TabItem>
+  <TabItem label="Python">
+  ```python
+  from openentropy import EntropyPool
+
+  pool = EntropyPool.auto()
+  result = pool.full_analysis(5000)
+  print(f"Shannon entropy: {result.shannon_entropy:.4f} bits/byte")
+  ```
+  </TabItem>
+  <TabItem label="CLI">
+  ```bash
+  openentropy analyze --profile security
+  openentropy analyze --profile deep --output analysis.json
+  ```
+  </TabItem>
+</Tabs>
+
+## Next Steps
+
+- [Python SDK Reference](/openentropy/python-sdk/reference/) — full Python API
+- [Rust SDK Reference](/openentropy/rust-sdk/api/) — full Rust API
+- [CLI Reference](/openentropy/cli/reference/) — all commands and flags
+- [Concepts: Entropy Sources](/openentropy/concepts/sources/) — all 63 sources explained

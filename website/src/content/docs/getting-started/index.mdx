@@ -1,0 +1,86 @@
+---
+title: Getting Started
+description: Install and start using openentropy
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Installation
+
+<Tabs syncKey="lang">
+  <TabItem label="Rust">
+  Add to your `Cargo.toml`:
+  ```toml
+  [dependencies]
+  openentropy-core = "0.10"
+  ```
+  Or install the CLI:
+  ```bash
+  cargo install openentropy-cli
+  ```
+  </TabItem>
+  <TabItem label="Python">
+  ```bash
+  pip install openentropy
+  ```
+  Build from source:
+  ```bash
+  git clone https://github.com/amenti-labs/openentropy.git && cd openentropy
+  pip install maturin
+  maturin develop
+  ```
+  </TabItem>
+  <TabItem label="CLI">
+  ```bash
+  cargo install openentropy-cli
+  ```
+  Requires Rust 1.85+.
+  </TabItem>
+</Tabs>
+
+## Quick Verification
+
+<Tabs syncKey="lang">
+  <TabItem label="Rust">
+  ```rust
+  use openentropy_core::{EntropyPool, detect_available_sources};
+
+  let pool = EntropyPool::auto();
+  let bytes = pool.get_random_bytes(256);
+  println!("{}", hex::encode(&bytes));
+  ```
+  </TabItem>
+  <TabItem label="Python">
+  ```python
+  from openentropy import EntropyPool, detect_available_sources
+
+  sources = detect_available_sources()
+  print(f"{len(sources)} entropy sources available")
+
+  pool = EntropyPool.auto()
+  data = pool.get_random_bytes(256)
+  print(data.hex())
+  ```
+  </TabItem>
+  <TabItem label="CLI">
+  ```bash
+  # Discover entropy sources on your machine
+  openentropy scan
+
+  # Output 64 random hex bytes
+  openentropy stream --format hex --bytes 64
+  ```
+  </TabItem>
+</Tabs>
+
+## Platform Requirements
+
+- **macOS (Apple Silicon)**: Full support — all 63 entropy sources
+- **macOS (Intel)**: ~20 sources (some ARM-specific sources unavailable)
+- **Linux**: 12–15 sources (timing, network, disk, process sources)
+- **Rust**: 1.85+ required
+
+See the [Quickstart](/openentropy/getting-started/quickstart/) for more examples, or jump to your SDK section:
+- [Python SDK](/openentropy/python-sdk/)
+- [Rust SDK](/openentropy/rust-sdk/)
+- [CLI](/openentropy/cli/)

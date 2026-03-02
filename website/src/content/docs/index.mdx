@@ -1,0 +1,57 @@
+---
+title: openentropy
+description: Harvest real entropy from hardware noise. Study it raw or condition it for crypto.
+template: splash
+hero:
+  title: openentropy
+  tagline: Harvest real entropy from hardware noise. Study it raw or condition it for crypto.
+  image:
+    alt: openentropy logo
+    file: ../../assets/logo.png
+  actions:
+    - text: Get Started
+      link: /openentropy/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: Python SDK
+      link: /openentropy/python-sdk/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/amenti-labs/openentropy
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+63 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.
+
+**Built for Apple Silicon. No special hardware. No API keys. Just physics.**
+
+## Components
+
+<CardGrid>
+  <Card title="Rust SDK" icon="seti:rust">
+    Use `openentropy-core` in your Rust projects. Full access to all 63 entropy sources, conditioning modes, and statistical analysis.
+    [Rust SDK →](/openentropy/rust-sdk/)
+  </Card>
+  <Card title="Python SDK" icon="seti:python">
+    Install via `pip install openentropy`. PyO3 bindings expose the full Rust API to Python with zero overhead.
+    [Python SDK →](/openentropy/python-sdk/)
+  </Card>
+  <Card title="CLI" icon="laptop">
+    `cargo install openentropy-cli`. Scan sources, stream bytes, run analysis, and monitor entropy in a live TUI dashboard.
+    [CLI →](/openentropy/cli/)
+  </Card>
+</CardGrid>
+
+## Why Hardware Entropy?
+
+Most random number generators are **pseudorandom** — deterministic algorithms seeded once. openentropy continuously harvests **real physical noise** from your hardware:
+
+- **Thermal noise** — three independent oscillator beats
+- **Timing and microarchitecture** — clock phase noise, DRAM row buffer conflicts, speculative execution variance
+- **GPU and compute** — GPU warp divergence, Neural Engine inference timing
+- **Network and sensors** — DNS resolution timing, TCP handshake variance, WiFi RSSI, BLE ambient RF
+
+The pool XOR-combines independent streams. No single source failure can compromise the pool.
