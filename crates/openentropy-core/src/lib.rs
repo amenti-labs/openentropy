@@ -42,8 +42,10 @@
 //! collects from all registered sources and concatenates their byte streams.
 
 pub mod analysis;
+pub mod chaos;
 pub mod comparison;
 pub mod conditioning;
+pub(crate) mod math;
 pub mod platform;
 pub mod pool;
 pub mod session;
@@ -51,7 +53,19 @@ pub mod source;
 pub mod sources;
 pub mod telemetry;
 pub mod trials;
+pub mod verdict;
 
+pub use analysis::{
+    AutocorrResult, BitBiasResult, CrossCorrMatrix, CrossCorrPair, DistributionResult,
+    RunsResult, SourceAnalysis, SpectralResult, StationarityResult, autocorrelation_profile,
+    bit_bias, cross_correlation_matrix, distribution_stats, full_analysis, pearson_correlation,
+    runs_analysis, spectral_analysis, stationarity_test,
+};
+pub use chaos::{
+    BiEntropyResult, ChaosAnalysis, CorrelationDimResult, EpiplexityResult, HurstResult,
+    LyapunovResult, bientropy, chaos_analysis, correlation_dimension, epiplexity,
+    hurst_exponent, lyapunov_exponent,
+};
 pub use comparison::{
     AggregateDelta, ComparisonResult, DigramAnalysis, MarkovAnalysis, MultiLagAnalysis,
     RunLengthComparison, TemporalAnalysis, TwoSampleTests, WindowAnomaly, aggregate_delta,
@@ -79,6 +93,10 @@ pub use trials::{
     CalibrationResult, StoufferResult, TrialAnalysis, TrialConfig, calibration_check,
     stouffer_combine, trial_analysis,
 };
-
+pub use verdict::{
+    Verdict, metric_or_na, verdict_autocorr, verdict_bias, verdict_bientropy,
+    verdict_compression, verdict_corrdim, verdict_distribution, verdict_hurst,
+    verdict_lyapunov, verdict_runs, verdict_spectral, verdict_stationarity,
+};
 /// Library version (from Cargo.toml).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
