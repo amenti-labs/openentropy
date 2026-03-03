@@ -42,6 +42,7 @@
 //! collects from all registered sources and concatenates their byte streams.
 
 pub mod analysis;
+pub mod benchmark;
 pub mod comparison;
 pub mod conditioning;
 pub mod platform;
@@ -52,6 +53,9 @@ pub mod sources;
 pub mod telemetry;
 pub mod trials;
 
+pub use benchmark::{
+    BenchConfig, BenchReport, BenchSourceReport, PoolQualityReport, RankBy, benchmark_sources,
+};
 pub use comparison::{
     AggregateDelta, ComparisonResult, DigramAnalysis, MarkovAnalysis, MultiLagAnalysis,
     RunLengthComparison, TemporalAnalysis, TwoSampleTests, WindowAnomaly, aggregate_delta,
@@ -67,7 +71,7 @@ pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
 pub use session::{
     MachineInfo, SessionConfig, SessionMeta, SessionSourceAnalysis, SessionWriter,
-    detect_machine_info,
+    detect_machine_info, list_sessions, load_session_raw_data,
 };
 pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInfo};
 pub use telemetry::{
