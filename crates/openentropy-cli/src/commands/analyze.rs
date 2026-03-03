@@ -2,6 +2,11 @@ use std::time::Instant;
 
 use openentropy_core::analysis;
 use openentropy_core::conditioning::{ConditioningMode, condition, min_entropy_estimate};
+use openentropy_core::verdict::{
+    metric_or_na, verdict_autocorr, verdict_bias, verdict_bientropy, verdict_compression,
+    verdict_corrdim, verdict_distribution, verdict_hurst, verdict_lyapunov, verdict_runs,
+    verdict_spectral, verdict_stationarity,
+};
 
 pub struct AnalyzeArgs {
     pub positional: Vec<String>,
@@ -14,6 +19,7 @@ pub struct AnalyzeArgs {
     pub conditioning: Option<String>,
     pub include_telemetry: bool,
     pub report: bool,
+    pub chaos: bool,
 }
 
 /// Resolved values after merging profile defaults with explicit flags.
@@ -23,6 +29,7 @@ struct Resolved {
     entropy: bool,
     report: bool,
     cross_correlation: bool,
+    chaos: bool,
 }
 
 pub fn run(args: AnalyzeArgs) {
@@ -39,6 +46,7 @@ pub fn run(args: AnalyzeArgs) {
         entropy: args.entropy || defaults.entropy,
         report: args.report || defaults.report,
         cross_correlation: args.cross_correlation || defaults.cross_correlation,
+        chaos: args.chaos || defaults.chaos,
     };
 
     println!(
@@ -117,7 +125,7 @@ fn run_analysis(args: &AnalyzeArgs, resolved: &Resolved) {
 
         all_results.push(result);
 
-        if resolved.cross_correlation {
+        if resolved.cross_correlation || resolved.chaos {
             all_data.push((name, data));
         }
     }
@@ -132,6 +140,72 @@ fn run_analysis(args: &AnalyzeArgs, resolved: &Resolved) {
     if let Some(ref matrix) = cross_matrix {
         super::print_cross_correlation(matrix, all_data.len());
     }
+
+    // Chaos theory analysis.
+    let chaos_results: Vec<(String, openentropy_core::chaos::ChaosAnalysis)> = if resolved.chaos {
+        println!();
+        println!("  ┌─ Chaos Theory Analysis");
+        let results: Vec<_> = all_data
+            .iter()
+            .map(|(name, data)| {
+                let chaos = openentropy_core::chaos::chaos_analysis(data);
+                let hurst_value = metric_or_na(chaos.hurst.hurst_exponent, chaos.hurst.is_valid);
+                let hurst_r2 = metric_or_na(chaos.hurst.r_squared, chaos.hurst.is_valid);
+                let lyapunov_value =
+                    metric_or_na(chaos.lyapunov.lyapunov_exponent, chaos.lyapunov.is_valid);
+                let corrdim_value = metric_or_na(
+                    chaos.correlation_dimension.dimension,
+                    chaos.correlation_dimension.is_valid,
+                );
+                let bientropy_value = metric_or_na(chaos.bientropy.bien, chaos.bientropy.is_valid);
+                let tbientropy_value =
+                    metric_or_na(chaos.bientropy.tbien, chaos.bientropy.is_valid);
+                let epiplexity_ratio = metric_or_na(
+                    chaos.epiplexity.compression_ratio,
+                    chaos.epiplexity.is_valid,
+                );
+                println!("  │");
+                println!("  │  {}", name);
+                println!(
+                    "  │  {:<22} {:>4}  H={} (R²={})",
+                    "Hurst exponent",
+                    verdict_hurst(chaos.hurst.hurst_exponent).as_str(),
+                    hurst_value,
+                    hurst_r2,
+                );
+                println!(
+                    "  │  {:<22} {:>4}  λ={}",
+                    "Lyapunov exponent",
+                    verdict_lyapunov(chaos.lyapunov.lyapunov_exponent).as_str(),
+                    lyapunov_value,
+                );
+                println!(
+                    "  │  {:<22} {:>4}  D₂={}",
+                    "Correlation dim",
+                    verdict_corrdim(chaos.correlation_dimension.dimension).as_str(),
+                    corrdim_value,
+                );
+                println!(
+                    "  │  {:<22} {:>4}  BiEn={} TBiEn={}",
+                    "BiEntropy",
+                    verdict_bientropy(chaos.bientropy.bien).as_str(),
+                    bientropy_value,
+                    tbientropy_value,
+                );
+                println!(
+                    "  │  {:<22} {:>4}  ratio={}",
+                    "Epiplexity",
+                    verdict_compression(chaos.epiplexity.compression_ratio).as_str(),
+                    epiplexity_ratio,
+                );
+                (name.clone(), chaos)
+            })
+            .collect();
+        println!("  └─");
+        results
+    } else {
+        Vec::new()
+    };
 
     let telemetry_report = telemetry.finish();
     if let Some(ref window) = telemetry_report {
@@ -151,7 +225,11 @@ fn run_analysis(args: &AnalyzeArgs, resolved: &Resolved) {
         if let Some(window) = telemetry_report {
             json["telemetry_v1"] = serde_json::json!(window);
         }
-
+        if !chaos_results.is_empty() {
+            let chaos_map: std::collections::HashMap<String, _> =
+                chaos_results.into_iter().collect();
+            json["chaos"] = serde_json::json!(chaos_map);
+        }
         super::write_json(&json, path, "Results");
     }
 }
@@ -177,7 +255,7 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
     let tests: Vec<(&str, &str, String)> = vec![
         (
             "Autocorrelation",
-            verdict_autocorr(ac.max_abs_correlation),
+            verdict_autocorr(ac.max_abs_correlation).as_str(),
             format!(
                 "max|r|={:.4} at lag {}, {}/{} violations",
                 ac.max_abs_correlation,
@@ -188,7 +266,7 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
         ),
         (
             "Spectral flatness",
-            verdict_spectral(sp.flatness),
+            verdict_spectral(sp.flatness).as_str(),
             format!(
                 "flatness={:.4} (1.0=white noise), dominant freq={:.4}",
                 sp.flatness, sp.dominant_frequency
@@ -196,7 +274,7 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
         ),
         (
             "Bit bias",
-            verdict_bias(bb.overall_bias, bb.has_significant_bias),
+            verdict_bias(bb.overall_bias, bb.has_significant_bias).as_str(),
             format!(
                 "overall={:.4}, bits=[{}]",
                 bb.overall_bias,
@@ -209,7 +287,7 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
         ),
         (
             "Distribution",
-            verdict_distribution(d.ks_p_value),
+            verdict_distribution(d.ks_p_value).as_str(),
             format!(
                 "KS p={:.4}, mean={:.1}, skew={:.3}, kurt={:.3}",
                 d.ks_p_value, d.mean, d.skewness, d.kurtosis
@@ -217,12 +295,12 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
         ),
         (
             "Stationarity",
-            verdict_stationarity(st.f_statistic, st.is_stationary),
+            verdict_stationarity(st.f_statistic, st.is_stationary).as_str(),
             format!("F={:.2} ({} windows)", st.f_statistic, st.n_windows),
         ),
         (
             "Runs",
-            verdict_runs(ru, r.sample_size),
+            verdict_runs(ru, r.sample_size).as_str(),
             format!(
                 "longest={} (expect {:.0}), total={} (expect {:.0})",
                 ru.longest_run, ru.expected_longest_run, ru.total_runs, ru.expected_runs
@@ -234,76 +312,6 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
         println!("    {:<20} {:>4}  {}", name, verdict, detail);
     }
     println!();
-}
-
-fn verdict_autocorr(max_abs: f64) -> &'static str {
-    if max_abs > 0.15 {
-        "FAIL"
-    } else if max_abs > 0.05 {
-        "WARN"
-    } else {
-        "PASS"
-    }
-}
-
-fn verdict_spectral(flatness: f64) -> &'static str {
-    if flatness < 0.5 {
-        "FAIL"
-    } else if flatness < 0.75 {
-        "WARN"
-    } else {
-        "PASS"
-    }
-}
-
-fn verdict_bias(overall: f64, has_significant: bool) -> &'static str {
-    if overall > 0.02 {
-        "FAIL"
-    } else if has_significant {
-        "WARN"
-    } else {
-        "PASS"
-    }
-}
-
-fn verdict_distribution(ks_p: f64) -> &'static str {
-    if ks_p < 0.001 {
-        "FAIL"
-    } else if ks_p < 0.01 {
-        "WARN"
-    } else {
-        "PASS"
-    }
-}
-
-fn verdict_stationarity(f_stat: f64, is_stationary: bool) -> &'static str {
-    if f_stat > 3.0 {
-        "FAIL"
-    } else if !is_stationary {
-        "WARN"
-    } else {
-        "PASS"
-    }
-}
-
-fn verdict_runs(ru: &analysis::RunsResult, _sample_size: usize) -> &'static str {
-    let longest_ratio = if ru.expected_longest_run > 0.0 {
-        ru.longest_run as f64 / ru.expected_longest_run
-    } else {
-        1.0
-    };
-    let runs_dev = if ru.expected_runs > 0.0 {
-        (ru.total_runs as f64 - ru.expected_runs).abs() / ru.expected_runs
-    } else {
-        0.0
-    };
-    if longest_ratio > 3.0 || runs_dev > 0.4 {
-        "FAIL"
-    } else if longest_ratio > 2.0 || runs_dev > 0.2 {
-        "WARN"
-    } else {
-        "PASS"
-    }
 }
 
 // ---------------------------------------------------------------------------

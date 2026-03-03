@@ -99,6 +99,21 @@ The foundational library. Contains all 63 entropy source implementations, the mi
 - `full_analysis()`, `cross_correlation_matrix()` -- statistical analysis
 - `comparison::compare()`, `comparison::compare_with_analysis()` -- differential session comparison
 - `trial_analysis()`, `stouffer_combine()`, `calibration_check()` -- PEAR-style trial analysis
+- `chaos_analysis()` -- opt-in chaos theory analysis (separate from `full_analysis()`, O(n²))
+
+**Chaos module:** `crates/openentropy-core/src/chaos.rs`
+
+The chaos module distinguishes true quantum randomness from deterministic chaos. It runs five independent methods on raw entropy samples:
+
+| Method | One-line summary |
+|--------|-----------------|
+| **Hurst Exponent** (R/S analysis) | Measures long-range memory; H ∈ [0.4, 0.6] indicates no persistent trends |
+| **Lyapunov Exponent** (Rosenstein) | Measures sensitivity to initial conditions; \|λ\| < 0.1 means no exponential divergence |
+| **Correlation Dimension** (Grassberger-Procaccia) | Estimates attractor dimensionality; D₂ > 3.0 is consistent with high-dimensional randomness |
+| **BiEntropy / TBiEntropy** | Quantifies ordered vs disordered bit sequences; BiEn > 0.95 = maximally disordered |
+| **Epiplexity** (compression-based) | Measures incompressibility; compression ratio > 0.99 = data resists compression |
+
+`chaos_analysis()` is opt-in and separate from `full_analysis()`. It has O(n²) complexity (correlation dimension phase-space reconstruction), so it's not run by default. The `deep` profile enables it via `--chaos`; all other profiles do not.
 
 ### 2. openentropy-cli
 

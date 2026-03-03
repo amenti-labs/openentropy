@@ -15,6 +15,7 @@ use serde::Serialize;
 
 use crate::analysis::{self, SourceAnalysis};
 use crate::conditioning::{quick_min_entropy, quick_shannon};
+use crate::math;
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -411,7 +412,7 @@ fn chi2_homogeneity(data_a: &[u8], data_b: &[u8]) -> (f64, usize, f64, bool) {
 
     // df = (rows-1)*(cols-1) = (non_empty_bins - 1) * (2 - 1)
     df = df.saturating_sub(1);
-    let p_value = chi_squared_survival(chi2, df);
+    let p_value = math::chi_squared_survival(chi2, df);
 
     (chi2, df, p_value, reliable)
 }
@@ -519,24 +520,12 @@ fn mann_whitney_u_test(data_a: &[u8], data_b: &[u8]) -> (f64, f64) {
         let z = (u - mu).abs() / sigma_sq.sqrt();
         // Two-tailed p-value from standard normal: p = 2 * Phi(-|z|)
         // Using the complementary error function: erfc(x/sqrt(2))
-        erfc(z / std::f64::consts::SQRT_2)
+        math::erfc(z / std::f64::consts::SQRT_2)
     } else {
         1.0
     };
 
     (u_norm, p_value.clamp(0.0, 1.0))
-}
-
-/// Complementary error function, erfc(x) = 1 - erf(x).
-///
-/// Uses Abramowitz & Stegun approximation 7.1.26 (maximum error < 1.5e-7).
-fn erfc(x: f64) -> f64 {
-    let t = 1.0 / (1.0 + 0.3275911 * x.abs());
-    let poly = t
-        * (0.254829592
-            + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
-    let result = poly * (-x * x).exp();
-    if x >= 0.0 { result } else { 2.0 - result }
 }
 
 // ---------------------------------------------------------------------------
@@ -853,104 +842,6 @@ fn kolmogorov_survival(lambda: f64) -> f64 {
 /// Upper-tail probability (survival function) for chi-squared distribution.
 ///
 /// P(X > chi2 | df) using the regularized incomplete gamma function.
-fn chi_squared_survival(chi2: f64, df: usize) -> f64 {
-    if df == 0 || chi2 < 0.0 {
-        return 1.0;
-    }
-    if chi2 == 0.0 {
-        return 1.0;
-    }
-    let a = df as f64 / 2.0;
-    let x = chi2 / 2.0;
-
-    // For extremely large x relative to a, the survival is effectively 0.
-    // The log-space computation: log_q ≈ -x + a*ln(x) - ln_gamma(a)
-    // If this is very negative, return 0 to avoid numerical issues.
-    let log_prefix = -x + a * x.ln() - ln_gamma(a);
-    if log_prefix < -700.0 {
-        return 0.0;
-    }
-
-    if x < a + 1.0 {
-        // Series expansion for the regularized lower incomplete gamma P(a,x).
-        // Survival = 1 - P(a,x).
-        let mut sum = 0.0;
-        let mut term = 1.0 / a;
-        sum += term;
-        for n in 1..300 {
-            term *= x / (a + n as f64);
-            sum += term;
-            if term.abs() < 1e-14 {
-                break;
-            }
-        }
-        let log_p = -x + a * x.ln() - ln_gamma(a) + sum.ln();
-        (1.0 - log_p.exp()).clamp(0.0, 1.0)
-    } else {
-        // Continued fraction (Lentz) for the upper incomplete gamma Q(a,x).
-        // This converges fast when x >= a+1.
-
-        // Modified Lentz algorithm: f_0 = C_0 = b_0, D_0 = 0 → D_1 = 1/b_0
-        let b0 = x - a + 1.0;
-        let mut f = if b0.abs() < 1e-30 { 1e-30 } else { b0 };
-        let mut c = f;
-        let mut d = 0.0_f64;
-
-        for n in 1..300 {
-            let nf = n as f64;
-            let a_n = nf * (a - nf);
-            let b_n = b0 + 2.0 * nf;
-
-            d = b_n + a_n * d;
-            if d.abs() < 1e-30 {
-                d = 1e-30;
-            }
-            d = 1.0 / d;
-
-            c = b_n + a_n / c;
-            if c.abs() < 1e-30 {
-                c = 1e-30;
-            }
-
-            let delta = c * d;
-            f *= delta;
-            if (delta - 1.0).abs() < 1e-14 {
-                break;
-            }
-        }
-
-        // Q(a,x) = exp(-x) * x^a / Gamma(a) / CF
-        let log_q = -x + a * x.ln() - ln_gamma(a) - f.ln();
-        log_q.exp().clamp(0.0, 1.0)
-    }
-}
-
-/// Log-gamma via Lanczos approximation.
-fn ln_gamma(x: f64) -> f64 {
-    if x <= 0.0 {
-        return 0.0;
-    }
-    let g = 7.0;
-    let c = [
-        0.999_999_999_999_809_9,
-        676.5203681218851,
-        -1259.1392167224028,
-        771.323_428_777_653_1,
-        -176.615_029_162_140_6,
-        12.507343278686905,
-        -0.13857109526572012,
-        9.984_369_578_019_572e-6,
-        1.5056327351493116e-7,
-    ];
-
-    let x = x - 1.0;
-    let mut sum = c[0];
-    for (i, &coeff) in c[1..].iter().enumerate() {
-        sum += coeff / (x + i as f64 + 1.0);
-    }
-    let t = x + g + 0.5;
-    0.5 * (2.0 * std::f64::consts::PI).ln() + (t.ln() * (x + 0.5)) - t + sum.ln()
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -959,6 +850,7 @@ fn ln_gamma(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::math::{chi_squared_survival, erfc};
 
     fn pseudo_random(n: usize, seed: u64) -> Vec<u8> {
         let mut data = Vec::with_capacity(n);
@@ -1256,7 +1148,7 @@ mod tests {
         assert_eq!(dist[0], (100, 1));
     }
 
-    // -- Chi-squared survival helper --
+    // -- Chi-squared survival helper (via crate::math) --
 
     #[test]
     fn chi_squared_survival_zero() {

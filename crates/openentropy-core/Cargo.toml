@@ -23,6 +23,10 @@ path = "../../examples/rust/raw_vs_conditioned.rs"
 name = "stream_to_file"
 path = "../../examples/rust/stream_to_file.rs"
 
+[[example]]
+name = "chaos_analysis"
+path = "../../examples/rust/chaos_analysis.rs"
+
 [dependencies]
 sha2 = { workspace = true }
 flate2 = { workspace = true }

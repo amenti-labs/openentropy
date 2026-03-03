@@ -7,6 +7,7 @@
 | [`rust/basic.rs`](rust/basic.rs) | Simple entropy collection — auto-detect sources, get random bytes, print as hex |
 | [`rust/raw_vs_conditioned.rs`](rust/raw_vs_conditioned.rs) | Compare Raw, VonNeumann, and Sha256 conditioning modes side by side |
 | [`rust/stream_to_file.rs`](rust/stream_to_file.rs) | Collect entropy and write raw bytes to a file |
+| [`rust/chaos_analysis.rs`](rust/chaos_analysis.rs) | Run five chaos theory methods on raw entropy to distinguish randomness from deterministic chaos |
 
 ### Running Rust Examples
 
@@ -14,6 +15,7 @@
 cargo run --example basic
 cargo run --example raw_vs_conditioned
 cargo run --example stream_to_file
+cargo run --example chaos_analysis
 ```
 
 ## Python Examples

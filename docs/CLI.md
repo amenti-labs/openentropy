@@ -9,12 +9,12 @@ Value flags (for example `--samples`, `--conditioning`) override profile default
 Boolean flags are additive (OR semantics): profile-enabled booleans stay enabled.
 Profiles are available on `analyze`, `sessions`, and `compare`.
 
-| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials |
-|---------|----------|---------|-------------|---------|-------------|------------|--------|
-| `quick` | Any | 10,000 | raw | — | — | — | — |
-| `standard` | Any (default) | 50,000 | raw | — | — | — | — |
-| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ |
-| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — |
+| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials | Chaos |
+|---------|----------|---------|-------------|---------|-------------|------------|--------|-------|
+| `quick` | Any | 10,000 | raw | — | — | — | — | — |
+| `standard` | Any (default) | 50,000 | raw | — | — | — | — | — |
+| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ | ✓ |
+| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — | — |
 
 The table reflects `analyze` defaults. `sessions` uses the profile's analysis
 toggles (`entropy`, `trials`, and whether analysis is implied). `compare` uses
@@ -148,6 +148,42 @@ openentropy analyze --entropy                # include min-entropy breakdown
 openentropy analyze --cross-correlation --output analysis.json
 openentropy analyze --telemetry --output analysis.json
 ```
+
+## `analyze --chaos` — Chaos theory analysis
+
+```bash
+openentropy analyze --chaos --samples 10000 clock_jitter
+openentropy analyze --profile deep                        # enables --chaos automatically
+openentropy analyze --chaos --output chaos_report.json
+```
+
+The `--chaos` flag runs five chaos theory methods on the raw entropy stream. Use it to distinguish true quantum randomness from deterministic chaos, validate QRNG sources, or characterize hardware noise structure.
+
+**When to use it:** QRNG validation, research into hardware noise dynamics, or any time you want to confirm a source isn't exhibiting low-dimensional chaotic behavior.
+
+The `deep` profile enables `--chaos` automatically. All other profiles (`quick`, `standard`, `security`) do not.
+
+### Chaos Methods
+
+| Method | What it measures |
+|--------|-----------------|
+| **Hurst Exponent** (R/S analysis) | Long-range memory. H near 0.5 = no memory (random). H > 0.6 = persistent trends. H < 0.4 = anti-persistent. |
+| **Lyapunov Exponent** (Rosenstein) | Sensitivity to initial conditions. Near zero = no exponential divergence (random). Large positive = chaotic. |
+| **Correlation Dimension** (Grassberger-Procaccia) | Attractor dimensionality. High D₂ (>3) = high-dimensional, consistent with randomness. Low D₂ = low-dimensional attractor (deterministic chaos). |
+| **BiEntropy / TBiEntropy** | Ordered vs disordered bit sequences. BiEn near 1.0 = maximally disordered (random). Near 0 = structured/predictable. |
+| **Epiplexity** (compression-based) | Incompressibility. Ratio near 1.0 = data resists compression (random). Low ratio = compressible structure present. |
+
+### Pass/Fail Thresholds
+
+| Metric | Symbol | PASS range | Interpretation |
+|--------|--------|-----------|----------------|
+| Hurst Exponent | H | 0.4 – 0.6 | No long-range memory |
+| Lyapunov Exponent | λ | \|λ\| < 0.1 | No exponential divergence |
+| Correlation Dimension | D₂ | > 3.0 | High-dimensional, not a low-D attractor |
+| BiEntropy | BiEn | > 0.95 | Maximally disordered bit sequences |
+| Epiplexity (compression ratio) | — | > 0.99 | Incompressible output |
+
+A source that passes all five is consistent with true randomness. Failing one or more doesn't necessarily mean the source is broken — it may indicate structured noise worth investigating.
 
 ## `analyze --report` — NIST test battery
 

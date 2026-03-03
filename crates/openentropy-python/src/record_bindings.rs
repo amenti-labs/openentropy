@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use openentropy_core::conditioning::{ConditioningMode, condition};
+use openentropy_core::conditioning::{condition, ConditioningMode};
 use openentropy_core::session::{SessionConfig, SessionWriter};
 
 use super::PyEntropyPool;

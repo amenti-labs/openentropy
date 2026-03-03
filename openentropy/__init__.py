@@ -57,6 +57,13 @@ from openentropy.openentropy import (
     list_sessions,
     load_session_meta,
     load_session_raw_data,
+    # Chaos
+    chaos_analysis,
+    hurst_exponent,
+    lyapunov_exponent,
+    correlation_dimension,
+    bientropy,
+    epiplexity,
 )
 
 __rust_backend__ = True
@@ -117,4 +124,11 @@ __all__ = [
     "list_sessions",
     "load_session_meta",
     "load_session_raw_data",
+    # Chaos
+    "chaos_analysis",
+    "hurst_exponent",
+    "lyapunov_exponent",
+    "correlation_dimension",
+    "bientropy",
+    "epiplexity",
 ]

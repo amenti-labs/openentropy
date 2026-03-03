@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
+use crate::math;
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -356,7 +358,7 @@ pub fn bit_bias(data: &[u8]) -> BitBiasResult {
 
     // Approximate p-value from chi-squared with 8 degrees of freedom.
     // Use the incomplete gamma function approximation.
-    let p_value = chi_squared_p_value(chi_squared, 8);
+    let p_value = math::chi_squared_p_value(chi_squared, 8);
 
     let has_significant_bias = bit_probs.iter().any(|&p| (p - 0.5).abs() > 0.01);
 
@@ -620,60 +622,6 @@ pub fn pearson_correlation(a: &[u8], b: &[u8]) -> f64 {
 
     let denom = (var_a * var_b).sqrt();
     if denom < 1e-10 { 0.0 } else { cov / denom }
-}
-
-/// Approximate chi-squared p-value using the regularized incomplete gamma function.
-fn chi_squared_p_value(chi2: f64, df: usize) -> f64 {
-    // Upper incomplete gamma function approximation.
-    // P-value = 1 - P(chi2 < x) = Q(df/2, chi2/2)
-    let a = df as f64 / 2.0;
-    let x = chi2 / 2.0;
-
-    if x < 0.0 {
-        return 1.0;
-    }
-
-    // Use series expansion for regularized lower incomplete gamma.
-    let mut sum = 0.0;
-    let mut term = 1.0 / a;
-    sum += term;
-    for n in 1..200 {
-        term *= x / (a + n as f64);
-        sum += term;
-        if term.abs() < 1e-12 {
-            break;
-        }
-    }
-    let lower_gamma = (-x + a * x.ln() - ln_gamma(a)).exp() * sum;
-    (1.0 - lower_gamma).clamp(0.0, 1.0)
-}
-
-/// Log gamma function (Stirling approximation).
-fn ln_gamma(x: f64) -> f64 {
-    if x <= 0.0 {
-        return 0.0;
-    }
-    // Lanczos approximation
-    let g = 7.0;
-    let c = [
-        0.999_999_999_999_809_9,
-        676.5203681218851,
-        -1259.1392167224028,
-        771.323_428_777_653_1,
-        -176.615_029_162_140_6,
-        12.507343278686905,
-        -0.13857109526572012,
-        9.984_369_578_019_572e-6,
-        1.5056327351493116e-7,
-    ];
-
-    let x = x - 1.0;
-    let mut sum = c[0];
-    for (i, &coeff) in c[1..].iter().enumerate() {
-        sum += coeff / (x + i as f64 + 1.0);
-    }
-    let t = x + g + 0.5;
-    0.5 * (2.0 * PI).ln() + (t.ln() * (x + 0.5)) - t + sum.ln()
 }
 
 // ---------------------------------------------------------------------------
