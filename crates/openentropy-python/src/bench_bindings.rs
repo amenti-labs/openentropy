@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::pythonize;
 
-use openentropy_core::benchmark::{benchmark_sources as bench_sources, BenchConfig, RankBy};
+use openentropy_core::benchmark::{BenchConfig, RankBy, benchmark_sources as bench_sources};
 
 use super::PyEntropyPool;
 
