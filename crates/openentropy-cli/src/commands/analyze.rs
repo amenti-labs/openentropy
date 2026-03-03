@@ -1,11 +1,11 @@
 use std::time::Instant;
 
 use openentropy_core::analysis;
-use openentropy_core::conditioning::{condition, min_entropy_estimate, ConditioningMode};
+use openentropy_core::conditioning::{ConditioningMode, condition, min_entropy_estimate};
 use openentropy_core::verdict::{
-    metric_or_na, verdict_autocorr, verdict_bias, verdict_bientropy,
-    verdict_compression, verdict_corrdim, verdict_distribution, verdict_hurst,
-    verdict_lyapunov, verdict_runs, verdict_spectral, verdict_stationarity,
+    metric_or_na, verdict_autocorr, verdict_bias, verdict_bientropy, verdict_compression,
+    verdict_corrdim, verdict_distribution, verdict_hurst, verdict_lyapunov, verdict_runs,
+    verdict_spectral, verdict_stationarity,
 };
 
 pub struct AnalyzeArgs {
@@ -313,7 +313,6 @@ fn print_source_forensics(r: &analysis::SourceAnalysis) {
     }
     println!();
 }
-
 
 // ---------------------------------------------------------------------------
 // NIST test battery path (--report)

@@ -6,8 +6,8 @@
 //!
 //! Run: `cargo run --example chaos_analysis`
 
-use openentropy_core::chaos::chaos_analysis;
 use openentropy_core::EntropyPool;
+use openentropy_core::chaos::chaos_analysis;
 
 fn main() {
     let pool = EntropyPool::auto();

@@ -4,8 +4,8 @@
 //! These functions help distinguish genuine quantum randomness from
 //! deterministic or structured behavior in sampled byte streams.
 
-use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use serde::Serialize;
 use std::f64::consts::LN_2;
 
