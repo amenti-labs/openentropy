@@ -1,5 +1,32 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightDocSearch from '@astrojs/starlight-docsearch';
+
+const algoliaAppId = process.env.ALGOLIA_APP_ID;
+const algoliaApiKey = process.env.ALGOLIA_SEARCH_API_KEY;
+const algoliaIndexName = process.env.ALGOLIA_INDEX_NAME;
+const algoliaAskAiAssistantId = process.env.ALGOLIA_ASK_AI_ASSISTANT_ID;
+
+const hasDocSearchConfig = Boolean(algoliaAppId && algoliaApiKey && algoliaIndexName);
+const hasPartialDocSearchConfig =
+  Boolean(algoliaAppId) || Boolean(algoliaApiKey) || Boolean(algoliaIndexName);
+
+if (hasPartialDocSearchConfig && !hasDocSearchConfig) {
+  console.warn(
+    '[docs] Partial Algolia DocSearch configuration detected. Set ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY, and ALGOLIA_INDEX_NAME together to enable AI search.'
+  );
+}
+
+const plugins = hasDocSearchConfig
+  ? [
+      starlightDocSearch({
+        appId: algoliaAppId,
+        apiKey: algoliaApiKey,
+        indexName: algoliaIndexName,
+        ...(algoliaAskAiAssistantId ? { askAi: algoliaAskAiAssistantId } : {}),
+      }),
+    ]
+  : [];
 
 export default defineConfig({
   site: 'https://amenti-labs.github.io',
@@ -7,6 +34,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'openentropy',
+      plugins,
       logo: {
         src: './src/assets/logo.png',
         alt: 'openentropy logo',
@@ -14,6 +42,7 @@ export default defineConfig({
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/amenti-labs/openentropy' },
       ],
+      customCss: ['./src/styles/custom.css'],
       editLink: {
         baseUrl: 'https://github.com/amenti-labs/openentropy/edit/master/website/',
       },

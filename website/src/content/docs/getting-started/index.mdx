@@ -43,11 +43,14 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs syncKey="lang">
   <TabItem label="Rust">
   ```rust
-  use openentropy_core::{EntropyPool, detect_available_sources};
+  use openentropy_core::EntropyPool;
 
   let pool = EntropyPool::auto();
   let bytes = pool.get_random_bytes(256);
-  println!("{}", hex::encode(&bytes));
+  for b in &bytes {
+      print!("{b:02x}");
+  }
+  println!();
   ```
   </TabItem>
   <TabItem label="Python">

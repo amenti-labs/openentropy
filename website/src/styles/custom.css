@@ -1,0 +1,37 @@
+/* Dark theme — Discord / VSCode black inspired */
+
+:root,
+::backdrop {
+	/* Gray scale — near-black backgrounds, cool blue undertone */
+	--sl-color-white: hsl(220, 15%, 93%);
+	--sl-color-gray-1: hsl(220, 15%, 82%);
+	--sl-color-gray-2: hsl(220, 10%, 68%);
+	--sl-color-gray-3: hsl(220, 8%, 46%);
+	--sl-color-gray-4: hsl(220, 10%, 28%);
+	--sl-color-gray-5: hsl(225, 16%, 16%);
+	--sl-color-gray-6: hsl(228, 20%, 12%);
+	--sl-color-black: hsl(230, 25%, 7%);
+
+	/* Accent — Discord blurple */
+	--sl-color-accent-low: hsl(228, 56%, 16%);
+	--sl-color-accent: hsl(228, 76%, 59%);
+	--sl-color-accent-high: hsl(228, 90%, 82%);
+}
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+	/* Light mode — subtle blue-gray, not stark white */
+	--sl-color-white: hsl(225, 20%, 12%);
+	--sl-color-gray-1: hsl(225, 18%, 18%);
+	--sl-color-gray-2: hsl(225, 12%, 28%);
+	--sl-color-gray-3: hsl(225, 8%, 44%);
+	--sl-color-gray-4: hsl(225, 6%, 62%);
+	--sl-color-gray-5: hsl(225, 10%, 84%);
+	--sl-color-gray-6: hsl(225, 16%, 93%);
+	--sl-color-gray-7: hsl(225, 16%, 96%);
+	--sl-color-black: hsl(0, 0%, 100%);
+
+	--sl-color-accent-high: hsl(228, 66%, 30%);
+	--sl-color-accent: hsl(228, 76%, 50%);
+	--sl-color-accent-low: hsl(228, 80%, 92%);
+}

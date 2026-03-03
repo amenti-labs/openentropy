@@ -11,13 +11,13 @@ Ollama supports an auxiliary RNG device via the `OLLAMA_AUXRNG_DEV` environment 
 
 ### Steps
 
-1. **Start the entropy device** (creates a named pipe):
+1. **Start a FIFO entropy stream** (creates a named pipe):
 
    ```bash
-   openentropy device /tmp/openentropy-rng
+   openentropy stream --fifo /tmp/openentropy-rng
    ```
 
-   This blocks and continuously supplies entropy to any reader.
+   This creates the FIFO and continuously supplies entropy to any reader.
 
 2. **In another terminal, start Ollama with hardware entropy**:
 
@@ -29,19 +29,19 @@ Ollama supports an auxiliary RNG device via the `OLLAMA_AUXRNG_DEV` environment 
 
 3. **Verify it's working**:
 
-   The `openentropy device` command prints statistics when a reader connects. You should see bytes being consumed as Ollama generates tokens.
+   The stream command should show FIFO activity as readers consume bytes.
 
 ### Options
 
 ```bash
 # Use only fast sources (default)
-openentropy device /tmp/openentropy-rng
+openentropy stream --fifo /tmp/openentropy-rng
 
 # Custom buffer size
-openentropy device /tmp/openentropy-rng --buffer-size 8192
+openentropy stream --fifo /tmp/openentropy-rng --rate 8192
 
 # Specific sources only
-openentropy device /tmp/openentropy-rng --sources timing,silicon
+openentropy stream clock_jitter denormal_timing --fifo /tmp/openentropy-rng
 ```
 
 ---

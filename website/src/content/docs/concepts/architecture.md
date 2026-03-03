@@ -78,6 +78,10 @@ openentropy/
 │           ├── comparison_bindings.rs # 9 comparison function bindings (pythonize)
 │           └── trials_bindings.rs  # 3 trials function bindings (pythonize + depythonize)
 │
+│   └── openentropy-wasm/              # WebAssembly/browser entropy crate
+│       └── src/
+│           └── lib.rs              # wasm-bindgen exports for browser usage
+│
 ├── openentropy/               # Python package wrapper for compiled extension
 ├── pyproject.toml                  # Python packaging (pip install)
 └── examples/                       # Rust and Python usage examples
@@ -128,6 +132,12 @@ A self-contained crate implementing 31 statistical tests inspired by the NIST SP
 PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` that is loaded as a native Python extension module.
 
 **Key dependencies:** `openentropy-core`, `openentropy-tests`, `pyo3`, `pythonize`
+
+### 6. openentropy-wasm
+
+WebAssembly bindings that expose selected entropy functionality for browser environments.
+
+**Key dependencies:** `openentropy-core`, `wasm-bindgen`, `js-sys`
 
 ## Data Flow
 

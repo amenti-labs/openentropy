@@ -76,6 +76,8 @@ openentropy bench clock_jitter       # filter by name
 openentropy bench --rank-by throughput
 openentropy bench --telemetry
 openentropy bench --output bench.json
+openentropy bench --no-pool
+openentropy bench --qcicada-mode raw
 ```
 
 `bench --output` JSON includes optional `telemetry_v1` when `--telemetry` is enabled.
@@ -90,6 +92,7 @@ openentropy stream --format base64 --rate 1024            # rate-limited
 openentropy stream --conditioning raw --format raw        # no conditioning
 openentropy stream --conditioning vonneumann --format hex # debiased only
 openentropy stream --conditioning sha256 --format hex     # full conditioning (default)
+openentropy stream --qcicada-mode samples --format hex --bytes 64
 ```
 
 ## `monitor` — Interactive TUI dashboard
@@ -150,6 +153,7 @@ openentropy analyze --profile deep --report  # deep forensic + NIST battery
 openentropy analyze --entropy                # include min-entropy breakdown
 openentropy analyze --cross-correlation --output analysis.json
 openentropy analyze --telemetry --output analysis.json
+openentropy analyze --qcicada-mode sha256 --output analysis.json
 ```
 
 ## `analyze --report` — NIST test battery
@@ -168,6 +172,7 @@ openentropy record clock_jitter --duration 30s
 openentropy record qcicada --duration 5m --tag experiment:baseline --note "5-min baseline"
 openentropy record all --duration 1m --analyze --telemetry
 openentropy record qcicada --calibrate --duration 5m  # PEAR-style calibration gate before recording
+openentropy record qcicada --qcicada-mode raw --duration 5m
 ```
 
 `--calibrate` runs a PEAR-style calibration check on each source before recording

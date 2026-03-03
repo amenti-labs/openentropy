@@ -48,7 +48,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   </TabItem>
   <TabItem label="Python">
   ```python
-  from openentropy import EntropyPool
+  from openentropy import EntropyPool, full_analysis
 
   pool = EntropyPool.auto()
   data = pool.get_random_bytes(256)
@@ -80,8 +80,9 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   from openentropy import EntropyPool
 
   pool = EntropyPool.auto()
-  result = pool.full_analysis(5000)
-  print(f"Shannon entropy: {result.shannon_entropy:.4f} bits/byte")
+  data = pool.get_raw_bytes(5000)
+  result = full_analysis("my_source", data)
+  print(f"Shannon entropy: {result['shannon_entropy']:.4f} bits/byte")
   ```
   </TabItem>
   <TabItem label="CLI">
