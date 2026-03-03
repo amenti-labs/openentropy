@@ -13,6 +13,7 @@ mod analysis_bindings;
 mod bench_bindings;
 mod chaos_bindings;
 mod comparison_bindings;
+mod dispatcher_bindings;
 mod record_bindings;
 mod sessions_bindings;
 mod trials_bindings;
@@ -369,6 +370,7 @@ fn openentropy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     bench_bindings::register(m)?;
     chaos_bindings::register(m)?;
     comparison_bindings::register(m)?;
+    dispatcher_bindings::register(m)?;
     record_bindings::register(m)?;
     sessions_bindings::register(m)?;
     trials_bindings::register(m)?;

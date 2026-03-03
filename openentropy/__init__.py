@@ -64,6 +64,9 @@ from openentropy.openentropy import (
     correlation_dimension,
     bientropy,
     epiplexity,
+    # Dispatcher
+    analyze,
+    analysis_config,
 )
 
 __rust_backend__ = True
@@ -131,4 +134,7 @@ __all__ = [
     "correlation_dimension",
     "bientropy",
     "epiplexity",
+    # Dispatcher
+    "analyze",
+    "analysis_config",
 ]

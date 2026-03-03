@@ -683,3 +683,102 @@ class TestSessions:
         assert "id" in meta
         raw = load_session_raw_data(session_path)
         assert isinstance(raw, dict)
+
+
+class TestDispatcher:
+    def test_analysis_config_default(self):
+        from openentropy import analysis_config
+
+        config = analysis_config()
+        assert isinstance(config, dict)
+        assert config["forensic"] is True
+        assert config["entropy"] is False
+        assert config["chaos"] is False
+        assert config["cross_correlation"] is False
+
+    def test_analysis_config_deep(self):
+        from openentropy import analysis_config
+
+        config = analysis_config("deep")
+        assert config["forensic"] is True
+        assert config["entropy"] is True
+        assert config["chaos"] is True
+        assert config["cross_correlation"] is True
+        assert config["trials"] == {"bits_per_trial": 200}
+
+    def test_analysis_config_security(self):
+        from openentropy import analysis_config
+
+        config = analysis_config("security")
+        assert config["entropy"] is True
+        assert config["chaos"] is False
+        assert config["trials"] is None
+
+    def test_analyze_forensic_only(self):
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze([("test", data)])
+        assert isinstance(report, dict)
+        assert len(report["sources"]) == 1
+        src = report["sources"][0]
+        assert src["label"] == "test"
+        assert "forensic" in src
+        assert "chaos" not in src
+        assert "entropy" not in src
+        assert "trials" not in src
+        assert "autocorrelation" in src["verdicts"]
+
+    def test_analyze_with_profile(self):
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze([("test", data)], profile="deep")
+        src = report["sources"][0]
+        assert "forensic" in src
+        assert "chaos" in src
+        assert "entropy" in src
+        assert "trials" in src
+        assert "hurst" in src["verdicts"]
+
+    def test_analyze_with_config_dict(self):
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze(
+            [("test", data)],
+            config={"forensic": False, "chaos": True},
+        )
+        src = report["sources"][0]
+        assert "forensic" not in src
+        assert "chaos" in src
+
+    def test_analyze_cross_correlation(self):
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze(
+            [("a", data), ("b", data)],
+            config={"cross_correlation": True},
+        )
+        assert len(report["sources"]) == 2
+        assert "cross_correlation" in report
+
+    def test_analyze_cross_correlation_single_source(self):
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze(
+            [("a", data)],
+            config={"cross_correlation": True},
+        )
+        assert "cross_correlation" not in report
+
+    def test_analyze_serializable(self):
+        import json
+        from openentropy import analyze
+
+        data = bytes(range(256)) * 4
+        report = analyze([("test", data)], profile="quick")
+        json_str = json.dumps(report)
+        assert '"forensic"' in json_str
