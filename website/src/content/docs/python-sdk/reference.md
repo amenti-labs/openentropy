@@ -7,6 +7,13 @@ Python bindings for `openentropy` via PyO3.
 
 The current package is a Rust-backed extension module exposed as `openentropy`.
 
+For most workflows, start with:
+
+- [Python Quick Reference](/openentropy/python-sdk/quick-reference/)
+- [Python Analysis Workflows](/openentropy/python-sdk/analysis/)
+
+Use this page as the exhaustive API surface.
+
 ## Installation
 
 Install from PyPI:
@@ -299,7 +306,7 @@ print(r)  # float in [-1, 1]
 ## Chaos Theory Analysis
 
 Chaos theory metrics distinguish genuine quantum randomness from deterministic
-or structured behavior. See [Chaos Theory Analysis](/openentropy/concepts/analysis/#chaos-theory-analysis)
+or structured behavior. See [Chaos Theory Analysis](/openentropy/concepts/analysis-chaos/)
 for interpretation guides and verdict thresholds.
 
 ```python

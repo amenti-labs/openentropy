@@ -5,6 +5,11 @@ description: 'Complete command reference for the openentropy CLI'
 
 Complete command reference for `openentropy-cli`.
 
+If you want guided workflows first, see:
+
+- [Security Validation](/openentropy/guides/security-validation/)
+- [Research Methodology](/openentropy/guides/research-methodology/)
+
 ## Analysis Profiles
 
 Profiles are convenience presets that configure multiple flags at once.

@@ -7,6 +7,13 @@ Accurate reference for the current Rust workspace API.
 
 For Python bindings, see [Python SDK](/openentropy/python-sdk/).
 
+For day-to-day usage, start with:
+
+- [Rust Quick Reference](/openentropy/rust-sdk/quick-reference/)
+- [Rust Analysis Workflows](/openentropy/rust-sdk/analysis/)
+
+Use this page for complete type and function coverage.
+
 ## openentropy-core
 
 Crate: `openentropy-core`  
@@ -334,7 +341,7 @@ println!("Stationary: {}", analysis.stationarity.is_stationary);
 ## Chaos Theory Analysis (`openentropy_core::chaos`)
 
 Distinguish true randomness from deterministic chaos using five independent metrics.
-See [Chaos Theory Analysis](/openentropy/concepts/analysis/#chaos-theory-analysis)
+See [Chaos Theory Analysis](/openentropy/concepts/analysis-chaos/)
 for interpretation guides and verdict thresholds.
 
 ### `chaos_analysis(data: &[u8]) -> ChaosAnalysis`
@@ -364,7 +371,7 @@ println!("Compression ratio={:.4}", result.epiplexity.compression_ratio);
 
 ### Interpreting results
 
-For **true random** data, expect: Hurst H ≈ 0.5, Lyapunov λ > 0 (sensitive dependence), high correlation dimension, BiEntropy near maximum, compression ratio near 1.0. See the [Verdict System](/openentropy/concepts/analysis/#verdict-system) for automated pass/fail classification of each metric.
+For **true random** data, expect: Hurst H ≈ 0.5, Lyapunov λ > 0 (sensitive dependence), high correlation dimension, BiEntropy near maximum, compression ratio near 1.0. See the [Verdict System](/openentropy/concepts/analysis-verdicts/) for automated pass/fail classification of each metric.
 
 ## Unified Analysis Dispatcher (`openentropy_core::dispatcher`)
 
@@ -439,7 +446,7 @@ let report = analyze(&[
 
 Automated pass/fail classification for every forensic and chaos metric.
 Each source report includes a `VerdictSummary` with up to 11 verdict fields.
-See [Verdict System](/openentropy/concepts/analysis/#verdict-system) for
+See [Verdict System](/openentropy/concepts/analysis-verdicts/) for
 all thresholds and interpretation guidance.
 
 ```rust

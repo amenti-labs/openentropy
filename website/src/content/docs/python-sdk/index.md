@@ -47,6 +47,8 @@ print(data.hex())
 
 ## Next Steps
 
+- **[Python Quick Reference](/openentropy/python-sdk/quick-reference/)** — Most-used calls and workflows
 - **[Full API Reference](/openentropy/python-sdk/reference/)** — Complete API documentation with examples for every function
+- **[Python Analysis Workflows](/openentropy/python-sdk/analysis/)** — Dispatcher, forensic, chaos, trials, and comparison patterns
 - **[Source Catalog](/openentropy/concepts/sources/)** — All 63 entropy sources with physics explanations
 - **[Trial Analysis Methodology](/openentropy/concepts/trials/)** — PEAR-style trial analysis and statistical model

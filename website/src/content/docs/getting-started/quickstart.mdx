@@ -93,9 +93,49 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   </TabItem>
 </Tabs>
 
+## CLI Common Workflows
+
+If you are starting from the CLI, these are the most common patterns and flags.
+
+```bash
+# Discover sources (with runtime context)
+openentropy scan
+openentropy scan --telemetry
+
+# Interactive TUI dashboard
+openentropy monitor
+openentropy monitor --telemetry
+
+# Benchmark all fast sources vs a specific source
+openentropy bench
+openentropy bench all --profile deep --output bench.json
+openentropy bench clock_jitter --rank-by throughput
+
+# Stream bytes (all sources pooled) vs specific source names
+openentropy stream --format hex --bytes 64
+openentropy stream clock_jitter denormal_timing --format raw --bytes 1024
+
+# Analysis profiles + explicit toggles
+openentropy analyze --profile security
+openentropy analyze --profile deep --output analysis.json
+openentropy analyze --entropy --chaos --cross-correlation --output analysis.json
+
+# Record all sources vs selected source, with optional calibration
+openentropy record all --duration 1m --analyze --telemetry
+openentropy record qcicada --calibrate --duration 5m
+
+# Session workflows
+openentropy sessions
+openentropy sessions sessions/<id> --profile deep --trials --output session.json
+openentropy compare sessions/<id-a> sessions/<id-b> --profile deep --output comparison.json
+```
+
 ## Next Steps
 
 - [Python SDK Reference](/openentropy/python-sdk/reference/) — full Python API
+- [Python Quick Reference](/openentropy/python-sdk/quick-reference/) — common workflows
 - [Rust SDK Reference](/openentropy/rust-sdk/api/) — full Rust API
+- [Rust Quick Reference](/openentropy/rust-sdk/quick-reference/) — common workflows
 - [CLI Reference](/openentropy/cli/reference/) — all commands and flags
 - [Concepts: Entropy Sources](/openentropy/concepts/sources/) — all 63 sources explained
+- [Choose Your Path](/openentropy/getting-started/choose-your-path/) — role-based navigation

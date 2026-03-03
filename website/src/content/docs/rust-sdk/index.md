@@ -109,3 +109,9 @@ for source in sources {
 ## [Full API Reference](/openentropy/rust-sdk/api/)
 
 For complete API documentation including all crates, types, and methods, see the [Rust API Reference](/openentropy/rust-sdk/api/).
+
+## Next Steps
+
+- [Rust Quick Reference](/openentropy/rust-sdk/quick-reference/) — most-used calls and common workflows
+- [Rust Analysis Workflows](/openentropy/rust-sdk/analysis/) — dispatcher, forensic, chaos, trials, and comparison patterns
+- [Analysis System](/openentropy/concepts/analysis/) — interpretation guides and verdict model

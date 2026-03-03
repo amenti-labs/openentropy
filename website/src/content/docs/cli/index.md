@@ -71,3 +71,8 @@ openentropy analyze --profile deep --output analysis.json
 ## Full CLI Reference
 
 For complete command documentation, examples, and advanced options, see the [Full CLI Reference](/openentropy/cli/reference/).
+
+## Task Guides
+
+- [Security Validation](/openentropy/guides/security-validation/)
+- [Research Methodology](/openentropy/guides/research-methodology/)
