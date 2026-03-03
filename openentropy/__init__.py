@@ -47,6 +47,12 @@ from openentropy.openentropy import (
     trial_analysis,
     stouffer_combine,
     calibration_check,
+    chaos_analysis,
+    hurst_exponent,
+    lyapunov_exponent,
+    correlation_dimension,
+    bientropy,
+    epiplexity,
 )
 
 __rust_backend__ = True
@@ -97,4 +103,10 @@ __all__ = [
     "trial_analysis",
     "stouffer_combine",
     "calibration_check",
+    "chaos_analysis",
+    "hurst_exponent",
+    "lyapunov_exponent",
+    "correlation_dimension",
+    "bientropy",
+    "epiplexity",
 ]
