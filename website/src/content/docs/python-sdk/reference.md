@@ -383,6 +383,112 @@ print(cal["bit_bias"])          # deviation from 0.5
 print(cal["analysis"])          # nested TrialAnalysis dict
 ```
 
+## Benchmarking
+
+### `benchmark_sources(pool, config=None) -> dict`
+
+Run a multi-round benchmark across all sources in a pool. Returns a `BenchReport` dict.
+
+**Parameters:**
+- `pool` — `EntropyPool` instance
+- `config` — optional dict with keys: `samples_per_round` (int), `rounds` (int), `warmup_rounds` (int), `timeout_sec` (float), `rank_by` (str: `"balanced"` | `"min_entropy"` | `"throughput"`), `include_pool_quality` (bool), `pool_quality_bytes` (int), `conditioning` (str)
+
+**Returns:** dict with keys:
+- `generated_unix` — Unix timestamp
+- `config` — the config used
+- `sources` — list of source report dicts (name, composite, healthy, success_rounds, failures, avg_shannon, avg_min_entropy, avg_throughput_bps, avg_autocorrelation, p99_latency_ms, stability, grade, score)
+- `pool` — optional pool quality dict (bytes, shannon_entropy, min_entropy, healthy_sources, total_sources)
+
+```python
+from openentropy import EntropyPool, benchmark_sources
+
+pool = EntropyPool.auto()
+report = benchmark_sources(pool, {"rounds": 3, "rank_by": "balanced"})
+for src in report["sources"]:
+    print(f"{src['name']}: grade={src['grade']} score={src['score']:.3f}")
+```
+
+### `bench_config_defaults() -> dict`
+
+Return the default `BenchConfig` as a dict. Useful for inspecting defaults before overriding.
+
+## Recording
+
+### `class SessionWriter`
+
+Low-level session writer for recording entropy samples to disk.
+
+**Constructor:** `SessionWriter(sources, output_dir, conditioning="raw", tags=None, note=None, analyze=False)`
+- `sources` — list of source names to record
+- `output_dir` — directory where session folder will be created
+- `conditioning` — `"raw"` | `"vonneumann"` | `"sha256"`
+- `tags` — optional dict of string key-value metadata
+- `note` — optional string note
+- `analyze` — if True, embed statistical analysis in session.json
+
+**Methods:**
+- `write_sample(source_name, raw: bytes, conditioned: bytes)` — write one sample
+- `finish() -> str` — finalize session, return session directory path
+- `total_samples() -> int` — samples written so far
+- `elapsed_secs() -> float` — seconds since recording started
+- `session_dir() -> str` — path to session directory
+
+```python
+from openentropy import EntropyPool, SessionWriter
+
+pool = EntropyPool.auto()
+writer = SessionWriter(["clock_jitter"], "sessions", conditioning="raw")
+for _ in range(100):
+    raw = pool.get_source_raw_bytes("clock_jitter", 1000)
+    writer.write_sample("clock_jitter", raw, raw)
+path = writer.finish()
+print(f"Session saved to: {path}")
+```
+
+### `record(pool, sources, duration_secs, conditioning="raw", output_dir="sessions", analyze=False) -> dict`
+
+Convenience function: record entropy from a pool for a fixed duration. Returns session metadata dict.
+
+```python
+from openentropy import EntropyPool, record
+
+pool = EntropyPool.auto()
+meta = record(pool, ["clock_jitter", "thermal_noise"], duration_secs=30.0)
+print(f"Recorded {meta['total_samples']} samples to {meta['id']}")
+```
+
+## Sessions
+
+### `list_sessions(dir) -> list[dict]`
+
+List all recorded sessions in a directory. Returns list of session metadata dicts, sorted newest-first. Each dict includes a `path` key with the session directory path.
+
+```python
+from openentropy import list_sessions
+
+sessions = list_sessions("sessions")
+for s in sessions:
+    print(f"{s['id']} — {s['total_samples']} samples — {s['path']}")
+```
+
+### `load_session_meta(session_dir) -> dict`
+
+Load session metadata from a session directory. Returns the `session.json` contents as a dict.
+
+### `load_session_raw_data(session_dir) -> dict[str, bytes]`
+
+Load raw entropy data from a session directory. Returns a dict mapping source name → raw bytes.
+
+```python
+from openentropy import load_session_meta, load_session_raw_data, full_analysis
+
+meta = load_session_meta("sessions/my-session")
+raw = load_session_raw_data("sessions/my-session")
+for source, data in raw.items():
+    analysis = full_analysis(source, data)
+    print(f"{source}: H∞={analysis['min_entropy']:.4f}")
+```
+
 ## Notes
 
 - The API is provided by the compiled extension module `openentropy.openentropy`.

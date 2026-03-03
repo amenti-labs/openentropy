@@ -21,6 +21,16 @@ pub use conditioning::{
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
+pub use comparison::{
+    AggregateDelta, ComparisonResult, DigramAnalysis, MarkovAnalysis, MultiLagAnalysis,
+    RunLengthComparison, TemporalAnalysis, TwoSampleTests, WindowAnomaly, aggregate_delta,
+    cliffs_delta, compare, compare_with_analysis, digram_analysis, markov_analysis,
+    multi_lag_analysis, run_length_comparison, temporal_analysis, two_sample_tests,
+};
+pub use trials::{
+    CalibrationResult, StoufferResult, TrialAnalysis, TrialConfig, calibration_check,
+    stouffer_combine, trial_analysis,
+};
 pub use session::{
     MachineInfo, SessionConfig, SessionMeta, SessionSourceAnalysis, SessionWriter,
     detect_machine_info,
@@ -78,6 +88,7 @@ pub struct SourceHealth {
     pub bytes: u64,
     pub entropy: f64,
     pub min_entropy: f64,
+    pub autocorrelation: f64,
     pub time: f64,
     pub failures: u64,
 }
@@ -91,6 +102,7 @@ pub struct SourceInfoSnapshot {
     pub requirements: Vec<String>,
     pub entropy_rate_estimate: f64,
     pub composite: bool,
+    pub config: Vec<(&'static str, String)>,
 }
 ```
 
@@ -218,4 +230,59 @@ Subcommands:
 - `monitor`
 - `record`
 - `sessions`
-- `telemetry`
+
+## Benchmark Module (`openentropy_core::benchmark`)
+
+### `benchmark_sources(pool: &EntropyPool, config: &BenchConfig) -> Result<BenchReport, BenchError>`
+
+Run a multi-round benchmark across all sources in a pool.
+
+```rust
+use openentropy_core::{EntropyPool, benchmark::{benchmark_sources, BenchConfig}};
+
+let pool = EntropyPool::auto();
+let config = BenchConfig::default();
+let report = benchmark_sources(&pool, &config)?;
+for src in &report.sources {
+    println!("{}: grade={} score={:.3}", src.name, src.grade, src.score);
+}
+```
+
+**`BenchConfig` fields** (all public):
+- `samples_per_round: usize` — default 2048
+- `rounds: usize` — default 3
+- `warmup_rounds: usize` — default 1
+- `timeout_sec: f64` — default 2.0
+- `rank_by: RankBy` — `Balanced` | `MinEntropy` | `Throughput`, default `Balanced`
+- `include_pool_quality: bool` — default true
+- `pool_quality_bytes: usize` — default 65536
+- `conditioning: ConditioningMode` — default `Sha256`
+
+**`BenchReport` fields**: `generated_unix`, `config`, `sources: Vec<BenchSourceReport>`, `pool: Option<PoolQualityReport>`
+
+**`BenchSourceReport` fields**: `name`, `composite`, `healthy`, `success_rounds`, `failures`, `avg_shannon`, `avg_min_entropy`, `avg_throughput_bps`, `avg_autocorrelation`, `p99_latency_ms`, `stability`, `grade: char`, `score: f64`
+
+## Session Utilities (`openentropy_core::session`)
+
+### `list_sessions(dir: &Path) -> Result<Vec<(PathBuf, SessionMeta)>, std::io::Error>`
+
+List all recorded sessions in a directory, sorted newest-first. Returns empty Vec for nonexistent directory.
+
+### `load_session_raw_data(session_dir: &Path) -> Result<HashMap<String, Vec<u8>>, std::io::Error>`
+
+Load raw entropy data from a session directory. Returns a map of source name → raw bytes.
+
+```rust
+use openentropy_core::{list_sessions, load_session_raw_data, full_analysis};
+use std::path::Path;
+
+let sessions = list_sessions(Path::new("sessions"))?;
+for (path, meta) in &sessions {
+    println!("{}: {} samples", meta.id, meta.total_samples);
+    let raw = load_session_raw_data(path)?;
+    for (source, data) in &raw {
+        let analysis = full_analysis(source, data);
+        println!("  {}: H∞={:.4}", source, analysis.min_entropy);
+    }
+}
+```
