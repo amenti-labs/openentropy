@@ -20,9 +20,9 @@ pub struct CompareArgs {
 
 /// Run the compare command.
 pub fn run(args: CompareArgs) {
-    let prof = super::AnalysisProfile::parse(&args.profile);
-    let defaults = prof.compare_defaults();
-    let do_entropy = args.entropy || defaults.entropy;
+    let profile = openentropy_core::AnalysisProfile::parse(&args.profile);
+    let config = profile.to_config();
+    let do_entropy = args.entropy || config.entropy;
 
     let dir_a = PathBuf::from(&args.session_a);
     let dir_b = PathBuf::from(&args.session_b);

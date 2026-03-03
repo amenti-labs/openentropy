@@ -33,20 +33,27 @@ struct Resolved {
 }
 
 pub fn run(args: AnalyzeArgs) {
-    let profile = super::AnalysisProfile::parse(&args.profile);
-    let defaults = profile.analyze_defaults();
+    let profile = openentropy_core::AnalysisProfile::parse(&args.profile);
+    let config = profile.to_config();
 
     let resolved = Resolved {
-        samples: args.samples.unwrap_or(defaults.samples),
+        samples: args.samples.unwrap_or(match profile {
+            openentropy_core::AnalysisProfile::Quick => 10_000,
+            openentropy_core::AnalysisProfile::Deep => 100_000,
+            _ => 50_000,
+        }),
         conditioning: args
             .conditioning
             .as_deref()
-            .unwrap_or(defaults.conditioning)
+            .unwrap_or(match profile {
+                openentropy_core::AnalysisProfile::Security => "sha256",
+                _ => "raw",
+            })
             .to_string(),
-        entropy: args.entropy || defaults.entropy,
-        report: args.report || defaults.report,
-        cross_correlation: args.cross_correlation || defaults.cross_correlation,
-        chaos: args.chaos || defaults.chaos,
+        entropy: args.entropy || config.entropy,
+        report: args.report || matches!(profile, openentropy_core::AnalysisProfile::Security),
+        cross_correlation: args.cross_correlation || config.cross_correlation,
+        chaos: args.chaos || config.chaos,
     };
 
     println!(

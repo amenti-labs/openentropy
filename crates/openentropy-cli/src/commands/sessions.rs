@@ -19,13 +19,13 @@ pub fn run(
     do_trials: bool,
     profile: &str,
 ) {
-    let prof = super::AnalysisProfile::parse(profile);
-    let defaults = prof.sessions_defaults();
+    let parsed_profile = openentropy_core::AnalysisProfile::parse(profile);
+    let config = parsed_profile.to_config();
 
     // A non-standard profile implies --analyze
-    let do_analyze = do_analyze || defaults.implies_analyze;
-    let do_entropy = do_entropy || defaults.entropy;
-    let do_trials = do_trials || defaults.trials;
+    let do_analyze = do_analyze || parsed_profile != openentropy_core::AnalysisProfile::Standard;
+    let do_entropy = do_entropy || config.entropy;
+    let do_trials = do_trials || config.trials.is_some();
 
     if let Some(path) = session_path {
         // Single session mode
@@ -54,7 +54,7 @@ pub fn run(
         }
     } else {
         // List mode
-        if prof != super::AnalysisProfile::Standard {
+        if parsed_profile != openentropy_core::AnalysisProfile::Standard {
             eprintln!("Warning: --profile {profile} applies only when a SESSION path is provided.");
         }
         list_sessions(dir);

@@ -257,114 +257,6 @@ pub fn format_duration_ms(ms: u64) -> String {
     }
 }
 
-/// Analysis profile presets. Individual flags always override.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AnalysisProfile {
-    Quick,
-    Standard,
-    Deep,
-    Security,
-}
-
-pub struct AnalyzeDefaults {
-    pub samples: usize,
-    pub conditioning: &'static str,
-    pub entropy: bool,
-    pub report: bool,
-    pub cross_correlation: bool,
-    pub chaos: bool,
-}
-
-pub struct SessionsDefaults {
-    pub entropy: bool,
-    pub trials: bool,
-    pub implies_analyze: bool,
-}
-
-pub struct CompareDefaults {
-    pub entropy: bool,
-}
-
-impl AnalysisProfile {
-    pub fn parse(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "quick" => Self::Quick,
-            "deep" => Self::Deep,
-            "security" => Self::Security,
-            _ => Self::Standard,
-        }
-    }
-
-    pub fn analyze_defaults(self) -> AnalyzeDefaults {
-        match self {
-            Self::Quick => AnalyzeDefaults {
-                samples: 10_000,
-                conditioning: "raw",
-                entropy: false,
-                report: false,
-                cross_correlation: false,
-                chaos: false,
-            },
-            Self::Standard => AnalyzeDefaults {
-                samples: 50_000,
-                conditioning: "raw",
-                entropy: false,
-                report: false,
-                cross_correlation: false,
-                chaos: false,
-            },
-            Self::Deep => AnalyzeDefaults {
-                samples: 100_000,
-                conditioning: "raw",
-                entropy: true,
-                report: false,
-                cross_correlation: true,
-                chaos: true,
-            },
-            Self::Security => AnalyzeDefaults {
-                samples: 50_000,
-                conditioning: "sha256",
-                entropy: true,
-                report: true,
-                cross_correlation: false,
-                chaos: false,
-            },
-        }
-    }
-
-    pub fn sessions_defaults(self) -> SessionsDefaults {
-        match self {
-            Self::Quick => SessionsDefaults {
-                entropy: false,
-                trials: false,
-                implies_analyze: true,
-            },
-            Self::Standard => SessionsDefaults {
-                entropy: false,
-                trials: false,
-                implies_analyze: false,
-            },
-            Self::Deep => SessionsDefaults {
-                entropy: true,
-                trials: true,
-                implies_analyze: true,
-            },
-            Self::Security => SessionsDefaults {
-                entropy: true,
-                trials: false,
-                implies_analyze: true,
-            },
-        }
-    }
-
-    pub fn compare_defaults(self) -> CompareDefaults {
-        match self {
-            Self::Quick | Self::Standard => CompareDefaults { entropy: false },
-            Self::Deep | Self::Security => CompareDefaults { entropy: true },
-        }
-    }
-}
-
 /// Write a serializable value as pretty JSON to a file.
 pub fn write_json<T: serde::Serialize>(value: &T, path: &str, label: &str) {
     match serde_json::to_string_pretty(value) {
@@ -425,27 +317,28 @@ mod tests {
     }
 
     #[test]
-    fn test_analyze_profile_standard_defaults() {
-        let d = AnalysisProfile::Standard.analyze_defaults();
-        assert_eq!(d.samples, 50_000);
-        assert_eq!(d.conditioning, "raw");
-        assert!(!d.entropy);
-        assert!(!d.report);
-        assert!(!d.cross_correlation);
+    fn test_analyze_profile_standard_config() {
+        let config = openentropy_core::AnalysisProfile::Standard.to_config();
+        assert!(config.forensic);
+        assert!(!config.entropy);
+        assert!(!config.cross_correlation);
     }
 
     #[test]
-    fn test_sessions_profile_deep_defaults() {
-        let d = AnalysisProfile::Deep.sessions_defaults();
-        assert!(d.implies_analyze);
-        assert!(d.entropy);
-        assert!(d.trials);
+    fn test_sessions_profile_deep_config() {
+        let config = openentropy_core::AnalysisProfile::Deep.to_config();
+        assert!(config.forensic);
+        assert!(config.entropy);
+        assert!(config.chaos);
+        assert!(config.trials.is_some());
+        assert!(config.cross_correlation);
     }
 
     #[test]
-    fn test_compare_profile_security_defaults() {
-        let d = AnalysisProfile::Security.compare_defaults();
-        assert!(d.entropy);
+    fn test_compare_profile_security_config() {
+        let config = openentropy_core::AnalysisProfile::Security.to_config();
+        assert!(config.entropy);
+        assert!(!config.chaos);
     }
 
     // -----------------------------------------------------------------------
