@@ -47,12 +47,12 @@ openentropy analyze --profile deep
 
 Profiles are convenience presets that configure multiple flags at once. Choose the profile that matches your use case:
 
-| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials |
-|---------|----------|---------|-------------|---------|-------------|------------|--------|
-| `quick` | Any | 10,000 | raw | — | — | — | — |
-| `standard` | Any (default) | 50,000 | raw | — | — | — | — |
-| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ |
-| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — |
+| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials | Chaos |
+|---------|----------|---------|-------------|---------|-------------|------------|--------|-------|
+| `quick` | Any | 10,000 | raw | — | — | — | — | — |
+| `standard` | Any (default) | 50,000 | raw | — | — | — | — | — |
+| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ | ✓ |
+| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — | — |
 
 **Security engineers** use the `security` profile to validate entropy quality and seed CSPRNGs:
 ```bash

@@ -83,6 +83,18 @@ openentropy.runs_analysis
 openentropy.cross_correlation_matrix
 openentropy.pearson_correlation
 
+# Chaos
+openentropy.chaos_analysis
+openentropy.hurst_exponent
+openentropy.lyapunov_exponent
+openentropy.correlation_dimension
+openentropy.bientropy
+openentropy.epiplexity
+
+# Dispatcher
+openentropy.analyze
+openentropy.analysis_config
+
 # Comparison
 openentropy.compare
 openentropy.aggregate_delta
@@ -280,6 +292,83 @@ print(matrix["pairs"], matrix["flagged_count"])
 r = pearson_correlation(os.urandom(1000), os.urandom(1000))
 print(r)  # float in [-1, 1]
 ```
+
+## Chaos Theory Analysis
+
+Chaos theory metrics distinguish genuine quantum randomness from deterministic or structured behavior.
+
+```python
+from openentropy import (
+    chaos_analysis, hurst_exponent, lyapunov_exponent,
+    correlation_dimension, bientropy, epiplexity,
+)
+
+data = os.urandom(5000)
+
+# Full chaos analysis — all metrics in one call
+result = chaos_analysis(data)
+print(result["hurst"]["hurst_exponent"])                # H ≈ 0.5 = random walk
+print(result["lyapunov"]["lyapunov_exponent"])           # λ ≈ 0 = no chaos
+print(result["correlation_dimension"]["dimension"])      # high D₂ = random
+print(result["bientropy"]["bien"])                       # high = maximal entropy
+print(result["epiplexity"]["compression_ratio"])         # ≈ 1.0 = incompressible
+
+# Individual metrics
+hurst = hurst_exponent(data)
+lyapunov = lyapunov_exponent(data)
+corrdim = correlation_dimension(data)
+bien = bientropy(data)
+epi = epiplexity(data)
+```
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `chaos_analysis(data)` | `dict` | All chaos metrics in one call |
+| `hurst_exponent(data)` | `dict` | Hurst exponent (H≈0.5 = random walk) |
+| `lyapunov_exponent(data)` | `dict` | Lyapunov exponent (λ≈0 = no chaos) |
+| `correlation_dimension(data)` | `dict` | Correlation dimension (high D₂ = random) |
+| `bientropy(data)` | `dict` | BiEntropy and TBiEntropy metrics |
+| `epiplexity(data)` | `dict` | Compression-based complexity |
+
+## Unified Analysis Dispatcher
+
+The `analyze()` function runs multiple analysis modules in one call with configurable profiles.
+
+```python
+from openentropy import analyze, analysis_config
+
+data = os.urandom(5000)
+
+# Run with a profile preset
+report = analyze([("my_source", data)], profile="deep")
+for src in report["sources"]:
+    print(f"{src['label']}: {src['verdicts']}")
+
+# Get profile defaults
+config = analysis_config("deep")
+# {'forensic': True, 'entropy': True, 'chaos': True,
+#  'trials': {'bits_per_trial': 200}, 'cross_correlation': True}
+
+# Custom config dict
+report = analyze(
+    [("my_source", data)],
+    config={"forensic": True, "chaos": True, "entropy": True}
+)
+```
+
+**Profiles:**
+
+| Profile | forensic | entropy | chaos | trials | cross_correlation |
+|---------|:--------:|:-------:|:-----:|:------:|:-----------------:|
+| `quick` | ✓ | | | | |
+| `standard` | ✓ | | | | |
+| `deep` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `security` | ✓ | ✓ | | | |
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `analyze(sources, config=None, profile=None)` | `dict` | Run selected analyses on source data |
+| `analysis_config(profile=None)` | `dict` | Get default config for a profile |
 
 ## Comparison
 

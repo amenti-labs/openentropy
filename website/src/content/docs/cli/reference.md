@@ -12,12 +12,12 @@ Value flags (for example `--samples`, `--conditioning`) override profile default
 Boolean flags are additive (OR semantics): profile-enabled booleans stay enabled.
 Profiles are available on `analyze`, `sessions`, and `compare`.
 
-| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials |
-|---------|----------|---------|-------------|---------|-------------|------------|--------|
-| `quick` | Any | 10,000 | raw | — | — | — | — |
-| `standard` | Any (default) | 50,000 | raw | — | — | — | — |
-| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ |
-| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — |
+| Profile | Audience | Samples | Conditioning | Entropy | NIST Report | Cross-Corr | Trials | Chaos |
+|---------|----------|---------|-------------|---------|-------------|------------|--------|-------|
+| `quick` | Any | 10,000 | raw | — | — | — | — | — |
+| `standard` | Any (default) | 50,000 | raw | — | — | — | — | — |
+| `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ | ✓ |
+| `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — | — |
 
 The table reflects `analyze` defaults. `sessions` uses the profile's analysis
 toggles (`entropy`, `trials`, and whether analysis is implied). `compare` uses
@@ -154,6 +154,8 @@ openentropy analyze --entropy                # include min-entropy breakdown
 openentropy analyze --cross-correlation --output analysis.json
 openentropy analyze --telemetry --output analysis.json
 openentropy analyze --qcicada-mode sha256 --output analysis.json
+openentropy analyze --chaos                          # chaos theory analysis (Hurst, Lyapunov, D₂, BiEntropy, epiplexity)
+openentropy analyze --profile deep --chaos           # deep profile already enables chaos
 ```
 
 ## `analyze --report` — NIST test battery

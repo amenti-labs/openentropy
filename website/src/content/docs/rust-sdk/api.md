@@ -31,6 +31,14 @@ pub use trials::{
     CalibrationResult, StoufferResult, TrialAnalysis, TrialConfig, calibration_check,
     stouffer_combine, trial_analysis,
 };
+pub use chaos::{
+    BiEntropyResult, ChaosAnalysis, CorrelationDimResult, EpiplexityResult, HurstResult,
+    LyapunovResult, bientropy, chaos_analysis, correlation_dimension, epiplexity,
+    hurst_exponent, lyapunov_exponent,
+};
+pub use dispatcher::{
+    AnalysisConfig, AnalysisProfile, AnalysisReport, SourceReport, VerdictSummary, analyze,
+};
 pub use session::{
     MachineInfo, SessionConfig, SessionMeta, SessionSourceAnalysis, SessionWriter,
     detect_machine_info,
@@ -285,4 +293,106 @@ for (path, meta) in &sessions {
         println!("  {}: H∞={:.4}", source, analysis.min_entropy);
     }
 }
+```
+
+## Chaos Theory Analysis (`openentropy_core::chaos`)
+
+Distinguish true randomness from deterministic chaos using five independent metrics.
+
+### `chaos_analysis(data: &[u8]) -> ChaosAnalysis`
+
+Run the full chaos analysis battery on a byte stream. Returns a `ChaosAnalysis` containing Hurst exponent, Lyapunov exponent, correlation dimension, BiEntropy, and epiplexity.
+
+```rust
+use openentropy_core::chaos::chaos_analysis;
+
+let result = chaos_analysis(&data);
+println!("Hurst H={:.4} (valid={})", result.hurst.hurst_exponent, result.hurst.is_valid);
+println!("Lyapunov λ={:.4}", result.lyapunov.lyapunov_exponent);
+println!("Correlation dim D₂={:.4}", result.correlation_dimension.dimension);
+println!("BiEntropy={:.4}, TBiEn={:.4}", result.bientropy.bien, result.bientropy.tbien);
+println!("Compression ratio={:.4}", result.epiplexity.compression_ratio);
+```
+
+### Individual functions
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `hurst_exponent(data)` | `HurstResult` | Rescaled range (R/S) analysis — H≈0.5 = random |
+| `lyapunov_exponent(data)` | `LyapunovResult` | Largest Lyapunov exponent — λ>0 = chaotic |
+| `correlation_dimension(data)` | `CorrelationDimensionResult` | Grassberger–Procaccia D₂ estimate |
+| `bientropy(data)` | `BiEntropyResult` | Binary entropy derivative (BiEn, TBiEn) |
+| `epiplexity(data)` | `EpiplexityResult` | Compression-ratio complexity metric |
+
+### Interpreting results
+
+For **true random** data, expect: Hurst H ≈ 0.5, Lyapunov λ > 0 (sensitive dependence), high correlation dimension, BiEntropy near maximum, compression ratio near 1.0. See `openentropy_core::verdict` for automated pass/fail classification of each metric.
+
+## Unified Analysis Dispatcher (`openentropy_core::dispatcher`)
+
+Run multiple analysis modules through a single entry point with configurable profiles.
+
+### `analyze(sources: &[(&str, &[u8])], config: &AnalysisConfig) -> AnalysisReport`
+
+Dispatch analysis across one or more labeled byte streams. The config controls which modules run.
+
+```rust
+use openentropy_core::dispatcher::{analyze, AnalysisConfig, AnalysisProfile};
+
+// Use a preset profile
+let config = AnalysisProfile::Deep.to_config();
+let report = analyze(&[("clock_jitter", &data)], &config);
+
+for source in &report.sources {
+    println!("{}: forensic={} chaos={} trials={}",
+        source.label,
+        source.forensic.is_some(),
+        source.chaos.is_some(),
+        source.trials.is_some(),
+    );
+    println!(
+        "  Verdicts: bias={:?} hurst={:?}",
+        source.verdicts.bias,
+        source.verdicts.hurst
+    );
+}
+```
+
+### `AnalysisConfig` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forensic` | `bool` | Run `full_analysis` (autocorrelation, spectral, bias, distribution, stationarity, runs) |
+| `entropy` | `bool` | Run `min_entropy_estimate` (detailed entropy breakdown) |
+| `chaos` | `bool` | Run `chaos_analysis` (Hurst, Lyapunov, correlation dimension, BiEntropy, epiplexity) |
+| `trials` | `Option<TrialConfig>` | Run `trial_analysis` with given config; `None` = skip |
+| `cross_correlation` | `bool` | Run `cross_correlation_matrix` when 2+ sources present |
+
+### `AnalysisProfile` presets
+
+| Profile | Forensic | Entropy | Chaos | Trials | Cross-Correlation |
+|---------|----------|---------|-------|--------|-------------------|
+| `Quick` | ✓ | — | — | — | — |
+| `Standard` | ✓ | — | — | — | — |
+| `Deep` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Security` | ✓ | ✓ | — | — | — |
+
+### Custom config
+
+```rust
+use openentropy_core::dispatcher::{analyze, AnalysisConfig};
+use openentropy_core::trials::TrialConfig;
+
+let config = AnalysisConfig {
+    forensic: true,
+    entropy: false,
+    chaos: true,
+    trials: Some(TrialConfig::default()),
+    cross_correlation: false,
+};
+
+let report = analyze(&[
+    ("source_a", &data_a),
+    ("source_b", &data_b),
+], &config);
 ```
