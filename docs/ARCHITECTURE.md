@@ -12,74 +12,38 @@ openentropy is a multi-source entropy harvesting system written in Rust. It trea
 
 ## Workspace Layout
 
-```
-openentropy/
-├── Cargo.toml                      # Workspace root
-├── crates/
-│   ├── openentropy-core/              # Core library
-│   │   └── src/
-│   │       ├── lib.rs              # Public API re-exports
-│   │       ├── source.rs           # EntropySource trait, SourceInfo, SourceCategory
-│   │       ├── pool.rs             # EntropyPool — thread-safe multi-source collector
-│   │       ├── conditioning.rs     # SHA-256, Von Neumann, XOR-fold, quality metrics
-│   │       ├── platform.rs         # Source auto-discovery, platform detection
-│   │       ├── analysis.rs         # Statistical analysis (autocorrelation, spectral, bias, runs)
-│   │       ├── comparison.rs       # Forensic session comparison (KS, chi-squared, effect sizes)
-│   │       ├── trials.rs           # PEAR-style trial analysis (Z-scores, Stouffer, calibration)
-│   │       └── sources/            # 63 source implementations, organized by category
-│   │           ├── mod.rs          # all_sources() composed from category modules
-│   │           ├── helpers.rs      # Shared: mach_time, extract_lsbs, xor_fold, etc.
-│   │           ├── timing/         # Clock jitter, DRAM row buffer, page fault (7 sources)
-│   │           ├── scheduling/     # Sleep jitter, thread lifecycle, timers (6 sources)
-│   │           ├── system/         # Sysctl, vmstat, process, IORegistry (6 sources)
-│   │           ├── network/        # DNS timing, TCP connect, WiFi RSSI (3 sources)
-│   │           ├── io/             # Disk I/O, NVMe sensors, fsync (6 sources)
-│   │           ├── sensor/         # Audio noise, camera noise, Bluetooth (4 sources)
-│   │           ├── microarch/      # Branch prediction, TLB, AMX timing (16 sources)
-│   │           ├── ipc/            # Mach ports, pipes, kqueue, keychain (4 sources)
-│   │           ├── thermal/        # Audio/display/PCIe PLL crossings (4 sources)
-│   │           ├── gpu/            # Metal divergence, IOSurface, NL inference (3 sources)
-│   │           ├── signal/         # Compression, hash, Spotlight timing (3 sources)
-│   │           └── quantum/        # QCicada USB QRNG (1 source)
-│   │
-│   ├── openentropy-cli/               # CLI binary
-│   │   └── src/
-│   │       ├── main.rs             # clap argument parsing, 9 subcommands
-│   │       ├── commands/           # One module per subcommand
-│   │       │   ├── mod.rs          # make_pool() helper with source filtering
-│   │       │   ├── scan.rs         # Discover available sources
-│   │       │   ├── bench.rs        # Benchmark all sources with ranking
-│   │       │   ├── analyze.rs      # Statistical source analysis (includes --report)
-│   │       │   ├── stream.rs       # Continuous entropy to stdout (includes --fifo)
-│   │       │   ├── server.rs       # Launch HTTP server
-│   │       │   ├── monitor.rs      # Launch TUI dashboard
-│   │       │   ├── record.rs       # Record session data to disk (includes --calibrate)
-│   │       │   ├── sessions.rs     # Inspect/analyze recorded sessions (includes --trials)
-│   │       │   ├── compare.rs      # Differential session comparison with trial analysis
-│   │       │   └── telemetry.rs    # Shared telemetry helpers
-│   │       └── tui/                # Interactive dashboard
-│   │           ├── mod.rs
-│   │           ├── app.rs          # Application state, event loop
-│   │           └── ui.rs           # ratatui widget rendering
-│   │
-│   ├── openentropy-server/            # HTTP entropy server
-│   │   └── src/
-│   │       └── lib.rs              # axum router, ANU QRNG API compatible
-│   │
-│   ├── openentropy-tests/             # Statistical test battery
-│   │   └── src/
-│   │       └── lib.rs              # 31 NIST SP 800-22 inspired tests
-│   │
-│   └── openentropy-python/            # Python bindings
-│       └── src/
-│           ├── lib.rs              # PyO3 module: EntropyPool, run_all_tests, etc.
-│           ├── analysis_bindings.rs # 9 analysis function bindings (pythonize)
-│           ├── comparison_bindings.rs # 9 comparison function bindings (pythonize)
-│           └── trials_bindings.rs  # 3 trials function bindings (pythonize + depythonize)
-│
-├── openentropy/               # Python package wrapper for compiled extension
-├── pyproject.toml                  # Python packaging (pip install)
-└── examples/                       # Rust and Python usage examples
+```mermaid
+flowchart TD
+    Root[openentropy workspace]
+    Cargo[Cargo.toml]
+    PyProject[pyproject.toml]
+    Examples[examples/ Rust + Python]
+    PyPkg[openentropy/ Python package wrapper]
+
+    Root --> Cargo
+    Root --> Crates[crates/]
+    Root --> PyProject
+    Root --> PyPkg
+    Root --> Examples
+
+    Crates --> Core[openentropy-core]
+    Crates --> CLI[openentropy-cli]
+    Crates --> Server[openentropy-server]
+    Crates --> Tests[openentropy-tests]
+    Crates --> Python[openentropy-python]
+
+    Core --> CoreAPI[lib.rs public API]
+    Core --> CorePool[pool.rs + conditioning.rs]
+    Core --> CoreAnalysis[analysis.rs + comparison.rs + trials.rs + dispatcher.rs]
+    Core --> CoreSources[sources/ 63 implementations across 13 categories]
+
+    CLI --> CLIMain[main.rs clap entrypoint]
+    CLI --> CLICommands[commands/ scan bench analyze stream monitor record sessions compare server]
+    CLI --> CLITui[tui/ app + ui]
+
+    Server --> ServerLib[lib.rs axum router]
+    Tests --> TestsLib[lib.rs NIST-inspired statistical battery]
+    Python --> PyBindings[lib.rs + *_bindings.rs via PyO3]
 ```
 
 ## Core Crates
@@ -145,55 +109,22 @@ PyO3 bindings that expose the Rust library to Python. Compiles as a `cdylib` tha
 
 ## Data Flow
 
-```
-                         ┌─────────────────────────────────────────────┐
-                         │          63 ENTROPY SOURCES                 │
-                         │                                             │
-                         │  Timing      System      Network   Hardware │
-                         │  Silicon     Frontier     Novel             │
-                         └──────────────────┬──────────────────────────┘
-                                            │
-                           each: collect(n_samples) -> Vec<u8>
-                                            │
-                              ┌──────────────────────┐
-                              │     ENTROPY POOL     │
-                              │                      │
-                              │  Mutex<Vec<u8>>       │
-                              │  buffer              │
-                              │                      │
-                              │  Health monitoring:  │
-                              │  - per-source H rate │
-                              │  - failure tracking  │
-                              │  - timing stats      │
-                              │  - graceful degrade  │
-                              └──────────┬───────────┘
-                                         │
-                                         ▼
-                         ┌───────────────────────────────┐
-                         │    SHA-256 FINAL CONDITIONING  │
-                         │                                │
-                         │                                │
-                         │  Inputs mixed per 32-byte      │
-                         │  output block:                 │
-                         │    1. internal state (32 bytes) │
-                         │    2. pool buffer (up to 256B)  │
-                         │    3. monotonic counter         │
-                         │    4. system timestamp (nanos)  │
-                         │    5. 8 bytes from /dev/urandom │
-                         │                                │
-                         │  State is chained: each output │
-                         │  updates the internal state    │
-                         └───────────┬─────────────────── ┘
-                                     │
-                 ┌───────────────────┼───────────────────┐
-                 │                   │                   │
-                 ▼                   ▼                   ▼
-         get_random_bytes()     stream/device        HTTP server
-            (Rust core)         (stdout/FIFO)        (axum)
-                 │                                       │
-                 ▼                                       ▼
-          Python bindings                         ANU QRNG API
-          (PyO3 extension)                         /api/v1/random
+```mermaid
+flowchart TD
+    Sources[63 entropy sources across timing system network IO IPC microarch GPU sensor thermal quantum signal]
+    Collect[each source collect(n_samples) -> Vec<u8>]
+    Pool[EntropyPool mutex buffer with health monitoring]
+    Conditioning[SHA-256 final conditioning per 32-byte block]
+    Inputs[Mixes internal_state pool_chunk counter timestamp os_random]
+
+    Sources --> Collect --> Pool --> Conditioning
+    Inputs --> Conditioning
+
+    Conditioning --> RustOut[get_random_bytes() in Rust]
+    Conditioning --> StreamOut[CLI stream and FIFO output]
+    Conditioning --> HttpOut[HTTP server endpoints]
+    RustOut --> PyOut[Python bindings via PyO3]
+    HttpOut --> AnuCompat[ANU QRNG-compatible /api/v1/random]
 ```
 
 ## Key Traits and Types

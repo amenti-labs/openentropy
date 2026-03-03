@@ -6,31 +6,18 @@ How raw hardware entropy becomes cryptographically uniform random bytes.
 
 ## Overview
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     Entropy Sources (63)                      │
-│  clock_jitter, dns_timing, page_fault_timing, ...            │
-│  Each returns raw bytes — NO internal conditioning           │
-└──────────────────┬───────────────────────────────────────────┘
-                   │ raw bytes
-                   ▼
-┌──────────────────────────────────────────────────────────────┐
-│                    EntropyPool (pool.rs)                      │
-│  XOR-combines raw bytes from all available sources           │
-│  get_raw_bytes()  → returns XOR-combined raw output          │
-│  get_bytes()      → passes through conditioning layer        │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-          ┌────────┴────────┐
-          │                 │
-          ▼                 ▼
-   ┌─────────────┐  ┌──────────────┐
-   │  Raw Mode   │  │ Conditioned  │
-   │  (bypass)   │  │ (default)    │
-   │             │  │              │
-   │ XOR-combined│  │ Von Neumann  │
-   │ bytes as-is │  │ → SHA-256    │
-   └─────────────┘  └──────────────┘
+```mermaid
+flowchart TD
+    Sources[Entropy Sources 63<br/>clock_jitter dns_timing page_fault_timing ...<br/>No per-source conditioning]
+    Pool[EntropyPool pool.rs<br/>XOR-combines source bytes<br/>get_raw_bytes and get_bytes]
+    Raw[Raw mode bypass<br/>XOR-combined bytes as-is]
+    Vn[Von Neumann debiasing]
+    Sha[SHA-256 conditioning default]
+
+    Sources -->|raw bytes| Pool
+    Pool -->|conditioning raw| Raw
+    Pool -->|conditioning vonneumann| Vn --> Sha
+    Pool -->|conditioning sha256| Sha
 ```
 
 ## The Two Modes

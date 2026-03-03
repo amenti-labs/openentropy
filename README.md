@@ -252,14 +252,22 @@ Cargo workspace with 6 crates:
 | `openentropy-python` | Python bindings via PyO3/maturin |
 | `openentropy-wasm` | WebAssembly/browser entropy crate |
 
-```
-Sources (63) → raw samples → Entropy Pool (XOR combine) → Conditioning (optional) → Output
-                                                                 │                       ├── Rust API
-                                                           ┌─────┴─────┐                ├── CLI / TUI
-                                                           │ sha256    │ (default)       ├── HTTP Server
-                                                           │ vonneumann│                 ├── Named Pipe
-                                                           │ raw       │ (passthrough)   └── Python SDK
-                                                           └───────────┘
+```mermaid
+flowchart TD
+    Sources[Sources 63] --> Raw[raw samples]
+    Raw --> Pool[Entropy Pool XOR combine]
+    Pool --> Modes{Conditioning mode}
+    Modes -->|default| Sha[sha256]
+    Modes --> Vn[vonneumann]
+    Modes -->|passthrough| RawMode[raw]
+    Sha --> Output[Output surfaces]
+    Vn --> Output
+    RawMode --> Output
+    Output --> Rust[Rust API]
+    Output --> CLI[CLI and TUI]
+    Output --> Http[HTTP Server]
+    Output --> Pipe[Named Pipe]
+    Output --> Py[Python SDK]
 ```
 
 ---

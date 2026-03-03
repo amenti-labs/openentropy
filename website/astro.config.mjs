@@ -36,9 +36,16 @@ export default defineConfig({
       title: 'openentropy',
       plugins,
       logo: {
-        src: './src/assets/logo.png',
+        src: './src/assets/logo_no_text.png',
         alt: 'openentropy logo',
       },
+      favicon: '/favicon.png',
+      head: [
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: 'https://amenti-labs.github.io/openentropy/og-image.png' },
+        },
+      ],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/amenti-labs/openentropy' },
       ],
