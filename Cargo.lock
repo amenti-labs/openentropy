@@ -1147,6 +1147,7 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "pythonize",
+ "serde_json",
 ]
 
 [[package]]
