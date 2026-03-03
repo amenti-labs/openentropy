@@ -1,11 +1,10 @@
 //! `openentropy sessions` — list and analyze recorded sessions.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use openentropy_core::analysis;
 use openentropy_core::conditioning::min_entropy_estimate;
-use openentropy_core::session::SessionMeta;
+use openentropy_core::session::{self, SessionMeta};
 use openentropy_core::trials::{TrialAnalysis, TrialConfig, trial_analysis};
 
 /// Run the sessions command.
@@ -64,40 +63,20 @@ pub fn run(
 
 /// List all sessions in a directory.
 fn list_sessions(dir: &str) {
-    let sessions_dir = PathBuf::from(dir);
+    let sessions_dir = Path::new(dir);
     if !sessions_dir.exists() {
         println!("No sessions directory found at {dir}");
         println!("Record a session first: openentropy record --sources <name>");
         return;
     }
 
-    let mut sessions: Vec<(PathBuf, SessionMeta)> = Vec::new();
-
-    let entries = match std::fs::read_dir(&sessions_dir) {
-        Ok(e) => e,
+    let sessions = match session::list_sessions(sessions_dir) {
+        Ok(s) => s,
         Err(e) => {
             eprintln!("Failed to read {dir}: {e}");
             return;
         }
     };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let json_path = path.join("session.json");
-        if !json_path.exists() {
-            continue;
-        }
-        match std::fs::read_to_string(&json_path) {
-            Ok(contents) => match serde_json::from_str::<SessionMeta>(&contents) {
-                Ok(meta) => sessions.push((path, meta)),
-                Err(_) => continue,
-            },
-            Err(_) => continue,
-        }
-    }
 
     if sessions.is_empty() {
         println!("No sessions found in {dir}/");
@@ -105,8 +84,7 @@ fn list_sessions(dir: &str) {
         return;
     }
 
-    // Sort by start time (newest first)
-    sessions.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+    // Already sorted by started_at descending from core function
 
     println!(
         "{:<50} {:<25} {:>8} {:>10}",
@@ -226,57 +204,18 @@ fn analyze_session(
     let telemetry = super::telemetry::TelemetryCapture::start(include_telemetry);
     let meta = read_session_meta(session_dir);
 
-    // Read raw_index.csv to group bytes by source
-    let index_path = session_dir.join("raw_index.csv");
-    let raw_path = session_dir.join("raw.bin");
-
-    if !index_path.exists() || !raw_path.exists() {
-        eprintln!("Missing raw.bin or raw_index.csv in session directory.");
-        std::process::exit(1);
-    }
-
-    let raw_data = match std::fs::read(&raw_path) {
-        Ok(d) => d,
+    // Load raw data grouped by source using core utility
+    let source_bytes = match session::load_session_raw_data(session_dir) {
+        Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read raw.bin: {e}");
+            if e.kind() == std::io::ErrorKind::NotFound {
+                eprintln!("Missing raw.bin or raw_index.csv in session directory.");
+            } else {
+                eprintln!("Failed to read session data: {e}");
+            }
             std::process::exit(1);
         }
     };
-
-    let index_csv = match std::fs::read_to_string(&index_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Failed to read raw_index.csv: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    // Parse index and group raw bytes by source
-    let mut source_bytes: HashMap<String, Vec<u8>> = HashMap::new();
-
-    for line in index_csv.lines().skip(1) {
-        // Format: offset,length,timestamp_ns,source
-        let parts: Vec<&str> = line.splitn(4, ',').collect();
-        if parts.len() < 4 {
-            continue;
-        }
-        let offset: usize = match parts[0].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let length: usize = match parts[1].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let source = parts[3].to_string();
-
-        if offset + length <= raw_data.len() {
-            source_bytes
-                .entry(source)
-                .or_default()
-                .extend_from_slice(&raw_data[offset..offset + length]);
-        }
-    }
 
     if source_bytes.is_empty() {
         println!("No data found in session.");

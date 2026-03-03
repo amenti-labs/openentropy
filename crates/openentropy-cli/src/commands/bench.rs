@@ -1,106 +1,32 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use openentropy_core::TelemetryWindowReport;
+use openentropy_core::benchmark::{self, BenchConfig, RankBy};
 use openentropy_core::conditioning::{
     quick_autocorrelation_lag1, quick_min_entropy, quick_quality, quick_shannon,
 };
 use serde::Serialize;
 
-#[derive(Clone, Copy, Debug)]
-enum BenchProfile {
-    Quick,
-    Standard,
-    Deep,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum RankBy {
-    Balanced,
-    MinEntropy,
-    Throughput,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct BenchSettings {
-    samples_per_round: usize,
-    rounds: usize,
-    warmup_rounds: usize,
-    timeout_sec: f64,
-}
-
-#[derive(Default)]
-struct SourceAccumulator {
-    success_rounds: usize,
-    failures: u64,
-    shannon_sum: f64,
-    min_entropy_sum: f64,
-    throughput_sum: f64,
-    autocorrelation_sum: f64,
-    min_entropy_values: Vec<f64>,
-    collection_times_ms: Vec<f64>,
-}
-
-#[derive(Clone)]
-struct BenchRow {
-    name: String,
-    composite: bool,
-    success_rounds: usize,
-    failures: u64,
-    avg_shannon: f64,
-    avg_min_entropy: f64,
-    avg_throughput_bps: f64,
-    avg_autocorrelation: f64,
-    p99_latency_ms: f64,
-    stability: f64,
-    score: f64,
-}
-
+/// CLI-specific JSON report wrapping the core benchmark results with CLI metadata.
 #[derive(Serialize)]
-struct BenchReport {
+struct CliBenchReport {
     generated_unix: u64,
     profile: String,
     conditioning: String,
     rank_by: String,
-    settings: BenchSettingsJson,
-    sources: Vec<BenchSourceReport>,
-    pool: Option<PoolQualityReport>,
+    settings: CliBenchSettings,
+    sources: Vec<benchmark::BenchSourceReport>,
+    pool: Option<benchmark::PoolQualityReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     telemetry_v1: Option<TelemetryWindowReport>,
 }
 
 #[derive(Serialize)]
-struct BenchSettingsJson {
+struct CliBenchSettings {
     samples_per_round: usize,
     rounds: usize,
     warmup_rounds: usize,
     timeout_sec: f64,
-}
-
-#[derive(Serialize)]
-struct BenchSourceReport {
-    name: String,
-    composite: bool,
-    healthy: bool,
-    success_rounds: usize,
-    failures: u64,
-    avg_shannon: f64,
-    avg_min_entropy: f64,
-    avg_throughput_bps: f64,
-    avg_autocorrelation: f64,
-    p99_latency_ms: f64,
-    stability: f64,
-    grade: char,
-    score: f64,
-}
-
-#[derive(Serialize, Clone)]
-struct PoolQualityReport {
-    bytes: usize,
-    shannon_entropy: f64,
-    min_entropy: f64,
-    healthy_sources: usize,
-    total_sources: usize,
 }
 
 pub struct BenchArgs {
@@ -131,28 +57,21 @@ pub fn run(args: BenchArgs) {
         return;
     }
 
-    let profile = BenchProfile::parse(&args.profile);
-    let rank_by = RankBy::parse(&args.rank_by);
+    let profile_str = parse_profile_name(&args.profile);
+    let rank_by = parse_rank_by(&args.rank_by);
     let telemetry = super::telemetry::TelemetryCapture::start(args.include_telemetry);
     let mode = super::parse_conditioning(&args.conditioning);
-    let mut settings = profile.defaults();
-    if let Some(v) = args.samples_per_round {
-        settings.samples_per_round = v.max(1);
-    }
-    if let Some(v) = args.rounds {
-        settings.rounds = v.max(1);
-    }
-    if let Some(v) = args.warmup_rounds {
-        settings.warmup_rounds = v;
-    }
-    if let Some(v) = args.timeout_sec {
-        settings.timeout_sec = v.max(0.1);
-    }
+
+    let (def_spr, def_rounds, def_warmup, def_timeout) = profile_defaults(&args.profile);
+    let samples_per_round = args.samples_per_round.map(|v| v.max(1)).unwrap_or(def_spr);
+    let rounds = args.rounds.map(|v| v.max(1)).unwrap_or(def_rounds);
+    let warmup_rounds = args.warmup_rounds.unwrap_or(def_warmup);
+    let mut timeout_sec = args.timeout_sec.map(|v| v.max(0.1)).unwrap_or(def_timeout);
 
     // When --all is used, slow sources (GPU, network, sensor) need more time.
     // Double the per-batch timeout unless the user explicitly set --timeout.
     if args.all && args.timeout_sec.is_none() {
-        settings.timeout_sec *= 2.0;
+        timeout_sec *= 2.0;
     }
 
     // Build pool from positional args, --all, or default fast sources
@@ -175,204 +94,35 @@ pub fn run(args: BenchArgs) {
     }
     println!(
         "Profile={} rounds={} warmup={} samples/round={} timeout={:.1}s rank-by={}",
-        profile.as_str(),
-        settings.rounds,
-        settings.warmup_rounds,
-        settings.samples_per_round,
-        settings.timeout_sec,
-        rank_by.as_str()
+        profile_str,
+        rounds,
+        warmup_rounds,
+        samples_per_round,
+        timeout_sec,
+        rank_by_name(rank_by)
     );
     println!();
 
-    for i in 0..settings.warmup_rounds {
-        let _ =
-            pool_instance.collect_all_parallel_n(settings.timeout_sec, settings.samples_per_round);
-        println!("Warmup round {}/{}", i + 1, settings.warmup_rounds);
-    }
-    if settings.warmup_rounds > 0 {
-        println!();
-    }
+    let config = BenchConfig {
+        samples_per_round,
+        rounds,
+        warmup_rounds,
+        timeout_sec,
+        rank_by,
+        include_pool_quality: !args.no_pool,
+        pool_quality_bytes: 65_536,
+        conditioning: mode,
+    };
 
-    let mut prev = snapshot_counters(&pool_instance.health_report().sources);
-    let mut accum: HashMap<String, SourceAccumulator> = HashMap::new();
-
-    for round_idx in 0..settings.rounds {
-        let t0 = Instant::now();
-        let collected =
-            pool_instance.collect_all_parallel_n(settings.timeout_sec, settings.samples_per_round);
-        let wall = t0.elapsed().as_secs_f64();
-        let health = pool_instance.health_report();
-
-        for src in &health.sources {
-            let (prev_bytes, prev_failures) = prev
-                .get(&src.name)
-                .copied()
-                .unwrap_or((src.bytes, src.failures));
-            let bytes_delta = src.bytes.saturating_sub(prev_bytes);
-            let failures_delta = src.failures.saturating_sub(prev_failures);
-
-            let entry = accum.entry(src.name.clone()).or_default();
-            entry.failures += failures_delta;
-
-            if bytes_delta > 0 {
-                entry.success_rounds += 1;
-                entry.shannon_sum += src.entropy;
-                entry.min_entropy_sum += src.min_entropy;
-                entry.autocorrelation_sum += src.autocorrelation;
-                entry.min_entropy_values.push(src.min_entropy);
-                entry.collection_times_ms.push(src.time * 1000.0);
-                if src.time > 0.0 {
-                    entry.throughput_sum += bytes_delta as f64 / src.time;
-                }
-            }
-
-            prev.insert(src.name.clone(), (src.bytes, src.failures));
+    let report = match benchmark::benchmark_sources(&pool_instance, &config) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Benchmark failed: {e}");
+            std::process::exit(1);
         }
+    };
 
-        println!(
-            "Round {}/{} complete: collected {} bytes in {:.2}s",
-            round_idx + 1,
-            settings.rounds,
-            collected,
-            wall
-        );
-    }
-
-    let mut rows: Vec<BenchRow> = infos
-        .iter()
-        .map(|info| {
-            let (
-                success_rounds,
-                failures,
-                avg_shannon,
-                avg_min_entropy,
-                avg_throughput_bps,
-                avg_autocorrelation,
-                p99_latency_ms,
-                stability,
-            ) = if let Some(src_acc) = accum.get(&info.name) {
-                let success_rounds = src_acc.success_rounds;
-                if success_rounds > 0 {
-                    let n = success_rounds as f64;
-                    (
-                        success_rounds,
-                        src_acc.failures,
-                        src_acc.shannon_sum / n,
-                        src_acc.min_entropy_sum / n,
-                        src_acc.throughput_sum / n,
-                        src_acc.autocorrelation_sum / n,
-                        percentile(&src_acc.collection_times_ms, 99.0),
-                        stability_index(&src_acc.min_entropy_values),
-                    )
-                } else {
-                    (0, src_acc.failures, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-                }
-            } else {
-                (0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-            };
-
-            BenchRow {
-                name: info.name.clone(),
-                composite: info.composite,
-                success_rounds,
-                failures,
-                avg_shannon,
-                avg_min_entropy,
-                avg_throughput_bps,
-                avg_autocorrelation,
-                p99_latency_ms,
-                stability,
-                score: 0.0,
-            }
-        })
-        .collect();
-
-    let max_throughput = rows
-        .iter()
-        .map(|r| r.avg_throughput_bps)
-        .fold(0.0_f64, f64::max);
-
-    for row in &mut rows {
-        row.score = match rank_by {
-            RankBy::MinEntropy => row.avg_min_entropy,
-            RankBy::Throughput => row.avg_throughput_bps,
-            RankBy::Balanced => {
-                let min_h_term = (row.avg_min_entropy / 8.0).clamp(0.0, 1.0);
-                let throughput_term = if max_throughput > 0.0 {
-                    (row.avg_throughput_bps / max_throughput).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                0.7 * min_h_term + 0.2 * throughput_term + 0.1 * row.stability
-            }
-        };
-
-        // Graduated reliability penalty: scale with failure rate instead of binary 0.8×.
-        let missed = settings.rounds.saturating_sub(row.success_rounds) as f64;
-        let total_issues = missed + row.failures as f64;
-        let expected = settings.rounds as f64;
-        if total_issues > 0.0 && expected > 0.0 {
-            let failure_rate = (total_issues / expected).clamp(0.0, 1.0);
-            row.score *= 1.0 - 0.5 * failure_rate;
-        }
-    }
-
-    rows.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    println!("\n{}", "=".repeat(120));
-    println!(
-        "{:<26} {:>5} {:>7} {:>7} {:>10} {:>6} {:>9} {:>9} {:>10} {:>6} {:>8}",
-        "Source",
-        "Grade",
-        "H",
-        "H∞",
-        "KB/s",
-        "r₁",
-        "p99(ms)",
-        "Stability",
-        "Rounds",
-        "Fail",
-        "State"
-    );
-    println!("{}", "-".repeat(120));
-    for row in &rows {
-        let grade = openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0));
-        let state = if row.success_rounds == 0 {
-            "UNSTABLE"
-        } else if row.success_rounds < settings.rounds {
-            "SLOW"
-        } else {
-            "OK"
-        };
-        let display_name = if row.composite {
-            format!("{} [C]", row.name)
-        } else {
-            row.name.clone()
-        };
-        let rounds_str = format!("{}/{}", row.success_rounds, settings.rounds);
-        println!(
-            "{:<26} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>6.3} {:>9.1} {:>9.2} {:>10} {:>6} {:>8}",
-            display_name,
-            grade,
-            row.avg_shannon,
-            row.avg_min_entropy,
-            row.avg_throughput_bps / 1024.0,
-            row.avg_autocorrelation,
-            row.p99_latency_ms,
-            row.stability,
-            rounds_str,
-            row.failures,
-            state,
-        );
-    }
-    println!();
-    println!("Grade is based on min-entropy (H∞), not Shannon.");
-    println!("r₁ = lag-1 autocorrelation (0 = ideal, ±1 = fully correlated).");
-    println!("Stability is derived from run-to-run min-entropy consistency (1.0 = most stable).");
+    print_bench_table(&report.sources, config.rounds);
 
     // Mode comparison for sources with on-device conditioning (e.g. QCicada).
     let configurable: Vec<String> = infos
@@ -399,7 +149,7 @@ pub fn run(args: BenchArgs) {
         );
         println!("  {}", "-".repeat(55));
 
-        let mode_samples = settings.samples_per_round;
+        let mode_samples = config.samples_per_round;
         for mode_name in &["raw", "sha256", "samples"] {
             let set_ok = pool_instance
                 .with_source(src_name, |s| s.set_config("mode", mode_name).is_ok())
@@ -445,41 +195,26 @@ pub fn run(args: BenchArgs) {
         println!("  samples = raw ADC readings, no processing");
     }
 
-    let pool_report = if !args.no_pool {
-        let bytes = 65_536usize;
-        let output = pool_instance.get_bytes(bytes, mode);
-        let health = pool_instance.health_report();
-        let report = PoolQualityReport {
-            bytes: output.len(),
-            shannon_entropy: quick_shannon(&output),
-            min_entropy: quick_min_entropy(&output),
-            healthy_sources: health.healthy,
-            total_sources: health.total,
-        };
-
+    if let Some(ref pool_quality) = report.pool {
         println!("\n{}", "=".repeat(68));
         println!(
             "Pool Output Quality (conditioning: {})\n",
             args.conditioning
         );
-        println!("  Conditioned output: {} bytes", report.bytes);
+        println!("  Conditioned output: {} bytes", pool_quality.bytes);
         println!(
             "  Shannon entropy: {:.4} / 8.0 bits/byte",
-            report.shannon_entropy
+            pool_quality.shannon_entropy
         );
         println!(
             "  Min-entropy H∞:  {:.4} / 8.0 bits/byte",
-            report.min_entropy
+            pool_quality.min_entropy
         );
         println!(
             "\n  {}/{} sources healthy",
-            report.healthy_sources, report.total_sources
+            pool_quality.healthy_sources, pool_quality.total_sources
         );
-
-        Some(report)
-    } else {
-        None
-    };
+    }
 
     let telemetry_report = telemetry.finish();
     if let Some(ref window) = telemetry_report {
@@ -487,135 +222,107 @@ pub fn run(args: BenchArgs) {
     }
 
     if let Some(path) = args.output.as_deref() {
-        let report = BenchReport {
-            generated_unix: super::unix_timestamp_now(),
-            profile: profile.as_str().to_string(),
+        let cli_report = CliBenchReport {
+            generated_unix: report.generated_unix,
+            profile: profile_str.to_string(),
             conditioning: args.conditioning.to_string(),
-            rank_by: rank_by.as_str().to_string(),
-            settings: BenchSettingsJson {
-                samples_per_round: settings.samples_per_round,
-                rounds: settings.rounds,
-                warmup_rounds: settings.warmup_rounds,
-                timeout_sec: settings.timeout_sec,
+            rank_by: rank_by_name(config.rank_by).to_string(),
+            settings: CliBenchSettings {
+                samples_per_round: config.samples_per_round,
+                rounds: config.rounds,
+                warmup_rounds: config.warmup_rounds,
+                timeout_sec: config.timeout_sec,
             },
-            sources: rows
-                .iter()
-                .map(|row| BenchSourceReport {
-                    name: row.name.clone(),
-                    composite: row.composite,
-                    healthy: row.avg_min_entropy > 1.0 && row.failures == 0,
-                    success_rounds: row.success_rounds,
-                    failures: row.failures,
-                    avg_shannon: row.avg_shannon,
-                    avg_min_entropy: row.avg_min_entropy,
-                    avg_throughput_bps: row.avg_throughput_bps,
-                    avg_autocorrelation: row.avg_autocorrelation,
-                    p99_latency_ms: row.p99_latency_ms,
-                    stability: row.stability,
-                    grade: openentropy_core::grade_min_entropy(row.avg_min_entropy.max(0.0)),
-                    score: row.score,
-                })
-                .collect(),
-            pool: pool_report,
+            sources: report.sources,
+            pool: report.pool,
             telemetry_v1: telemetry_report,
         };
 
-        super::write_json(&report, path, "Benchmark report");
+        super::write_json(&cli_report, path, "Benchmark report");
     }
 }
 
-fn snapshot_counters(sources: &[openentropy_core::SourceHealth]) -> HashMap<String, (u64, u64)> {
-    sources
-        .iter()
-        .map(|s| (s.name.clone(), (s.bytes, s.failures)))
-        .collect()
+fn print_bench_table(sources: &[benchmark::BenchSourceReport], total_rounds: usize) {
+    println!("\n{}", "=".repeat(120));
+    println!(
+        "{:<26} {:>5} {:>7} {:>7} {:>10} {:>6} {:>9} {:>9} {:>10} {:>6} {:>8}",
+        "Source",
+        "Grade",
+        "H",
+        "H∞",
+        "KB/s",
+        "r₁",
+        "p99(ms)",
+        "Stability",
+        "Rounds",
+        "Fail",
+        "State"
+    );
+    println!("{}", "-".repeat(120));
+    for src in sources {
+        let state = if src.success_rounds == 0 {
+            "UNSTABLE"
+        } else if src.success_rounds < total_rounds {
+            "SLOW"
+        } else {
+            "OK"
+        };
+        let display_name = if src.composite {
+            format!("{} [C]", src.name)
+        } else {
+            src.name.clone()
+        };
+        let rounds_str = format!("{}/{}", src.success_rounds, total_rounds);
+        println!(
+            "{:<26} {:>5} {:>7.3} {:>7.3} {:>10.1} {:>6.3} {:>9.1} {:>9.2} {:>10} {:>6} {:>8}",
+            display_name,
+            src.grade,
+            src.avg_shannon,
+            src.avg_min_entropy,
+            src.avg_throughput_bps / 1024.0,
+            src.avg_autocorrelation,
+            src.p99_latency_ms,
+            src.stability,
+            rounds_str,
+            src.failures,
+            state,
+        );
+    }
+    println!();
+    println!("Grade is based on min-entropy (H∞), not Shannon.");
+    println!("r₁ = lag-1 autocorrelation (0 = ideal, ±1 = fully correlated).");
+    println!("Stability is derived from run-to-run min-entropy consistency (1.0 = most stable).");
 }
 
-/// Compute the p-th percentile of a float slice using nearest-rank.
-fn percentile(values: &[f64], p: f64) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    let mut sorted: Vec<f64> = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let rank = ((p / 100.0 * sorted.len() as f64).ceil() as usize).max(1);
-    sorted[rank.min(sorted.len()) - 1]
-}
-
-fn stability_index(values: &[f64]) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    if values.len() == 1 {
-        return 1.0;
-    }
-    let mean = values.iter().sum::<f64>() / values.len() as f64;
-    let var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
-    let stddev = var.sqrt();
-    // If mean ≈ 0 and stddev ≈ 0, all values are consistently near zero — perfectly stable.
-    if mean.abs() < f64::EPSILON {
-        return if stddev < f64::EPSILON { 1.0 } else { 0.0 };
-    }
-    let cv = (stddev / mean.abs()).min(1.0);
-    (1.0 - cv).clamp(0.0, 1.0)
-}
-
-impl BenchProfile {
-    fn parse(s: &str) -> Self {
-        match s {
-            "quick" => Self::Quick,
-            "deep" => Self::Deep,
-            _ => Self::Standard,
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Quick => "quick",
-            Self::Standard => "standard",
-            Self::Deep => "deep",
-        }
-    }
-
-    fn defaults(self) -> BenchSettings {
-        match self {
-            Self::Quick => BenchSettings {
-                samples_per_round: 2048,
-                rounds: 3,
-                warmup_rounds: 1,
-                timeout_sec: 2.0,
-            },
-            Self::Standard => BenchSettings {
-                samples_per_round: 4096,
-                rounds: 5,
-                warmup_rounds: 1,
-                timeout_sec: 3.0,
-            },
-            Self::Deep => BenchSettings {
-                samples_per_round: 16384,
-                rounds: 10,
-                warmup_rounds: 2,
-                timeout_sec: 6.0,
-            },
-        }
+fn parse_profile_name(s: &str) -> &'static str {
+    match s {
+        "quick" => "quick",
+        "deep" => "deep",
+        _ => "standard",
     }
 }
 
-impl RankBy {
-    fn parse(s: &str) -> Self {
-        match s {
-            "min_entropy" => Self::MinEntropy,
-            "throughput" => Self::Throughput,
-            _ => Self::Balanced,
-        }
+fn profile_defaults(s: &str) -> (usize, usize, usize, f64) {
+    match s {
+        "quick" => (2048, 3, 1, 2.0),
+        "deep" => (16384, 10, 2, 6.0),
+        _ => (4096, 5, 1, 3.0),
     }
+}
 
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Balanced => "balanced",
-            Self::MinEntropy => "min_entropy",
-            Self::Throughput => "throughput",
-        }
+fn parse_rank_by(s: &str) -> RankBy {
+    match s {
+        "min_entropy" => RankBy::MinEntropy,
+        "throughput" => RankBy::Throughput,
+        _ => RankBy::Balanced,
+    }
+}
+
+fn rank_by_name(r: RankBy) -> &'static str {
+    match r {
+        RankBy::Balanced => "balanced",
+        RankBy::MinEntropy => "min_entropy",
+        RankBy::Throughput => "throughput",
     }
 }
 
