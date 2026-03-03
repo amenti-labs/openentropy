@@ -39,9 +39,14 @@ from openentropy import EntropyPool, detect_available_sources
 sources = detect_available_sources()
 print(f"{len(sources)} sources available")
 
+source = sources[0]["name"]
+
 pool = EntropyPool.auto()
-data = pool.get_random_bytes(64)
-print(data.hex())
+raw = pool.get_source_raw_bytes(source, 4096)
+conditioned = pool.get_source_bytes(source, 64, conditioning="sha256")
+
+print(f"Using source: {source}")
+print(conditioned.hex())
 ```
 
 ## Backend and Version
@@ -131,7 +136,16 @@ pool = EntropyPool(seed=b"optional-seed")
 pool = EntropyPool.auto()  # auto-discover available sources
 ```
 
-Collection and output:
+Single-source sampling (recommended):
+
+```python
+source = pool.source_names()[0]
+
+data = pool.get_source_bytes(source, 32, conditioning="sha256")
+raw = pool.get_source_raw_bytes(source, 64)
+```
+
+Collection and pooled output (advanced):
 
 ```python
 pool.collect_all()                          # default collection
@@ -140,16 +154,6 @@ pool.collect_all(parallel=True, timeout=5) # parallel collection with timeout
 pool.get_random_bytes(32)                  # SHA-256 conditioned
 pool.get_raw_bytes(32)                     # raw unconditioned bytes
 pool.get_bytes(32, conditioning="raw")     # raw / vonneumann|vn / sha256
-```
-
-Single-source sampling:
-
-```python
-names = pool.source_names()
-name = names[0]
-
-data = pool.get_source_bytes(name, 32, conditioning="sha256")
-raw = pool.get_source_raw_bytes(name, 64)
 ```
 
 Health and source metadata:
@@ -222,7 +226,8 @@ print(qr["quality_score"], qr["grade"])
 from openentropy import EntropyPool, run_all_tests, calculate_quality_score
 
 pool = EntropyPool.auto()
-data = pool.get_random_bytes(10_000)
+source = pool.source_names()[0]
+data = pool.get_source_raw_bytes(source, 10_000)
 
 results = run_all_tests(data)
 score = calculate_quality_score(results)

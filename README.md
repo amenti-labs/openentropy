@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/logo_no_text.png" alt="openentropy logo" width="200">
+<img src="assets/logo_with_text.png" alt="openentropy logo" width="320">
 
 # openentropy
 
-**Harvest real entropy from hardware noise. Study it raw or condition it for crypto.**
+**Measure and operationalize hardware entropy for research and security.**
 
 [![Crates.io](https://img.shields.io/crates/v/openentropy-core.svg)](https://crates.io/crates/openentropy-core)
 [![docs.rs](https://docs.rs/openentropy-core/badge.svg)](https://docs.rs/openentropy-core)
@@ -12,9 +12,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/amenti-labs/openentropy/ci.yml?branch=master&label=CI)](https://github.com/amenti-labs/openentropy/actions)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
 
-*63 entropy sources from the physics inside your computer — clock jitter, thermal noise, DRAM timing, cache contention, GPU scheduling, IPC latency, and more. Conditioned output for cryptography. Raw output for research.*
+*Collect entropy from on-device hardware sources, analyze source quality with statistical tests, and deliver raw or conditioned output through CLI, Rust, Python, and HTTP interfaces.*
 
-**Built for Apple Silicon. No special hardware. No API keys. Just physics.**
+**One workflow for entropy research, validation, and cryptographic deployment.**
 
 **By [Amenti Labs](https://github.com/amenti-labs)**
 
@@ -56,7 +56,8 @@ sources = detect_available_sources()
 print(f"{len(sources)} entropy sources available")
 
 pool = EntropyPool.auto()
-data = pool.get_random_bytes(256)
+source = sources[0]["name"]
+data = pool.get_source_bytes(source, 256, conditioning="sha256")
 ```
 
 Build from source (native extension):
@@ -197,10 +198,16 @@ openentropy-core = "0.10"
 ```
 
 ```rust
-use openentropy_core::{EntropyPool, detect_available_sources};
+use openentropy_core::{ConditioningMode, EntropyPool, detect_available_sources};
+
+let sources = detect_available_sources();
+println!("{} sources available", sources.len());
 
 let pool = EntropyPool::auto();
-let bytes = pool.get_random_bytes(256);
+let source = pool.source_names()[0].clone();
+let bytes = pool
+    .get_source_bytes(&source, 256, ConditioningMode::Sha256)
+    .unwrap();
 let health = pool.health_report();
 ```
 
@@ -209,14 +216,14 @@ Analyze and compare entropy data programmatically:
 ```rust
 use openentropy_core::{full_analysis, compare, trial_analysis};
 
-let data = pool.get_raw_bytes(5000);
+let data = pool.get_source_raw_bytes(&source, 5000).unwrap();
 
 // Per-source statistical analysis
-let analysis = full_analysis("my_source", &data);
+let analysis = full_analysis(&source, &data);
 println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
 
 // Differential comparison of two streams
-let other = pool.get_raw_bytes(5000);
+let other = pool.get_source_raw_bytes(&source, 5000).unwrap();
 let diff = compare("stream_a", &data, "stream_b", &other);
 
 // PEAR-style trial analysis

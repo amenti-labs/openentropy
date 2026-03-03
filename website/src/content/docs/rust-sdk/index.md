@@ -16,61 +16,51 @@ openentropy-core = "0.10"
 
 ## Quick Start
 
-### Initialize the entropy pool
+### Discover available sources
 
 ```rust
-use openentropy_core::EntropyPool;
+use openentropy_core::detect_available_sources;
 
-// Auto-detect available sources on your platform
+let sources = detect_available_sources();
+println!("Available sources: {}", sources.len());
+```
+
+### Sample a single source (recommended)
+
+```rust
+use openentropy_core::{ConditioningMode, EntropyPool};
+
 let pool = EntropyPool::auto();
+let source = pool.source_names()[0].clone();
+
+let raw = pool.get_source_raw_bytes(&source, 4096).unwrap();
+let conditioned = pool
+    .get_source_bytes(&source, 256, ConditioningMode::Sha256)
+    .unwrap();
+
+println!("Using source: {source}");
+println!("Conditioned bytes: {}", conditioned.len());
+println!("Raw bytes: {}", raw.len());
 ```
 
-### Get random bytes
+### Analyze source quality
 
 ```rust
-// Get 256 bytes of cryptographically-conditioned random data (SHA-256 by default)
-let bytes = pool.get_random_bytes(256);
-print!("Random hex: ");
-for b in &bytes {
-    print!("{b:02x}");
-}
-println!();
-```
-
-### Analyze entropy quality
-
-```rust
-// Get health report for all sources
-let health = pool.health_report();
-println!("Healthy sources: {}/{}", health.healthy, health.total);
-println!("Total entropy collected: {} bytes", health.raw_bytes);
-
-// Per-source breakdown
-for source in &health.sources {
-    println!("{}: {} bytes, entropy={:.4} bits/byte", 
-        source.name, source.bytes, source.entropy);
-}
-```
-
-### Full analysis workflow
-
-```rust
-use openentropy_core::{compare, trial_analysis};
 use openentropy_core::analysis::full_analysis;
 
-let data = pool.get_raw_bytes(5000);
-
-// Per-source statistical analysis
-let analysis = full_analysis("my_source", &data);
+let analysis = full_analysis(&source, &raw);
 println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
+```
 
-// Differential comparison of two streams
-let other = pool.get_raw_bytes(5000);
-let diff = compare("stream_a", &data, "stream_b", &other);
+### Use pooled output (advanced)
 
-// PEAR-style trial analysis
-let trials = trial_analysis(&data, &Default::default());
-println!("Terminal Z: {:.4}, p = {:.4}", trials.terminal_z, trials.terminal_p_value);
+```rust
+// Combine available sources for pooled output
+let bytes = pool.get_random_bytes(256);
+let health = pool.health_report();
+
+println!("Random bytes: {}", bytes.len());
+println!("Healthy sources: {}/{}", health.healthy, health.total);
 ```
 
 ## Conditioning Modes
@@ -88,22 +78,6 @@ let bytes = pool.get_bytes(256, ConditioningMode::VonNeumann);
 
 // Raw unconditioned bytes — for research and analysis
 let bytes = pool.get_bytes(256, ConditioningMode::Raw);
-```
-
-## Source Discovery
-
-Detect which entropy sources are available on the current platform:
-
-```rust
-use openentropy_core::detect_available_sources;
-
-let sources = detect_available_sources();
-println!("Available sources: {}", sources.len());
-
-for source in sources {
-    let info = source.info();
-    println!("  {} — {} ({})", info.name, info.description, info.category);
-}
 ```
 
 ## [Full API Reference](/openentropy/rust-sdk/api/)

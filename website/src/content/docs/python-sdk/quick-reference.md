@@ -6,7 +6,27 @@ description: 'Most-used Python SDK calls for day-to-day workflows'
 Use this page for the common 80% workflows. For full signatures and all
 functions, see [Python API Reference](/openentropy/python-sdk/reference/).
 
-## Pool Basics
+## Source Discovery
+
+```python
+from openentropy import detect_available_sources, platform_info
+sources = detect_available_sources()
+platform = platform_info()
+```
+
+## Single-Source Sampling
+
+```python
+from openentropy import EntropyPool
+
+pool = EntropyPool.auto()
+source = pool.source_names()[0]
+
+raw = pool.get_source_raw_bytes(source, 4096)
+conditioned = pool.get_source_bytes(source, 256, conditioning="sha256")
+```
+
+## Pool Workflows (advanced)
 
 ```python
 from openentropy import EntropyPool
@@ -16,14 +36,6 @@ pool.collect_all(parallel=True, timeout=5)
 data = pool.get_random_bytes(256)
 raw = pool.get_raw_bytes(256)
 health = pool.health_report()
-```
-
-## Source Discovery
-
-```python
-from openentropy import detect_available_sources, platform_info
-sources = detect_available_sources()
-platform = platform_info()
 ```
 
 ## Dispatcher Analysis

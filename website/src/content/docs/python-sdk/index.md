@@ -25,16 +25,25 @@ maturin develop
 ## Quick Start
 
 ```python
-from openentropy import EntropyPool, detect_available_sources
+from openentropy import EntropyPool, detect_available_sources, full_analysis
 
 # Discover available entropy sources on your machine
 sources = detect_available_sources()
 print(f"{len(sources)} entropy sources available")
 
-# Create a pool and collect entropy
+# Pick one source for focused sampling
+source = sources[0]["name"]
+
+# Create pool and sample that single source
 pool = EntropyPool.auto()
-data = pool.get_random_bytes(256)
-print(data.hex())
+raw = pool.get_source_raw_bytes(source, 4096)
+conditioned = pool.get_source_bytes(source, 64, conditioning="sha256")
+
+print(f"Using source: {source}")
+print(conditioned.hex())
+
+result = full_analysis(source, raw)
+print(f"Shannon entropy: {result['shannon_entropy']:.4f} bits/byte")
 ```
 
 ## What You Can Do

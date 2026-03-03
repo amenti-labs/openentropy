@@ -55,6 +55,20 @@ pub use source::{EntropySource, Platform, Requirement, SourceCategory, SourceInf
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 ```
 
+### Single-source sampling (common pattern)
+
+```rust
+use openentropy_core::{ConditioningMode, EntropyPool};
+
+let pool = EntropyPool::auto();
+let source = pool.source_names()[0].clone();
+
+let raw = pool.get_source_raw_bytes(&source, 4096).unwrap();
+let conditioned = pool
+    .get_source_bytes(&source, 256, ConditioningMode::Sha256)
+    .unwrap();
+```
+
 ### `EntropyPool` (`openentropy_core::pool`)
 
 ```rust

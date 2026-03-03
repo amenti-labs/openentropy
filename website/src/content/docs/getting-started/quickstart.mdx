@@ -40,18 +40,20 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs syncKey="lang">
   <TabItem label="Rust">
   ```rust
-  use openentropy_core::EntropyPool;
+use openentropy_core::{ConditioningMode, EntropyPool};
 
-  let pool = EntropyPool::auto();
-  let bytes = pool.get_random_bytes(256);
+let pool = EntropyPool::auto();
+let source = pool.source_names()[0].clone();
+let bytes = pool.get_source_bytes(&source, 256, ConditioningMode::Sha256).unwrap();
   ```
   </TabItem>
   <TabItem label="Python">
   ```python
-  from openentropy import EntropyPool, full_analysis
+from openentropy import EntropyPool, detect_available_sources
 
-  pool = EntropyPool.auto()
-  data = pool.get_random_bytes(256)
+sources = detect_available_sources()
+pool = EntropyPool.auto()
+data = pool.get_source_bytes(sources[0]["name"], 256, conditioning="sha256")
   ```
   </TabItem>
   <TabItem label="CLI">
@@ -67,22 +69,25 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs syncKey="lang">
   <TabItem label="Rust">
   ```rust
-  use openentropy_core::{EntropyPool, full_analysis};
+use openentropy_core::{EntropyPool, full_analysis};
 
-  let pool = EntropyPool::auto();
-  let data = pool.get_raw_bytes(5000);
-  let analysis = full_analysis("my_source", &data);
-  println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
+let pool = EntropyPool::auto();
+let source = pool.source_names()[0].clone();
+let data = pool.get_source_raw_bytes(&source, 5000).unwrap();
+let analysis = full_analysis(&source, &data);
+println!("Shannon entropy: {:.4} bits/byte", analysis.shannon_entropy);
   ```
   </TabItem>
   <TabItem label="Python">
   ```python
-  from openentropy import EntropyPool
+from openentropy import EntropyPool, detect_available_sources, full_analysis
 
-  pool = EntropyPool.auto()
-  data = pool.get_raw_bytes(5000)
-  result = full_analysis("my_source", data)
-  print(f"Shannon entropy: {result['shannon_entropy']:.4f} bits/byte")
+sources = detect_available_sources()
+source = sources[0]["name"]
+pool = EntropyPool.auto()
+data = pool.get_source_raw_bytes(source, 5000)
+result = full_analysis(source, data)
+print(f"Shannon entropy: {result['shannon_entropy']:.4f} bits/byte")
   ```
   </TabItem>
   <TabItem label="CLI">
