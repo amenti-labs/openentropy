@@ -38,7 +38,7 @@ let report = analyze(&[("startup", &data)], &AnalysisProfile::Security.to_config
 
 Use periodic health reports and alert when healthy source count drops.
 
-## Related
+## Next Steps
 
 - [Python SDK](/openentropy/python-sdk/)
 - [Rust SDK](/openentropy/rust-sdk/)

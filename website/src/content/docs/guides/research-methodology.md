@@ -35,7 +35,7 @@ For trial-heavy workflows, gate recordings with calibration:
 openentropy record qcicada --calibrate --duration 5m
 ```
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Trial Analysis](/openentropy/concepts/trials/)

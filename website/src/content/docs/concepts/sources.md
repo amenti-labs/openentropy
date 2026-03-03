@@ -42,3 +42,10 @@ is the navigation hub for the split source catalog.
 2. Define `SourceInfo` with mechanism and platform requirements.
 3. Register source in the category `mod.rs`.
 4. Add tests and document the source in the corresponding docs category page.
+
+## Next Steps
+
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Conditioning](/openentropy/concepts/conditioning/)
+- [Security Validation](/openentropy/guides/security-validation/)
+- [Research Methodology](/openentropy/guides/research-methodology/)

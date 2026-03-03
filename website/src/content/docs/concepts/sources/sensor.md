@@ -12,3 +12,9 @@ device telemetry paths.
 - `camera_noise` — sensor dark/read noise
 - `bluetooth_noise` — BLE ambient RF variability
 - `smc_highvar_timing` — SMC sensor/timing channel variation
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

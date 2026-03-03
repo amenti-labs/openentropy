@@ -595,3 +595,10 @@ for source, data in raw.items():
 ## Notes
 
 - The API is provided by the compiled extension module `openentropy.openentropy`.
+
+## Next Steps
+
+- [Python SDK Overview](/openentropy/python-sdk/)
+- [Python Quick Reference](/openentropy/python-sdk/quick-reference/)
+- [Python Analysis Workflows](/openentropy/python-sdk/analysis/)
+- [Analysis System](/openentropy/concepts/analysis/)

@@ -13,3 +13,9 @@ IO sources derive entropy from storage-stack, bus, and device timing effects.
 - `nvme_iokit_sensors` — NVMe sensor/property polling timing
 - `nvme_raw_device` — raw block-device read timing
 - `nvme_passthrough_linux` — Linux NVMe admin passthrough timing
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

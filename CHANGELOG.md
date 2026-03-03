@@ -28,10 +28,7 @@
 - **Sources hub refactor** — Converted `concepts/sources.md` into a catalog hub linking to category-specific source pages.
 - **Quickstart expansion** — Added practical CLI workflow examples including TUI (`openentropy monitor`), `all`/source-targeted usage, profile-driven analysis, output files, telemetry, calibration, sessions, and compare flows.
 - **Cross-link cleanup** — Replaced anchor-fragile analysis links with stable dedicated page links in SDK and CLI docs.
-
-### Removed
-
-- **Integrations guide page** — Removed `website/src/content/docs/guides/integrations.md` from the docs site navigation.
+- **Guides reorganization** — Split SDK-focused integration usage into `guides/sdk-integration-patterns.md`.
 
 ## 0.10.0 — 2026-03-01
 

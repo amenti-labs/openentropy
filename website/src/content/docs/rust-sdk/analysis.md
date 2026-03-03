@@ -32,7 +32,7 @@ use openentropy_core::compare;
 let delta = compare("a", &data_a, "b", &data_b);
 ```
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Rust API Reference](/openentropy/rust-sdk/api/)

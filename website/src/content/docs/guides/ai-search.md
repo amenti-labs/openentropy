@@ -52,3 +52,10 @@ If variables are missing, the site automatically falls back to Pagefind.
 - Required for DocSearch: `ALGOLIA_APP_ID`, `ALGOLIA_SEARCH_API_KEY`, `ALGOLIA_INDEX_NAME`
 - Optional for Ask AI: `ALGOLIA_ASK_AI_ASSISTANT_ID`
 - No secrets are committed in the repository; use environment variables locally and in CI.
+
+## Next Steps
+
+- [Docs Home](/openentropy/)
+- [Getting Started](/openentropy/getting-started/)
+- [Troubleshooting](/openentropy/guides/troubleshooting/)
+- [SDK Integration](/openentropy/guides/sdk-integration-patterns/)

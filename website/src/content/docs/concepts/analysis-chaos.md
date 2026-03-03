@@ -44,7 +44,7 @@ Compression-ratio complexity metric.
 - Ratio near `1.0` indicates incompressible/random-like data
 - Lower ratios imply compressible structure
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Verdict System](/openentropy/concepts/analysis-verdicts/)

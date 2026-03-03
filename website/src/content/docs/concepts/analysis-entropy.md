@@ -38,7 +38,7 @@ diagnostic floor is also available for additional caution.
 - `--profile deep` for broad research characterization
 - `--entropy` to enable entropy breakdown in custom runs
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

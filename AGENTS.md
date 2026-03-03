@@ -15,6 +15,8 @@ Practical instructions for humans and coding agents working in this repo.
 - Python bindings surface: `crates/openentropy-python/src/lib.rs` + `*_bindings.rs`
 - Python package metadata: `pyproject.toml`
 - Docs site content: `website/src/content/docs/**`
+- Docs standards: `docs/DOCS_STANDARDS.md`
+- Legacy docs mirror: `docs/*.md`
 - CI quality gates: `.github/workflows/ci.yml`
 
 ## Non-Negotiable Alignment Rule
@@ -59,6 +61,7 @@ When changing **docs only**:
 
 1. Validate every command/example against code, not assumptions.
 2. Do not introduce commands/flags/functions that are not implemented.
+3. Keep canonical website docs and legacy mirror pages aligned when both exist.
 
 ## Drift Traps To Avoid
 

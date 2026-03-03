@@ -88,7 +88,7 @@ Measures run structure in repeated values.
 
 Run metrics far from expectation can indicate stickiness or insufficient mixing.
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Verdict System](/openentropy/concepts/analysis-verdicts/)

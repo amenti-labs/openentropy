@@ -10,3 +10,9 @@ Signal sources use timing sensitivity in transform and metadata pipelines.
 - `compression_timing` — data-dependent compression path timing
 - `hash_timing` — hash pipeline timing variation
 - `spotlight_timing` — metadata query timing variability
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

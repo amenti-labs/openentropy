@@ -550,3 +550,10 @@ println!("Cliff's d: {:.4}", result.two_sample.cliffs_delta);
 | `markov_analysis(a, b)` | `MarkovAnalysis` | Per-bit transition probabilities |
 | `multi_lag_analysis(a, b)` | `MultiLagAnalysis` | Autocorrelation at multiple lags |
 | `run_length_comparison(a, b)` | `RunLengthComparison` | Byte run-length distributions |
+
+## Next Steps
+
+- [Rust SDK Overview](/openentropy/rust-sdk/)
+- [Rust Quick Reference](/openentropy/rust-sdk/quick-reference/)
+- [Rust Analysis Workflows](/openentropy/rust-sdk/analysis/)
+- [Analysis System](/openentropy/concepts/analysis/)

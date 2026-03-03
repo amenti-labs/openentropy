@@ -53,7 +53,7 @@ let sessions = list_sessions(Path::new("sessions"))?;
 let raw_map = load_session_raw_data(&sessions[0].0)?;
 ```
 
-## Related
+## Next Steps
 
 - [Rust API Reference](/openentropy/rust-sdk/api/)
 - [Analysis System](/openentropy/concepts/analysis/)

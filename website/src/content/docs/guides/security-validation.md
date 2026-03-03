@@ -37,7 +37,7 @@ Use SHA-256 conditioned output for operational use:
 openentropy stream --conditioning sha256 --format raw --bytes 1024
 ```
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Entropy Breakdown](/openentropy/concepts/analysis-entropy/)

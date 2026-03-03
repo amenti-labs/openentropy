@@ -144,3 +144,10 @@ python -c "import openentropy; print(openentropy.version())"
 - Open an issue: [github.com/amenti-labs/openentropy/issues](https://github.com/amenti-labs/openentropy/issues)
 - Check existing issues for your error message
 - Include output of `openentropy scan` and `rustc --version` in your report
+
+## Next Steps
+
+- [Getting Started](/openentropy/getting-started/)
+- [CLI Reference](/openentropy/cli/reference/)
+- [Security Validation](/openentropy/guides/security-validation/)
+- [Research Methodology](/openentropy/guides/research-methodology/)

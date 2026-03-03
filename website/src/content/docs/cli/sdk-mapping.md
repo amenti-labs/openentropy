@@ -34,3 +34,10 @@ TUI dashboard. Cannot be embedded in Python/Rust apps.
 HTTP entropy server — Rust-only, no Python bindings.
 - **Use case**: Serve entropy over HTTP API
 - **Why not Python**: Would require async runtime (tokio) in PyO3
+
+## Next Steps
+
+- [CLI Overview](/openentropy/cli/)
+- [CLI Reference](/openentropy/cli/reference/)
+- [Python API Reference](/openentropy/python-sdk/reference/)
+- [Rust API Reference](/openentropy/rust-sdk/api/)

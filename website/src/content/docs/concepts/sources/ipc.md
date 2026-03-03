@@ -11,3 +11,9 @@ IPC sources exploit timing variability in inter-process communication paths.
 - `pipe_buffer` — pipe lifecycle allocator contention
 - `kqueue_events` — event multiplexing timing jitter
 - `keychain_timing` — keychain/security service round-trip timing
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

@@ -29,3 +29,9 @@ interconnect behavior at low levels.
 
 This category is broad and platform-sensitive. Validate with `deep` profile and
 cross-run comparisons before drawing conclusions from a single metric.
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

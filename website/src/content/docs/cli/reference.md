@@ -226,3 +226,10 @@ multi-lag autocorrelation, Markov transitions, digram analysis, run-length
 distributions, effect sizes, and PEAR-style trial comparison with Stouffer Z
 meta-analysis. For `compare`, profile presets currently control only whether
 min-entropy breakdown is enabled by default.
+
+## Next Steps
+
+- [CLI Overview](/openentropy/cli/)
+- [Security Validation](/openentropy/guides/security-validation/)
+- [Research Methodology](/openentropy/guides/research-methodology/)
+- [Analysis System](/openentropy/concepts/analysis/)

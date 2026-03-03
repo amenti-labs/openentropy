@@ -71,3 +71,10 @@ For source-independence checks and pair interpretation, see
 
 For PASS/WARN/FAIL threshold tables and reading guidance, see
 [Verdict System](/openentropy/concepts/analysis-verdicts/).
+
+## Next Steps
+
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)
+- [Entropy Breakdown](/openentropy/concepts/analysis-entropy/)
+- [Chaos Theory Analysis](/openentropy/concepts/analysis-chaos/)
+- [Trial Analysis Methodology](/openentropy/concepts/trials/)

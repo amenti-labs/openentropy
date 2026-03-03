@@ -13,3 +13,9 @@ System sources use volatile kernel counters and system metadata timing.
 - `ioregistry` — IOKit registry state variability
 - `proc_info_timing` — proc info syscall timing jitter
 - `getentropy_timing` — OS entropy path timing behavior
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

@@ -32,7 +32,7 @@ from openentropy import compare
 delta = compare("a", data_a, "b", data_b)
 ```
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Python API Reference](/openentropy/python-sdk/reference/)

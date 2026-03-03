@@ -51,7 +51,7 @@ sessions = list_sessions("sessions")
 raw_map = load_session_raw_data(sessions[0]["path"])
 ```
 
-## Related
+## Next Steps
 
 - [Python API Reference](/openentropy/python-sdk/reference/)
 - [Analysis System](/openentropy/concepts/analysis/)

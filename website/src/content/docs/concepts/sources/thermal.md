@@ -12,3 +12,9 @@ clock domains.
 - `counter_beat` — beat-frequency between independent clocks
 - `display_pll` — display PLL phase-noise effects
 - `pcie_pll` — PCIe clock-domain jitter
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

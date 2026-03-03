@@ -11,3 +11,9 @@ subsystems.
 - `gpu_divergence` — shader divergence timing
 - `iosurface_crossing` — CPU/GPU memory-domain crossing timing
 - `nl_inference_timing` — framework inference timing via accelerator paths
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

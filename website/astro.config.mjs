@@ -131,7 +131,7 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
-            { slug: 'guides/sdk-integration' },
+            { slug: 'guides/sdk-integration-patterns' },
             { slug: 'guides/troubleshooting' },
             { slug: 'guides/ai-search' },
           ],

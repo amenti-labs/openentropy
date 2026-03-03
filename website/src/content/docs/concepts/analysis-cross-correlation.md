@@ -29,7 +29,7 @@ coupling, or environmental coupling that reduces effective independence.
 - Requires two or more sources
 - Enabled by `--profile deep` or `--cross-correlation`
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

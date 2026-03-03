@@ -40,7 +40,7 @@ Treat verdicts as triage, not absolute proof. A single fail can reflect sample
 size, transient conditions, or one sensitive metric. Confirm with larger samples
 and `deep` profile runs before making hard decisions.
 
-## Related
+## Next Steps
 
 - [Analysis System](/openentropy/concepts/analysis/)
 - [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

@@ -13,3 +13,9 @@ Quantum sources provide entropy from explicitly quantum physical processes.
 
 - Requires compatible USB hardware.
 - Mode controls are available for raw/conditioned/sample output paths.
+
+## Next Steps
+
+- [Entropy Sources Hub](/openentropy/concepts/sources/)
+- [Analysis System](/openentropy/concepts/analysis/)
+- [Forensic Analysis](/openentropy/concepts/analysis-forensic/)

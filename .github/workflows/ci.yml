@@ -77,3 +77,24 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/ci/check_python_source_parity.py
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build docs site
+        run: |
+          cd website
+          npm ci
+          npm run build
+
+      - name: Check docs links
+        run: python3 scripts/ci/check_docs_links.py
