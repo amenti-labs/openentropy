@@ -19,6 +19,7 @@ openentropy-core = { workspace = true }
 openentropy-tests = { workspace = true }
 pyo3 = { workspace = true, features = ["extension-module"] }
 pythonize = { workspace = true }
+serde_json = { workspace = true }
 
 [build-dependencies]
 pyo3-build-config = "0.23"
