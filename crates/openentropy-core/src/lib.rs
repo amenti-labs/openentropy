@@ -46,6 +46,7 @@ pub mod benchmark;
 pub mod chaos;
 pub mod comparison;
 pub mod conditioning;
+pub mod dispatcher;
 pub(crate) mod math;
 pub mod platform;
 pub mod pool;
@@ -80,6 +81,9 @@ pub use conditioning::{
     ConditioningMode, MinEntropyReport, QualityReport, condition, grade_min_entropy,
     min_entropy_estimate, quick_autocorrelation_lag1, quick_min_entropy, quick_quality,
     quick_shannon,
+};
+pub use dispatcher::{
+    AnalysisConfig, AnalysisProfile, AnalysisReport, SourceReport, VerdictSummary, analyze,
 };
 pub use platform::{detect_available_sources, platform_info};
 pub use pool::{EntropyPool, HealthReport, SourceHealth, SourceInfoSnapshot};
