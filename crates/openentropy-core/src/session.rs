@@ -701,6 +701,121 @@ fn truncate_for_path(s: &str, max_chars: usize) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Session listing and loading utilities
+// ---------------------------------------------------------------------------
+
+/// List all recorded sessions in a directory.
+///
+/// Scans `dir` for subdirectories containing a valid `session.json` file,
+/// deserializes each into [`SessionMeta`], and returns them sorted by
+/// `started_at` descending (newest first).
+///
+/// Returns `Ok(vec![])` if the directory does not exist. Subdirectories
+/// with missing or corrupt `session.json` files are silently skipped.
+pub fn list_sessions(dir: &Path) -> Result<Vec<(PathBuf, SessionMeta)>, std::io::Error> {
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut sessions: Vec<(PathBuf, SessionMeta)> = Vec::new();
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let json_path = path.join("session.json");
+        if !json_path.exists() {
+            continue;
+        }
+        let contents = match fs::read_to_string(&json_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        match serde_json::from_str::<SessionMeta>(&contents) {
+            Ok(meta) => sessions.push((path, meta)),
+            Err(_) => continue,
+        }
+    }
+
+    // Sort by start time, newest first
+    sessions.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+
+    Ok(sessions)
+}
+
+/// Load raw entropy data from a recorded session, grouped by source.
+///
+/// Reads `raw.bin` and `raw_index.csv` from `session_dir`, then groups
+/// the raw bytes by source name using the index entries.
+///
+/// # CSV format (`raw_index.csv`)
+///
+/// ```text
+/// offset,length,timestamp_ns,source
+/// 0,1000,1709234567890123456,clock_jitter
+/// 1000,1000,1709234567890234567,thermal_noise
+/// ```
+///
+/// Each row after the header contains four comma-separated fields:
+/// - `offset` — byte offset into `raw.bin`
+/// - `length` — number of bytes for this entry
+/// - `timestamp_ns` — nanosecond timestamp when the sample was recorded
+/// - `source` — name of the entropy source
+///
+/// Index entries where `offset + length` exceeds the size of `raw.bin`
+/// are silently skipped (bounds check).
+///
+/// # Errors
+///
+/// Returns [`std::io::ErrorKind::NotFound`] if either `raw.bin` or
+/// `raw_index.csv` is missing from `session_dir`.
+pub fn load_session_raw_data(
+    session_dir: &Path,
+) -> Result<HashMap<String, Vec<u8>>, std::io::Error> {
+    let raw_path = session_dir.join("raw.bin");
+    let index_path = session_dir.join("raw_index.csv");
+
+    if !raw_path.exists() || !index_path.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "missing raw.bin or raw_index.csv",
+        ));
+    }
+
+    let raw_data = fs::read(&raw_path)?;
+    let index_csv = fs::read_to_string(&index_path)?;
+
+    let mut source_bytes: HashMap<String, Vec<u8>> = HashMap::new();
+
+    for line in index_csv.lines().skip(1) {
+        let parts: Vec<&str> = line.splitn(4, ',').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        let offset: usize = match parts[0].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let length: usize = match parts[1].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let source = parts[3].to_string();
+
+        if offset + length <= raw_data.len() {
+            source_bytes
+                .entry(source)
+                .or_default()
+                .extend_from_slice(&raw_data[offset..offset + length]);
+        }
+    }
+
+    Ok(source_bytes)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1170,5 +1285,58 @@ mod tests {
         assert!(is_leap(2024));
         assert!(!is_leap(1900));
         assert!(!is_leap(2023));
+    }
+
+    // -----------------------------------------------------------------------
+    // list_sessions / load_session_raw_data tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_list_sessions_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nonexistent = tmp.path().join("does_not_exist");
+        let result = list_sessions(&nonexistent).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_list_sessions_corrupt_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bad_session = tmp.path().join("bad-session");
+        fs::create_dir_all(&bad_session).unwrap();
+        fs::write(bad_session.join("session.json"), "not valid json {{{").unwrap();
+
+        let result = list_sessions(tmp.path()).unwrap();
+        assert!(result.is_empty(), "corrupt session.json should be skipped");
+    }
+
+    #[test]
+    fn test_list_and_load_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let raw_bytes = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let conditioned_bytes = vec![0xCA, 0xFE];
+
+        let config = SessionConfig {
+            sources: vec!["test_src".to_string()],
+            output_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+        let mut writer = SessionWriter::new(config).unwrap();
+        writer
+            .write_sample("test_src", &raw_bytes, &conditioned_bytes)
+            .unwrap();
+        let session_dir = writer.finish().unwrap();
+
+        // list_sessions should find it
+        let sessions = list_sessions(tmp.path()).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].0, session_dir);
+        assert_eq!(sessions[0].1.total_samples, 1);
+        assert_eq!(sessions[0].1.sources, vec!["test_src"]);
+
+        // load_session_raw_data should recover the bytes
+        let loaded = load_session_raw_data(&session_dir).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded.get("test_src").unwrap(), &raw_bytes);
     }
 }
