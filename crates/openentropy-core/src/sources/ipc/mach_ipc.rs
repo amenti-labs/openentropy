@@ -1,9 +1,9 @@
 //! Mach IPC timing — entropy from complex Mach messages with OOL descriptors.
 
 #[cfg(target_os = "macos")]
-use std::sync::Arc;
-#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "macos")]
+use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use std::thread;
 
@@ -190,13 +190,14 @@ impl EntropySource for MachIPCSource {
                                 // data into our address space. Deallocate it to prevent
                                 // VM memory leaks proportional to message count.
                                 if kr == 0 && ((*hdr).msgh_bits & 0x80000000) != 0 {
-                                    let recv_ool = recv_buf.as_ptr().add(
+                                    let recv_ool_ptr = recv_buf.as_ptr().add(
                                         std::mem::size_of::<MachMsgHeader>()
                                             + std::mem::size_of::<MachMsgBody>(),
                                     )
                                         as *const MachMsgOOLDescriptor;
-                                    let addr = (*recv_ool).address as usize;
-                                    let size = (*recv_ool).size as usize;
+                                    let recv_ool = std::ptr::read_unaligned(recv_ool_ptr);
+                                    let addr = recv_ool.address as usize;
+                                    let size = recv_ool.size as usize;
                                     if addr != 0 && size > 0 {
                                         vm_deallocate(mach_task_self(), addr, size);
                                     }
