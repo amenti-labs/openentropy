@@ -144,6 +144,12 @@ curl "http://localhost:8080/pool/status?telemetry=true"
 
 ## `analyze` — Statistical source analysis
 
+Run statistical analysis on entropy sources. The analysis system includes
+five categories — forensic, entropy breakdown, chaos theory, trial analysis,
+and cross-correlation — controlled by profiles or individual flags. See
+[Analysis System](/openentropy/concepts/analysis/) for detailed explanations
+of each category, interpretation guides, and verdict thresholds.
+
 ```bash
 openentropy analyze                          # standard forensic analysis
 openentropy analyze --profile quick          # fast 10K-sample check

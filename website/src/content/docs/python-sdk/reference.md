@@ -230,6 +230,9 @@ print(results[0].keys())
 Analyze raw byte data for entropy quality, bias, and structure. All functions
 accept `bytes` and return `dict` (except `pearson_correlation` which returns `float`).
 
+For detailed explanations of each analysis category, interpretation guides,
+and verdict thresholds, see [Analysis System](/openentropy/concepts/analysis/).
+
 ```python
 import os
 from openentropy import (
@@ -295,7 +298,9 @@ print(r)  # float in [-1, 1]
 
 ## Chaos Theory Analysis
 
-Chaos theory metrics distinguish genuine quantum randomness from deterministic or structured behavior.
+Chaos theory metrics distinguish genuine quantum randomness from deterministic
+or structured behavior. See [Chaos Theory Analysis](/openentropy/concepts/analysis/#chaos-theory-analysis)
+for interpretation guides and verdict thresholds.
 
 ```python
 from openentropy import (
@@ -332,7 +337,9 @@ epi = epiplexity(data)
 
 ## Unified Analysis Dispatcher
 
-The `analyze()` function runs multiple analysis modules in one call with configurable profiles.
+The `analyze()` function runs multiple analysis modules in one call with
+configurable profiles. See [Analysis System](/openentropy/concepts/analysis/)
+for profile details, analysis categories, and the verdict system.
 
 ```python
 from openentropy import analyze, analysis_config

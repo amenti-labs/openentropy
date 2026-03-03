@@ -295,9 +295,47 @@ for (path, meta) in &sessions {
 }
 ```
 
+## Forensic Analysis (`openentropy_core::analysis`)
+
+Core statistical analysis battery for evaluating entropy quality. Six tests
+that assess the fundamental properties expected of random data. See
+[Analysis System](/openentropy/concepts/analysis/) for interpretation guides
+and verdict thresholds.
+
+### `full_analysis(source_name: &str, data: &[u8]) -> SourceAnalysis`
+
+Run all six forensic tests in one call. Returns a `SourceAnalysis` containing
+autocorrelation, spectral, bit bias, distribution, stationarity, and runs
+results, plus Shannon and min-entropy estimates.
+
+```rust
+use openentropy_core::full_analysis;
+
+let analysis = full_analysis("clock_jitter", &data);
+println!("Shannon: {:.4} bits/byte", analysis.shannon_entropy);
+println!("Min-entropy: {:.4}", analysis.min_entropy);
+println!("Spectral flatness: {:.4}", analysis.spectral.flatness);
+println!("Stationary: {}", analysis.stationarity.is_stationary);
+```
+
+### Individual functions
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `autocorrelation_profile(data, max_lag)` | `AutocorrResult` | Serial dependence at multiple lags |
+| `spectral_analysis(data)` | `SpectralResult` | FFT-based power spectral density |
+| `bit_bias(data)` | `BitBiasResult` | Per-bit deviation from 50/50 |
+| `distribution_stats(data)` | `DistributionResult` | Byte-value distribution vs uniform |
+| `stationarity_test(data)` | `StationarityResult` | ANOVA stability over 10 windows |
+| `runs_analysis(data)` | `RunsResult` | Consecutive identical value patterns |
+| `cross_correlation_matrix(sources)` | `CrossCorrMatrix` | Pairwise Pearson correlation, flags \|r\| > 0.3 |
+| `pearson_correlation(a, b)` | `f64` | Pearson correlation coefficient |
+
 ## Chaos Theory Analysis (`openentropy_core::chaos`)
 
 Distinguish true randomness from deterministic chaos using five independent metrics.
+See [Chaos Theory Analysis](/openentropy/concepts/analysis/#chaos-theory-analysis)
+for interpretation guides and verdict thresholds.
 
 ### `chaos_analysis(data: &[u8]) -> ChaosAnalysis`
 
@@ -326,7 +364,7 @@ println!("Compression ratio={:.4}", result.epiplexity.compression_ratio);
 
 ### Interpreting results
 
-For **true random** data, expect: Hurst H ≈ 0.5, Lyapunov λ > 0 (sensitive dependence), high correlation dimension, BiEntropy near maximum, compression ratio near 1.0. See `openentropy_core::verdict` for automated pass/fail classification of each metric.
+For **true random** data, expect: Hurst H ≈ 0.5, Lyapunov λ > 0 (sensitive dependence), high correlation dimension, BiEntropy near maximum, compression ratio near 1.0. See the [Verdict System](/openentropy/concepts/analysis/#verdict-system) for automated pass/fail classification of each metric.
 
 ## Unified Analysis Dispatcher (`openentropy_core::dispatcher`)
 
@@ -396,3 +434,112 @@ let report = analyze(&[
     ("source_b", &data_b),
 ], &config);
 ```
+
+## Verdict System (`openentropy_core::verdict`)
+
+Automated pass/fail classification for every forensic and chaos metric.
+Each source report includes a `VerdictSummary` with up to 11 verdict fields.
+See [Verdict System](/openentropy/concepts/analysis/#verdict-system) for
+all thresholds and interpretation guidance.
+
+```rust
+use openentropy_core::dispatcher::{analyze, AnalysisProfile, VerdictSummary};
+
+let config = AnalysisProfile::Deep.to_config();
+let report = analyze(&[("src", &data)], &config);
+
+for source in &report.sources {
+    let v = &source.verdicts;
+    println!("Autocorrelation: {:?}", v.autocorrelation);
+    println!("Spectral: {:?}", v.spectral);
+    println!("Bias: {:?}", v.bias);
+    println!("Distribution: {:?}", v.distribution);
+    println!("Stationarity: {:?}", v.stationarity);
+    println!("Runs: {:?}", v.runs);
+    println!("Hurst: {:?}", v.hurst);
+    println!("Lyapunov: {:?}", v.lyapunov);
+    println!("Correlation dim: {:?}", v.correlation_dimension);
+    println!("BiEntropy: {:?}", v.bientropy);
+    println!("Compression: {:?}", v.compression);
+}
+```
+
+Verdict values: `Pass`, `Warn`, `Fail`, `Na`. Serializes as `"PASS"`, `"WARN"`, `"FAIL"`, `"N/A"`.
+
+## Trial Analysis (`openentropy_core::trials`)
+
+PEAR-style 200-bit trial analysis. Slices byte data into fixed-length trials
+and computes Z-scores, cumulative deviation, and effect sizes. See
+[Trial Analysis Methodology](/openentropy/concepts/trials/) for the
+statistical model.
+
+### `trial_analysis(data: &[u8], config: &TrialConfig) -> TrialAnalysis`
+
+```rust
+use openentropy_core::trials::{trial_analysis, TrialConfig};
+
+let config = TrialConfig::default(); // 200 bits per trial
+let result = trial_analysis(&data, &config);
+println!("Trials: {}, Terminal Z: {:.4}, Effect: {:.6}, p={:.4}",
+    result.num_trials, result.terminal_z,
+    result.effect_size, result.terminal_p_value);
+```
+
+### `stouffer_combine(analyses: &[&TrialAnalysis]) -> StoufferResult`
+
+Weighted Stouffer composition across multiple sessions (weights = √num\_trials).
+
+```rust
+use openentropy_core::trials::{trial_analysis, stouffer_combine, TrialConfig};
+
+let config = TrialConfig::default();
+let t1 = trial_analysis(&data_a, &config);
+let t2 = trial_analysis(&data_b, &config);
+let combined = stouffer_combine(&[&t1, &t2]);
+println!("Combined Z: {:.4}, p={:.4}", combined.stouffer_z, combined.p_value);
+```
+
+### `calibration_check(data: &[u8], config: &TrialConfig) -> CalibrationResult`
+
+Pre-recording suitability check. Thresholds: |Z| < 2.0, bit bias < 0.005,
+Shannon > 7.9, Z-score std in \[0.85, 1.15\].
+
+```rust
+use openentropy_core::trials::{calibration_check, TrialConfig};
+
+let result = calibration_check(&data, &TrialConfig::default());
+println!("Suitable: {}, Warnings: {:?}", result.is_suitable, result.warnings);
+```
+
+## Comparison (`openentropy_core::comparison`)
+
+Differential statistical analysis between two byte streams. See
+[Analysis System](/openentropy/concepts/analysis/) for context on how
+comparison fits into the analysis pipeline.
+
+### `compare(label_a, data_a, label_b, data_b) -> ComparisonResult`
+
+Full differential report including aggregate deltas, two-sample tests,
+temporal analysis, digram analysis, Markov transitions, multi-lag
+autocorrelation, and run-length distributions.
+
+```rust
+use openentropy_core::compare;
+
+let result = compare("session_a", &data_a, "session_b", &data_b);
+println!("KS p-value: {:.4}", result.two_sample.ks_p_value);
+println!("Cliff's d: {:.4}", result.two_sample.cliffs_delta);
+```
+
+### Individual comparison functions
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `aggregate_delta(a, b)` | `AggregateDelta` | Shannon/min-entropy/mean/variance deltas, Cohen's d |
+| `two_sample_tests(a, b)` | `TwoSampleTests` | KS, chi-squared, Mann-Whitney, Cliff's delta |
+| `cliffs_delta(a, b)` | `f64` | Non-parametric effect size \[-1, 1\] |
+| `temporal_analysis(a, b, window, z)` | `TemporalAnalysis` | Sliding-window anomaly detection |
+| `digram_analysis(a, b)` | `DigramAnalysis` | Digram chi-squared uniformity |
+| `markov_analysis(a, b)` | `MarkovAnalysis` | Per-bit transition probabilities |
+| `multi_lag_analysis(a, b)` | `MultiLagAnalysis` | Autocorrelation at multiple lags |
+| `run_length_comparison(a, b)` | `RunLengthComparison` | Byte run-length distributions |

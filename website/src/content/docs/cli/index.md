@@ -54,6 +54,10 @@ Profiles are convenience presets that configure multiple flags at once. Choose t
 | `deep` | Research | 100,000 | raw | ✓ | — | ✓ | ✓ | ✓ |
 | `security` | Security | 50,000 | sha256 | ✓ | ✓ | — | — | — |
 
+For detailed explanations of each analysis category (forensic, entropy, chaos,
+trials, cross-correlation), interpretation guides, and the verdict system, see
+[Analysis System](/openentropy/concepts/analysis/).
+
 **Security engineers** use the `security` profile to validate entropy quality and seed CSPRNGs:
 ```bash
 openentropy analyze --profile security --output audit.md
