@@ -23,6 +23,7 @@
 //! output indistinguishable from PRNG. The `Raw` mode here is what makes
 //! openentropy useful for researchers studying actual hardware noise.
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -575,7 +576,7 @@ pub fn min_entropy_estimate(data: &[u8]) -> MinEntropyReport {
 }
 
 /// Min-entropy analysis report with individual estimator results.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MinEntropyReport {
     /// Shannon entropy (bits/byte, max 8.0). Upper bound, not conservative.
     pub shannon_entropy: f64,
