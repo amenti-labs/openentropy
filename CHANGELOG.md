@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.11.0 — 2026-03-03
+
+### Added
+
+- **Comprehensive analysis documentation split** — Added dedicated concept pages for forensic metrics, entropy estimators, chaos metrics, cross-correlation interpretation, and verdict thresholds:
+  - `website/src/content/docs/concepts/analysis-forensic.md`
+  - `website/src/content/docs/concepts/analysis-entropy.md`
+  - `website/src/content/docs/concepts/analysis-chaos.md`
+  - `website/src/content/docs/concepts/analysis-cross-correlation.md`
+  - `website/src/content/docs/concepts/analysis-verdicts.md`
+- **Task-oriented docs guides** — Added practical guides for security validation, research methodology, and SDK integration workflows.
+- **SDK quick-reference and workflow pages** — Added focused quick-reference and analysis workflow pages for Python and Rust SDKs.
+- **Role-based onboarding page** — Added `getting-started/choose-your-path` for faster navigation by user intent.
+- **Entropy source catalog split** — Added category pages under `concepts/sources/` (timing, scheduling, system, network, io, ipc, microarch, gpu, thermal, signal, sensor, quantum).
+
+### Changed
+
+- **Docs IA and sidebar redesign** — Reorganized left navigation around user journeys:
+  - Getting Started
+  - Quick References
+  - CLI / Python SDK / Rust SDK
+  - Analysis & Validation
+  - Concepts
+  - Guides
+- **Analysis hub refactor** — Converted `concepts/analysis.md` from a monolithic long-form page into a hub page linking to focused deep-dive docs.
+- **Sources hub refactor** — Converted `concepts/sources.md` into a catalog hub linking to category-specific source pages.
+- **Quickstart expansion** — Added practical CLI workflow examples including TUI (`openentropy monitor`), `all`/source-targeted usage, profile-driven analysis, output files, telemetry, calibration, sessions, and compare flows.
+- **Cross-link cleanup** — Replaced anchor-fragile analysis links with stable dedicated page links in SDK and CLI docs.
+
+### Removed
+
+- **Integrations guide page** — Removed `website/src/content/docs/guides/integrations.md` from the docs site navigation.
+
 ## 0.10.0 — 2026-03-01
 
 ### Added

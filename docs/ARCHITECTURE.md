@@ -6,7 +6,7 @@
 
 openentropy is a multi-source entropy harvesting system written in Rust. It treats every computer as a collection of noisy analog subsystems and extracts randomness from their unpredictable physical behavior. The project is structured as a Cargo workspace with multiple crates, each with a focused responsibility.
 
-**Version:** 0.10.0
+**Version:** 0.11.0
 **Edition:** Rust 2024
 **License:** MIT
 
