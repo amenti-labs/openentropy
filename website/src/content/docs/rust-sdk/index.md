@@ -30,7 +30,11 @@ let pool = EntropyPool::auto();
 ```rust
 // Get 256 bytes of cryptographically-conditioned random data (SHA-256 by default)
 let bytes = pool.get_random_bytes(256);
-println!("Random hex: {}", hex::encode(&bytes));
+print!("Random hex: ");
+for b in &bytes {
+    print!("{b:02x}");
+}
+println!();
 ```
 
 ### Analyze entropy quality
@@ -51,7 +55,8 @@ for source in &health.sources {
 ### Full analysis workflow
 
 ```rust
-use openentropy_core::{full_analysis, compare, trial_analysis};
+use openentropy_core::{compare, trial_analysis};
+use openentropy_core::analysis::full_analysis;
 
 let data = pool.get_raw_bytes(5000);
 
